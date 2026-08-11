@@ -6,88 +6,84 @@
     <title>OliveWar - Acesso</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Firebase SDKs -->
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    <!-- BLOCO DE SCRIPT CORRETAMENTE ENCAPSULADO -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-const firebaseConfig = {
-    apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY",
-    authDomain: "olivewar-1e5e2.firebaseapp.com",
-    projectId: "olivewar-1e5e2",
-    storageBucket: "olivewar-1e5e2.firebasestorage.app",
-    messagingSenderId: "437889793363",
-    appId: "1:437889793363:web:508e445177eb06f6e435a6",
-    measurementId: "G-GGB4C2X6TL"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY",
+            authDomain: "olivewar-1e5e2.firebaseapp.com",
+            projectId: "olivewar-1e5e2",
+            storageBucket: "olivewar-1e5e2.firebasestorage.app",
+            messagingSenderId: "437889793363",
+            appId: "1:437889793363:web:508e445177eb06f6e435a6",
+            measurementId: "G-GGB4C2X6TL"
+        };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
 
-let ehModoCadastro = false;
+        let ehModoCadastro = false;
 
-window.alternarModo = function() {
-    ehModoCadastro = !ehModoCadastro;
-    const subtitulo = document.getElementById('subtitulo-pagina');
-    const botao = document.getElementById('botao-acao');
-    const opcoesLogin = document.getElementById('opcoes-login');
-    const textoAlternativa = document.getElementById('texto-alternativa');
+        window.alternarModo = function() {
+            ehModoCadastro = !ehModoCadastro;
+            const subtitulo = document.getElementById('subtitulo-pagina');
+            const botao = document.getElementById('botao-acao');
+            const opcoesLogin = document.getElementById('opcoes-login');
+            const textoAlternativa = document.getElementById('texto-alternativa');
 
-    if (ehModoCadastro) {
-        subtitulo.innerText = "Crie sua nova conta para o ambiente beta.";
-        botao.innerText = "Cadastrar usuário";
-        opcoesLogin.style.display = "none";
-        textoAlternativa.innerHTML = 'Já tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold hover:underline ml-1 cursor-pointer">Entrar</button>';
-    } else {
-        subtitulo.innerText = "Insira suas credenciais para acessar o ambiente beta.";
-        botao.innerText = "Entrar";
-        opcoesLogin.style.display = "flex";
-        textoAlternativa.innerHTML = 'Ainda não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold hover:underline ml-1 cursor-pointer">Criar conta</button>';
-    }
-};
-
-window.handleAuth = async (event) => {
-    event.preventDefault();
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        if (ehModoCadastro) {
-            // 1. Cria o usuário no Authentication
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            // 2. Registra no banco que ele acabou de se cadastrar e ainda NÃO preencheu os dados
-            await setDoc(doc(db, "usuarios", user.uid), {
-                email: email,
-                dadosPreenchidos: false
-            });
-
-            alert("Usuário cadastrado com sucesso!");
-            // Como é novo, vai direto para a coleta de informações
-            window.location.href = "dashboard.html"; 
-        } else {
-            // 1. Faz o login normal
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            // 2. Verifica no banco se este usuário já preencheu os dados anteriormente
-            const docRef = doc(db, "usuarios", user.uid);
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists() && docSnap.data().dadosPreenchidos === true) {
-                alert("Login realizado com sucesso!");
-                window.location.href = "index.html"; // Já preencheu, vai para a página principal
+            if (ehModoCadastro) {
+                subtitulo.innerText = "Crie sua nova conta para o ambiente beta.";
+                botao.innerText = "Cadastrar usuário";
+                opcoesLogin.style.display = "none";
+                textoAlternativa.innerHTML = 'Já tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold hover:underline ml-1 cursor-pointer">Entrar</button>';
             } else {
-                alert("Login realizado. Por favor, preencha seus dados.");
-                window.location.href = "dashboard.html"; // Não preencheu ainda, vai para a coleta
+                subtitulo.innerText = "Insira suas credenciais para acessar o ambiente beta.";
+                botao.innerText = "Entrar";
+                opcoesLogin.style.display = "flex";
+                textoAlternativa.innerHTML = 'Ainda não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold hover:underline ml-1 cursor-pointer">Criar conta</button>';
             }
-        }
-    } catch (error) {
-        alert("Erro na autenticação: " + error.message);
-    }
-};
+        };
+
+        window.handleAuth = async (event) => {
+            event.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                if (ehModoCadastro) {
+                    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    await setDoc(doc(db, "usuarios", user.uid), {
+                        email: email,
+                        dadosPreenchidos: false
+                    });
+
+                    alert("Usuário cadastrado com sucesso!");
+                    window.location.href = "dashboard.html"; 
+                } else {
+                    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                    const user = userCredential.user;
+
+                    const docRef = doc(db, "usuarios", user.uid);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists() && docSnap.data().dadosPreenchidos === true) {
+                        alert("Login realizado com sucesso!");
+                        window.location.href = "index.html"; 
+                    } else {
+                        alert("Login realizado. Por favor, preencha seus dados.");
+                        window.location.href = "dashboard.html"; 
+                    }
+                }
+            } catch (error) {
+                alert("Erro na autenticação: " + error.message);
+            }
+        };
     </script>
 </head>
 <body class="bg-blue-50">
