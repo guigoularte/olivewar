@@ -64,7 +64,7 @@
                     });
 
                     alert("Usuário cadastrado com sucesso!");
-                    window.location.href = "dashboard.html"; 
+                    window.location.href = "newleads.html"; 
                 } else {
                     const userCredential = await signInWithEmailAndPassword(auth, email, password);
                     const user = userCredential.user;
@@ -77,7 +77,7 @@
                         window.location.href = "index.html"; 
                     } else {
                         alert("Login realizado. Por favor, preencha seus dados.");
-                        window.location.href = "dashboard.html"; 
+                        window.location.href = "newleads.html"; 
                     }
                 }
             } catch (error) {

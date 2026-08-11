@@ -3,36 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliveWar - Versão Beta</title>
+    <title>OliveWar - Home</title>
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-blue-50">
 
-    <div class="min-h-screen bg-gradient-to-b from-blue-50 to-blue-100 flex flex-col items-center justify-between p-6">
-      
-      <div class="flex flex-col items-center mt-12">
-        <div class="bg-white p-4 rounded-full shadow-md mb-6">
-          <svg class="w-16 h-16 text-blue-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-          </svg>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, query, orderBy, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY",
+            authDomain: "olivewar-1e5e2.firebaseapp.com",
+            projectId: "olivewar-1e5e2",
+            storageBucket: "olivewar-1e5e2.firebasestorage.app",
+            messagingSenderId: "437889793363",
+            appId: "1:437889793363:web:508e445177eb06f6e435a6",
+            measurementId: "G-GGB4C2X6TL"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Busca o lead mais recente desse usuário
+                const leadsRef = collection(db, "usuarios", user.uid, "leads");
+                const q = query(leadsRef, orderBy("dataEnvio", "desc"), limit(1));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    const lead = querySnapshot.docs[0].data();
+                    document.getElementById('nome-usuario').innerText = user.email;
+                    document.getElementById('nome-empresa').innerText = lead.empresa;
+                    document.getElementById('nome-produto').innerText = lead.produto;
+                }
+            } else {
+                window.location.href = "login.html";
+            }
+        });
+
+        window.logout = async () => {
+            await signOut(auth);
+            window.location.href = "login.html";
+        };
+    </script>
+</head>
+<body class="bg-blue-50 p-6">
+    <div class="max-w-md mx-auto bg-white rounded-3xl shadow-lg p-8">
+        <h1 class="text-2xl font-bold text-blue-900 mb-6">Olá, bem-vindo!</h1>
+        
+        <div class="space-y-4">
+            <div class="p-4 bg-blue-50 rounded-xl">
+                <p class="text-xs text-gray-500 uppercase font-bold">Seu E-mail</p>
+                <p id="nome-usuario" class="text-blue-900 font-semibold">Carregando...</p>
+            </div>
+            <div class="p-4 bg-blue-50 rounded-xl">
+                <p class="text-xs text-gray-500 uppercase font-bold">Empresa</p>
+                <p id="nome-empresa" class="text-blue-900 font-semibold">Aguardando cadastro...</p>
+            </div>
+            <div class="p-4 bg-blue-50 rounded-xl">
+                <p class="text-xs text-gray-500 uppercase font-bold">Produto Cadastrado</p>
+                <p id="nome-produto" class="text-blue-900 font-semibold">Aguardando cadastro...</p>
+            </div>
         </div>
 
-        <h1 class="text-3xl font-bold text-blue-900 tracking-wide">OliveWar</h1>
-        
-        <p class="text-gray-600 text-center mt-3 max-w-xs text-sm leading-relaxed">
-          Bem-vindo ao <span class="font-semibold text-blue-800">OliveWar</span>, ambiente beta para testes e validações estratégicas.
-        </p>
-      </div>
-
-      <div class="w-full max-w-md bg-white rounded-t-3xl shadow-xl p-8 flex flex-col items-center mt-auto">
-        <div class="w-12 h-1 bg-gray-300 rounded-full mb-6"></div>
-        
-        <button onclick="window.location.href='login.html'" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg transition duration-200 text-center cursor-pointer">
-  Para começar, insira seus dados
-</button>
-      </div>
-
+        <div class="mt-8 flex gap-4">
+            <a href="newleads.html" class="flex-1 bg-blue-600 text-white text-center py-3 rounded-xl font-semibold">Novo Lead</a>
+            <button onclick="logout()" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold">Sair</button>
+        </div>
     </div>
-
 </body>
 </html>
