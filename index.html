@@ -2,37 +2,30 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>OliveWar - Central</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OliveWar - Bem-vindo</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-
-        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) { window.location.href = "login.html"; return; }
-            const userSnap = await getDoc(doc(db, "usuarios", user.uid));
-            document.getElementById('display-nome').innerText = userSnap.data().nome;
-
-            const prods = await getDocs(collection(db, "usuarios", user.uid, "produtos"));
-            const lista = document.getElementById('lista-produtos');
-            prods.forEach(p => {
-                lista.innerHTML += `<div class="p-4 bg-white border rounded-xl flex justify-between">
-                    ${p.data().nomeProduto} <a href="cadastro_produto.html?id=${p.id}">✏️</a>
-                </div>`;
-            });
-        });
-    </script>
 </head>
-<body class="bg-slate-50 p-8">
-    <h1 class="text-xl font-bold">Olá, <span id="display-nome">...</span></h1>
-    <div id="lista-produtos" class="space-y-3 my-6"></div>
-    <a href="cadastro_produto.html" class="block bg-slate-900 text-white text-center p-3 rounded-lg font-bold">+ Cadastrar Produto</a>
-    <a href="newleads.html" class="block bg-blue-600 text-white text-center p-3 rounded-lg font-bold mt-3">Formulário de Contato (Leads)</a>
+<body class="bg-blue-50">
+
+    <div class="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-100 to-blue-50">
+      
+      <!-- Logo e Título -->
+      <div class="text-center mb-12">
+        <div class="bg-white p-6 rounded-full shadow-lg mb-6 inline-block">
+          <svg class="w-20 h-20 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        </div>
+        <h1 class="text-4xl font-extrabold text-blue-900 mb-2">OliveWar</h1>
+        <p class="text-blue-700 text-lg">Bem-vindo ao OliveWar,<br>aplicativo para ver a viabilidade<br>econômica do seu produto.</p>
+      </div>
+
+      <!-- Botão para começar -->
+      <div class="w-full max-w-sm">
+        <a href="login.html" class="block w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-xl text-center transition transform hover:scale-105">
+          Para começar, insira seus dados
+        </a>
+      </div>
+
+    </div>
 </body>
 </html>
