@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliveWar - Login</title>
+    <title>OliveWar - Acesso</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -15,25 +15,41 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        window.efetuarAcao = async (e) => {
+        let ehCadastro = false;
+
+        window.alternarModo = () => {
+            ehCadastro = !ehCadastro;
+            const titulo = document.getElementById('titulo-topo');
+            const campoNome = id => document.getElementById(id).parentElement;
+            
+            // Alterna a visibilidade do campo "Seu Nome"
+            document.getElementById('grupo-nome').style.display = ehCadastro ? 'block' : 'none';
+            document.getElementById('nome').required = ehCadastro;
+            
+            titulo.innerText = ehCadastro ? "Criar Conta" : "Login";
+            document.getElementById('btn-submit').innerText = ehCadastro ? "Cadastrar" : "Entrar";
+            document.getElementById('texto-alternativa').innerHTML = ehCadastro 
+                ? 'Já tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline">Entrar</button>'
+                : 'Não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline">Criar conta</button>';
+        };
+
+        window.handleAuth = async (e) => {
             e.preventDefault();
-            const nome = document.getElementById('nome').value;
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
 
             try {
-                // Tenta criar conta
-                const cred = await createUserWithEmailAndPassword(auth, email, password);
-                await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email });
-                window.location.href = "index.html";
-            } catch (error) {
-                // Se der erro (ex: já existe), tenta logar
-                try {
+                if (ehCadastro) {
+                    const nome = document.getElementById('nome').value;
+                    const cred = await createUserWithEmailAndPassword(auth, email, password);
+                    await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email });
+                    alert("Conta criada com sucesso!");
+                } else {
                     await signInWithEmailAndPassword(auth, email, password);
-                    window.location.href = "index.html";
-                } catch (err) {
-                    alert("Erro ao entrar: " + err.message);
                 }
+                window.location.href = "index.html";
+            } catch (err) {
+                alert("Erro: " + err.message);
             }
         };
     </script>
@@ -41,19 +57,32 @@
 <body class="bg-blue-50 flex items-center justify-center min-h-screen">
 
     <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm">
-        <h2 class="text-xl font-bold text-center mb-6">Login / Cadastro</h2>
+        <h2 id="titulo-topo" class="text-xl font-bold text-center mb-6 text-blue-900">Login</h2>
         
-        <form onsubmit="efetuarAcao(event)" class="space-y-4">
-            <input type="text" id="nome" placeholder="Seu Nome" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
-            <input type="email" id="email" placeholder="E-mail" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
-            <input type="password" id="password" placeholder="Senha" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
+        <form onsubmit="handleAuth(event)" class="space-y-4">
+            <!-- Campo Nome oculto por padrão no Login -->
+            <div id="grupo-nome" style="display: none;">
+                <input type="text" id="nome" placeholder="Seu Nome" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+            </div>
+
+            <div>
+                <input type="email" id="email" placeholder="E-mail" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+            </div>
+
+            <div>
+                <input type="password" id="password" placeholder="Senha" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+            </div>
             
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition">
+            <button type="submit" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition cursor-pointer">
                 Entrar
             </button>
         </form>
 
-        <p class="text-center text-xs text-gray-400 mt-4">Ao entrar, você concorda com nossos termos.</p>
+        <div class="mt-6 text-center text-xs text-gray-500">
+            <span id="texto-alternativa">
+                Não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline cursor-pointer">Criar conta</button>
+            </span>
+        </div>
     </div>
 
 </body>

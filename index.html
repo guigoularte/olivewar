@@ -3,29 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliveWar - Bem-vindo</title>
+    <title>OliveWar - Início</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                window.location.href = "login.html";
+                return;
+            }
+
+            try {
+                // Busca o nome do usuário associado no Firestore
+                const docRef = doc(db, "usuarios", user.uid);
+                const docSnap = await getDoc(docRef);
+
+                if (docSnap.exists() && docSnap.data().nome) {
+                    document.getElementById('nome-usuario').innerText = `Olá, ${docSnap.data().nome}`;
+                } else {
+                    document.getElementById('nome-usuario').innerText = "Olá, Usuário";
+                }
+            } catch (error) {
+                console.error("Erro ao buscar nome:", error);
+                document.getElementById('nome-usuario').innerText = "Olá, Usuário";
+            }
+        });
+
+        window.fazerLogout = async () => {
+            await signOut(auth);
+            window.location.href = "login.html";
+        };
+    </script>
 </head>
-<body class="bg-blue-50">
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
 
-    <div class="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-100 to-blue-50">
-      
-      <!-- Logo e Título -->
-      <div class="text-center mb-12">
-        <div class="bg-white p-6 rounded-full shadow-lg mb-6 inline-block">
-          <svg class="w-20 h-20 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+    <!-- Container estilo Moldura de Celular -->
+    <div class="w-full max-w-sm bg-[#f0f4f8] min-h-[700px] rounded-[40px] shadow-2xl border-4 border-slate-300 flex flex-col justify-between relative overflow-hidden">
+        
+        <!-- Conteúdo Superior -->
+        <div>
+            <!-- Topo / Cabeçalho -->
+            <div class="px-6 pt-10 pb-4 text-center border-b border-slate-300">
+                <h1 class="text-2xl font-black text-blue-950 tracking-tight">OliveWar</h1>
+                <p id="nome-usuario" class="text-lg font-bold text-blue-950 mt-1">Carregando...</p>
+            </div>
+
+            <!-- Botões de Ação (Cards) -->
+            <div class="px-6 mt-6 space-y-4">
+                
+                <!-- Produtos / Serviços -->
+                <a href="produtos.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:border-blue-500 transition group">
+                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Produtos/Serviços</span>
+                </a>
+
+                <!-- Compras -->
+                <a href="compras.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:border-blue-500 transition group">
+                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Compras</span>
+                </a>
+
+                <!-- Vendas -->
+                <a href="vendas.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:border-blue-500 transition group">
+                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Vendas</span>
+                </a>
+
+            </div>
         </div>
-        <h1 class="text-4xl font-extrabold text-blue-900 mb-2">OliveWar</h1>
-        <p class="text-blue-700 text-lg">Bem-vindo ao OliveWar,<br>aplicativo para ver a viabilidade<br>econômica do seu produto.</p>
-      </div>
 
-      <!-- Botão para começar -->
-      <div class="w-full max-w-sm">
-        <a href="login.html" class="block w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 rounded-2xl shadow-xl text-center transition transform hover:scale-105">
-          Para começar, insira seus dados
-        </a>
-      </div>
+        <!-- Barra de Navegação Inferior -->
+        <div class="bg-white border-t border-slate-200 px-6 py-4 flex justify-around items-center">
+            <!-- Home -->
+            <a href="index.html" class="text-blue-900">
+                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+            </a>
+            <!-- Configurações -->
+            <a href="configuracoes.html" class="text-slate-400 hover:text-blue-900 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </a>
+            <!-- Perfil / Sair -->
+            <button onclick="fazerLogout()" title="Sair da Conta" class="text-slate-400 hover:text-red-600 transition">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+            </button>
+        </div>
 
     </div>
+
 </body>
 </html>
