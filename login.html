@@ -31,7 +31,7 @@
                 : 'Não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline">Criar conta</button>';
         };
 
-        window.handleAuth = async (e) => {
+       window.handleAuth = async (e) => {
             e.preventDefault();
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -39,15 +39,20 @@
             try {
                 if (ehCadastro) {
                     const nome = document.getElementById('nome').value;
+                    console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
+                    
+                    console.log("Tentando salvar nome no Firestore...");
                     await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email });
+                    
                     alert("Conta criada com sucesso!");
                 } else {
+                    console.log("Tentando fazer login...");
                     await signInWithEmailAndPassword(auth, email, password);
                 }
-                // Redireciona para o painel principal logado
                 window.location.href = "app.html";
             } catch (err) {
+                console.error("Erro detalhado:", err);
                 alert("Erro: " + err.message);
             }
         };
