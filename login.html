@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OliveWar - Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
@@ -14,30 +15,46 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        window.handleAuth = async (e) => {
+        window.efetuarAcao = async (e) => {
             e.preventDefault();
+            const nome = document.getElementById('nome').value;
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
-            const nome = document.getElementById('nome').value;
 
             try {
+                // Tenta criar conta
                 const cred = await createUserWithEmailAndPassword(auth, email, password);
                 await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email });
                 window.location.href = "index.html";
-            } catch {
-                await signInWithEmailAndPassword(auth, email, password);
-                window.location.href = "index.html";
+            } catch (error) {
+                // Se der erro (ex: já existe), tenta logar
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    window.location.href = "index.html";
+                } catch (err) {
+                    alert("Erro ao entrar: " + err.message);
+                }
             }
         };
     </script>
 </head>
-<body class="bg-blue-50 p-8">
-    <form onsubmit="handleAuth(event)" class="max-w-xs mx-auto bg-white p-6 rounded-2xl shadow-xl space-y-4">
-        <h2 class="font-bold text-center">Login / Cadastro</h2>
-        <input type="text" id="nome" placeholder="Seu Nome" class="w-full border p-2 rounded-lg" required>
-        <input type="email" id="email" placeholder="E-mail" class="w-full border p-2 rounded-lg" required>
-        <input type="password" id="password" placeholder="Senha" class="w-full border p-2 rounded-lg" required>
-        <button class="w-full bg-blue-600 text-white py-2 rounded-lg font-bold">Entrar</button>
-    </form>
+<body class="bg-blue-50 flex items-center justify-center min-h-screen">
+
+    <div class="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm">
+        <h2 class="text-xl font-bold text-center mb-6">Login / Cadastro</h2>
+        
+        <form onsubmit="efetuarAcao(event)" class="space-y-4">
+            <input type="text" id="nome" placeholder="Seu Nome" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
+            <input type="email" id="email" placeholder="E-mail" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
+            <input type="password" id="password" placeholder="Senha" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" required>
+            
+            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition">
+                Entrar
+            </button>
+        </form>
+
+        <p class="text-center text-xs text-gray-400 mt-4">Ao entrar, você concorda com nossos termos.</p>
+    </div>
+
 </body>
 </html>
