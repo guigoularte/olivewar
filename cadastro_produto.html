@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>OliveWar - Produto</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const prodId = urlParams.get('id');
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            
+            // Se tiver um ID na URL, carrega os dados do produto para editar
+            if (prodId) {
+                const docSnap = await getDoc(doc(db, "usuarios", user.uid, "produtos", prodId));
+                if (docSnap.exists()) {
+                    document.getElementById('nomeProduto').value = docSnap.data().nomeProduto;
+                }
+            }
+        });
+
+        window.salvarProduto = async (e) => {
+            e.preventDefault();
+            const uid = auth.currentUser.uid;
+            // Se já existe ID, edita; se não, cria um novo com código do tempo
+            const id = prodId || "prod_" + Date.now();
+            
+            await setDoc(doc(db, "usuarios", uid, "produtos", id), {
+                nomeProduto: document.getElementById('nomeProduto').value
+            });
+            alert("Produto salvo!");
+            window.location.href = "index.html";
+        };
+    </script>
+</head>
+<body class="bg-blue-50 p-8">
+    <form onsubmit="salvarProduto(event)" class="max-w-xs mx-auto bg-white p-6 rounded-2xl shadow-xl space-y-4">
+        <h2 class="font-bold text-center">Cadastrar Produto</h2>
+        <input type="text" id="nomeProduto" placeholder="Nome do Produto" class="w-full border p-2 rounded-lg" required>
+        <button class="w-full bg-blue-600 text-white py-2 rounded-lg font-bold">Salvar Produto</button>
+        <a href="index.html" class="block text-center text-sm text-gray-500 underline">Voltar</a>
+    </form>
+</body>
+</html>

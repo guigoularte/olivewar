@@ -2,13 +2,12 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OliveWar - Central</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -17,38 +16,23 @@
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
-            
-            const leadsRef = collection(db, "usuarios", user.uid, "leads");
-            const querySnapshot = await getDocs(leadsRef);
-            const listaDiv = document.getElementById('lista-produtos');
-            listaDiv.innerHTML = '';
+            const userSnap = await getDoc(doc(db, "usuarios", user.uid));
+            document.getElementById('display-nome').innerText = userSnap.data().nome;
 
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                if (data.nomeUsuario) document.getElementById('display-nome').innerText = data.nomeUsuario;
-                
-                const card = document.createElement('div');
-                card.className = "flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl shadow-sm";
-                card.innerHTML = `
-                    <div>
-                        <p class="font-bold text-slate-800">${data.produto}</p>
-                        <p class="text-xs text-slate-500">${data.empresa}</p>
-                    </div>
-                    <a href="newleads.html?id=${doc.id}" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</a>
-                `;
-                listaDiv.appendChild(card);
+            const prods = await getDocs(collection(db, "usuarios", user.uid, "produtos"));
+            const lista = document.getElementById('lista-produtos');
+            prods.forEach(p => {
+                lista.innerHTML += `<div class="p-4 bg-white border rounded-xl flex justify-between">
+                    ${p.data().nomeProduto} <a href="cadastro_produto.html?id=${p.id}">✏️</a>
+                </div>`;
             });
         });
-        window.logout = () => { signOut(auth); window.location.href = "login.html"; };
     </script>
 </head>
-<body class="bg-slate-50 p-6">
-    <div class="max-w-md mx-auto">
-        <h1 class="text-2xl font-bold text-slate-800 mb-2">Olá, <span id="display-nome">Usuário</span>!</h1>
-        <p class="text-slate-500 text-sm mb-6">Seus produtos cadastrados:</p>
-        <div id="lista-produtos" class="space-y-4"></div>
-        <a href="newleads.html" class="block w-full bg-slate-900 text-white text-center py-3.5 rounded-xl font-bold mt-8">+ Cadastrar novo produto</a>
-        <button onclick="logout()" class="block w-full text-slate-400 text-xs mt-4 underline">Sair da conta</button>
-    </div>
+<body class="bg-slate-50 p-8">
+    <h1 class="text-xl font-bold">Olá, <span id="display-nome">...</span></h1>
+    <div id="lista-produtos" class="space-y-3 my-6"></div>
+    <a href="cadastro_produto.html" class="block bg-slate-900 text-white text-center p-3 rounded-lg font-bold">+ Cadastrar Produto</a>
+    <a href="newleads.html" class="block bg-blue-600 text-white text-center p-3 rounded-lg font-bold mt-3">Formulário de Contato (Leads)</a>
 </body>
 </html>
