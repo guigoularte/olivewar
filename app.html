@@ -42,17 +42,19 @@
         };
     </script>
 </head>
-<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+<!-- O fundo e o layout agora ocupam 100% da tela do celular -->
+<body class="bg-slate-50 min-h-screen flex flex-col justify-between"
 
     <!-- Moldura Estilo Celular -->
-    <div class="w-full max-w-sm bg-[#f4f7fb] min-h-[700px] rounded-[40px] shadow-2xl border-4 border-slate-300 flex flex-col justify-between overflow-hidden relative">
+    <div class="w-full max-w-md mx-auto p-4 flex-1 flex flex-col justify-between">
         
         <!-- Conteúdo do Topo -->
         <div>
             <!-- Cabeçalho / Perfil -->
-            <div class="px-8 pt-10 pb-6 text-center border-b border-slate-200">
-                <h1 class="text-3xl font-black text-blue-950 tracking-tight mb-3">OliveWar</h1>
-                <h2 id="nome-usuario" class="text-xl font-bold text-blue-950">Carregando...</h2>
+           <div class="bg-white border-t border-slate-200 py-3 px-6 flex justify-around items-center mt-auto">
+            <a href="app.html" class="text-blue-900">🏠</a>
+            <a href="configuracoes.html" class="text-slate-400">⚙️</a>
+            <a href="perfil.html" class="text-slate-400">👤</a>
             </div>
 
             <!-- Botões / Cards de Navegação -->
@@ -60,25 +62,28 @@
                 
                 <!-- Produtos/Serviços -->
                 <a href="produtos.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
-                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
-                    </div>
+                   <div class="bg-white border-t border-slate-200 py-3 px-6 flex justify-around items-center mt-auto">
+            <a href="app.html" class="text-blue-900">🏠</a>
+            <a href="configuracoes.html" class="text-slate-400">⚙️</a>
+            <a href="perfil.html" class="text-slate-400">👤</a>
                     <span class="ml-4 font-bold text-slate-800 text-base">Produtos/Serviços</span>
                 </a>
 
                 <!-- Compras -->
                 <a href="compras.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
-                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                    </div>
+                    <div class="bg-white border-t border-slate-200 py-3 px-6 flex justify-around items-center mt-auto">
+            <a href="app.html" class="text-blue-900">🏠</a>
+            <a href="configuracoes.html" class="text-slate-400">⚙️</a>
+            <a href="perfil.html" class="text-slate-400">👤</a>
                     <span class="ml-4 font-bold text-slate-800 text-base">Compras</span>
                 </a>
 
                 <!-- Vendas -->
                 <a href="vendas.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
-                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                    </div>
+                   <div class="bg-white border-t border-slate-200 py-3 px-6 flex justify-around items-center mt-auto">
+            <a href="app.html" class="text-blue-900">🏠</a>
+            <a href="configuracoes.html" class="text-slate-400">⚙️</a>
+            <a href="perfil.html" class="text-slate-400">👤</a>
                     <span class="ml-4 font-bold text-slate-800 text-base">Vendas</span>
                 </a>
 
