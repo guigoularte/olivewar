@@ -27,17 +27,26 @@
                 const docSnap = await getDoc(docRef);
 
                 if (docSnap.exists() && docSnap.data().nome) {
-                    document.getElementById('nome-usuario').innerText = `Olá, ${docSnap.data().nome}`;
+                    const primeiroNome = docSnap.data().nome.trim().split(" ")[0];
+                    document.getElementById('nome-usuario').innerText = `Olá, ${primeiroNome}`;
                 } else {
                     document.getElementById('nome-usuario').innerText = "Olá, Usuário";
                 }
 
-                // Libera funcionalidades extras apenas para funcionários
-                if (docSnap.exists() && docSnap.data().role === "funcionario") {
-                    const menuRel = document.getElementById('menu-relatorios');
-                    menuRel.classList.remove('hidden');
-                    menuRel.classList.add('flex');
-                }
+                // Controle de acesso por funcionalidade (definido pelo master)
+                const dados = docSnap.exists() ? docSnap.data() : {};
+                const ehMaster = dados.role === "master";
+                const func = dados.funcionalidades || {};
+
+                const mostrar = (id) => {
+                    const el = document.getElementById(id);
+                    if (el) { el.classList.remove('hidden'); el.classList.add('flex'); }
+                };
+
+                // Master vê tudo; demais veem conforme as permissões liberadas
+                if (ehMaster || func.calculoMargem) mostrar('menu-margem');
+                if (ehMaster || func.relatorios) mostrar('menu-relatorios');
+                if (ehMaster) mostrar('menu-admin');
             } catch (error) {
                 console.error("Erro ao buscar nome:", error);
                 document.getElementById('nome-usuario').innerText = "Olá, Usuário";
@@ -90,12 +99,20 @@
                     <span class="ml-4 font-bold text-slate-800 text-base">Vendas</span>
                 </a>
 
-                <!-- Cálculo de Margem -->
-                <a href="calculo_margem.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <!-- Cálculo de Margem (funcionalidade paga) -->
+                <a id="menu-margem" href="calculo_margem.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m-6 4h6m-6 4h4M5 3h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Cálculo de Margem</span>
+                </a>
+
+                <!-- Painel Master (apenas administrador) -->
+                <a id="menu-admin" href="admin.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-purple-300/80 hover:border-purple-500 transition group">
+                    <div class="p-3 bg-purple-50 text-purple-700 rounded-xl group-hover:bg-purple-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Painel Master</span>
                 </a>
 
                 <!-- Relatórios (apenas funcionários) -->

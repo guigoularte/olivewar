@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OliveWar - Painel Master</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Funcionalidades controláveis pelo master
+        const FUNCS = [
+            { chave: "calculoMargem", label: "Cálculo de Margem" },
+            { chave: "relatorios", label: "Relatórios" }
+        ];
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+
+            // Só o master acessa este painel
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            if (!meu.exists() || meu.data().role !== "master") {
+                alert("Acesso restrito ao administrador.");
+                window.location.href = "app.html";
+                return;
+            }
+
+            document.getElementById('conteudo').classList.remove('hidden');
+            carregarUsuarios(user.uid);
+        });
+
+        async function carregarUsuarios(meuUid) {
+            const snap = await getDocs(collection(db, "usuarios"));
+            const lista = document.getElementById('lista-usuarios');
+            lista.innerHTML = '';
+
+            snap.forEach((d) => {
+                const u = d.data();
+                if (d.id === meuUid) return; // não lista o próprio master
+                const func = u.funcionalidades || {};
+
+                const toggles = FUNCS.map(f => `
+                    <label class="flex items-center justify-between text-xs py-1">
+                        <span class="text-slate-600">${f.label}</span>
+                        <input type="checkbox" data-uid="${d.id}" data-func="${f.chave}"
+                            ${func[f.chave] ? "checked" : ""}
+                            onchange="alternarFunc(this)"
+                            class="w-9 h-5 accent-blue-600 cursor-pointer">
+                    </label>
+                `).join('');
+
+                lista.innerHTML += `
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                        <div class="mb-2">
+                            <div class="font-bold text-slate-800 text-sm">${u.nome || "(sem nome)"}</div>
+                            <div class="text-[11px] text-slate-500">${u.email || ""}</div>
+                            <div class="text-[10px] text-slate-400">${u.segmento || ""} ${u.telefone ? "· " + u.telefone : ""}</div>
+                        </div>
+                        <div class="border-t border-slate-100 pt-2">${toggles}</div>
+                    </div>`;
+            });
+
+            if (lista.innerHTML === '') lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhum outro usuário cadastrado.</p>';
+        }
+
+        // Liga/desliga uma funcionalidade de um usuário
+        window.alternarFunc = async (input) => {
+            const uid = input.dataset.uid;
+            const chave = input.dataset.func;
+            input.disabled = true;
+            try {
+                await updateDoc(doc(db, "usuarios", uid), {
+                    [`funcionalidades.${chave}`]: input.checked
+                });
+            } catch (err) {
+                alert("Erro ao atualizar: " + err.message);
+                input.checked = !input.checked; // desfaz visualmente
+            } finally {
+                input.disabled = false;
+            }
+        };
+    </script>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#f4f7fb] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-slate-300 flex flex-col justify-between p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Painel Master</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <p class="text-[11px] text-slate-500 mb-3 leading-snug">Ligue ou desligue as funcionalidades de cada usuário. As alterações são salvas automaticamente.</p>
+
+            <div id="lista-usuarios" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
+            <a href="app.html" class="text-blue-900"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+            <a href="configuracoes.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg></a>
+            <a href="perfil.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></a>
+        </div>
+    </div>
+</body>
+</html>

@@ -27,8 +27,11 @@
             ehCadastro = !ehCadastro;
             const titulo = document.getElementById('titulo-topo');
             
-            document.getElementById('grupo-nome').style.display = ehCadastro ? 'block' : 'none';
+            document.getElementById('grupo-cadastro').style.display = ehCadastro ? 'block' : 'none';
             document.getElementById('nome').required = ehCadastro;
+            document.getElementById('telefone').required = ehCadastro;
+            document.getElementById('segmento').required = ehCadastro;
+            document.getElementById('faturamento').required = ehCadastro;
             
             titulo.innerText = ehCadastro ? "Criar Conta" : "Login";
             document.getElementById('btn-submit').innerText = ehCadastro ? "Cadastrar" : "Entrar";
@@ -45,18 +48,33 @@
             try {
                 if (ehCadastro) {
                     const nome = document.getElementById('nome').value;
+                    const telefone = document.getElementById('telefone').value;
+                    const segmento = document.getElementById('segmento').value;
+                    const faturamento = document.getElementById('faturamento').value;
                     console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
-                    console.log("Tentando salvar nome no Firestore...");
+                    console.log("Tentando salvar dados no Firestore...");
                     // Todo novo cadastro entra como "cliente" por padrão
-                    await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email, role: "cliente" });
+                    await setDoc(doc(db, "usuarios", cred.user.uid), {
+                        nome: nome,
+                        email: email,
+                        telefone: telefone,
+                        segmento: segmento,
+                        faturamento: faturamento,
+                        role: "cliente",
+                        // Funcionalidades pagas começam desligadas
+                        funcionalidades: { calculoMargem: false, relatorios: false }
+                    });
 
                     // Avisa o administrador por e-mail sobre o novo cadastro
                     try {
                         await emailjs.send("service_yuf3qik", "template_ljx1rge", {
                             nome_usuario: nome,
                             email_usuario: email,
+                            telefone_usuario: telefone,
+                            segmento_usuario: segmento,
+                            faturamento_usuario: faturamento,
                             data_cadastro: new Date().toLocaleString("pt-BR")
                         });
                     } catch (mailErr) {
@@ -82,8 +100,18 @@
         <h2 id="titulo-topo" class="text-2xl font-black text-center mb-6 text-blue-950">Login</h2>
         
         <form onsubmit="handleAuth(event)" class="space-y-4">
-            <div id="grupo-nome" style="display: none;">
-                <input type="text" id="nome" placeholder="Seu Nome" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+            <div id="grupo-cadastro" style="display: none;" class="space-y-4">
+                <input type="text" id="nome" placeholder="Nome completo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                <input type="tel" id="telefone" placeholder="Telefone (WhatsApp) ativo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                <input type="text" id="segmento" placeholder="Segmento da empresa (ex: Lanchonete)" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                <select id="faturamento" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm text-slate-500">
+                    <option value="">Faturamento médio mensal</option>
+                    <option value="Até R$ 5.000">Até R$ 5.000</option>
+                    <option value="R$ 5.000 a R$ 20.000">R$ 5.000 a R$ 20.000</option>
+                    <option value="R$ 20.000 a R$ 50.000">R$ 20.000 a R$ 50.000</option>
+                    <option value="R$ 50.000 a R$ 100.000">R$ 50.000 a R$ 100.000</option>
+                    <option value="Acima de R$ 100.000">Acima de R$ 100.000</option>
+                </select>
             </div>
 
             <div>

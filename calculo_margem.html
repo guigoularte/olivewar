@@ -10,7 +10,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, deleteDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -21,9 +21,20 @@
         let editandoId = null; // id do produto em edição (null = novo)
         let produtosSalvos = {}; // cache dos produtos salvos por id
 
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             usuarioAtual = user;
+
+            // Verifica permissão para esta funcionalidade
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const dados = snap.exists() ? snap.data() : {};
+            const permitido = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.calculoMargem);
+            if (!permitido) {
+                alert("Esta funcionalidade não está disponível no seu plano.");
+                window.location.href = "app.html";
+                return;
+            }
+
             adicionarLinha();
             carregarSalvos();
         });

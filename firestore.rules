@@ -2,37 +2,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Função auxiliar: papel atual do usuário logado
+    // Papel do usuário logado
     function role() {
       return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role;
     }
+    function ehMaster() {
+      return request.auth != null && role() == "master";
+    }
+    // Verifica se a atualização NÃO mexeu em campos sensíveis
+    function naoAlterou(campos) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(campos);
+    }
 
     match /usuarios/{userId} {
-      // Só o próprio dono lê seu documento
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // O próprio dono lê seu documento; o master lê qualquer um
+      allow read: if request.auth != null && (request.auth.uid == userId || ehMaster());
 
       // No cadastro, o usuário SÓ pode se criar como "cliente"
       allow create: if request.auth != null
                     && request.auth.uid == userId
                     && request.resource.data.role == "cliente";
 
-      // Ao atualizar, NÃO pode alterar o próprio "role"
-      // (promover a funcionário só pelo Console do Firebase)
-      allow update: if request.auth != null
-                    && request.auth.uid == userId
-                    && request.resource.data.role == resource.data.role;
+      // Master pode atualizar qualquer usuário (inclusive funcionalidades e role).
+      // O próprio dono pode atualizar seus dados, MAS não o "role" nem "funcionalidades".
+      allow update: if ehMaster()
+                    || (request.auth != null
+                        && request.auth.uid == userId
+                        && naoAlterou(['role', 'funcionalidades']));
 
-      allow delete: if false;
+      allow delete: if ehMaster();
 
-      // Subcoleções do próprio usuário (produtos, compras, vendas...)
+      // Subcoleções do próprio usuário (produtos, compras, vendas, margens...)
       match /{documento=**} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (request.auth.uid == userId || ehMaster());
       }
-    }
-
-    // Exemplo: coleção de relatórios acessível apenas a funcionários
-    match /relatorios/{doc} {
-      allow read, write: if request.auth != null && role() == "funcionario";
     }
   }
 }
