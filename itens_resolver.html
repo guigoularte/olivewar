@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OliveWar - Itens para Resolver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let usuarioAtual = null;
+
+        onAuthStateChanged(auth, (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            usuarioAtual = user;
+            carregarItens();
+        });
+
+        function comprimirImagem(file, maxLado = 900, qualidade = 0.6) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > height && width > maxLado) { height = height * maxLado / width; width = maxLado; }
+                        else if (height > maxLado) { width = width * maxLado / height; height = maxLado; }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width; canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', qualidade));
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function carregarItens() {
+            const snap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "itens_resolver"));
+            const lista = document.getElementById('lista');
+            lista.innerHTML = '';
+            if (snap.empty) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum item pendente. 🎉</p>'; return; }
+
+            // Pendentes primeiro
+            const docs = snap.docs.slice().sort((a, b) => (a.data().status === "concluido") - (b.data().status === "concluido"));
+            docs.forEach((d) => {
+                const it = d.data();
+                const concluido = it.status === "concluido";
+                lista.innerHTML += `<div class="bg-white p-4 rounded-2xl shadow-sm border ${concluido ? 'border-green-300' : 'border-slate-200'}">
+                    <div class="flex justify-between items-start gap-2 mb-2">
+                        <p class="text-sm font-semibold text-slate-800 flex-1">${it.descricao}</p>
+                        ${concluido ? '<span class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded">CONCLUÍDO</span>' : '<span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">PENDENTE</span>'}
+                    </div>
+                    <div class="text-[10px] text-slate-400 mb-2">Enviado por ${it.funcionario || "—"}</div>
+                    ${it.fotoAntes ? `<div class="mb-2"><span class="text-[10px] text-slate-500">Foto do funcionário:</span><img src="${it.fotoAntes}" class="mt-1 rounded-lg w-full max-h-44 object-cover"></div>` : ''}
+                    ${it.fotoDepois ? `<div class="mb-2"><span class="text-[10px] text-green-600">Sua foto (resolvido):</span><img src="${it.fotoDepois}" class="mt-1 rounded-lg w-full max-h-44 object-cover"></div>` : ''}
+                    ${concluido ? '' : `
+                        <div class="flex gap-2 mt-2">
+                            <label class="flex-1 text-center bg-slate-100 text-slate-700 text-xs font-semibold py-2 rounded-lg cursor-pointer hover:bg-slate-200">
+                                📷 Enviar foto
+                                <input type="file" accept="image/*" capture="environment" class="hidden" onchange="enviarFoto('${d.id}', this)">
+                            </label>
+                            <button onclick="marcarConcluido('${d.id}')" class="flex-1 bg-green-600 text-white text-xs font-semibold py-2 rounded-lg hover:bg-green-700">✓ Concluir</button>
+                        </div>`}
+                </div>`;
+            });
+        }
+
+        window.enviarFoto = async (id, input) => {
+            const arquivo = input.files[0];
+            if (!arquivo) return;
+            try {
+                const foto = await comprimirImagem(arquivo);
+                await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "itens_resolver", id), { fotoDepois: foto });
+                carregarItens();
+            } catch (e) {
+                alert("Erro ao enviar foto: " + e.message);
+            }
+        };
+
+        window.marcarConcluido = async (id) => {
+            await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "itens_resolver", id), { status: "concluido" });
+            carregarItens();
+        };
+    </script>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#f4f7fb] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-slate-300 flex flex-col justify-between p-6 overflow-hidden">
+        <div class="overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Itens para Resolver</h1>
+                <div class="w-8"></div>
+            </div>
+            <div id="lista" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
+            <a href="app.html" class="text-blue-900"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+            <a href="configuracoes.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg></a>
+            <a href="perfil.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></a>
+        </div>
+    </div>
+</body>
+</html>

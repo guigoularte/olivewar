@@ -2,29 +2,31 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Papel do usuário logado
-    function role() {
-      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role;
+    function dadosUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
     }
     function ehMaster() {
-      return request.auth != null && role() == "master";
+      return request.auth != null && dadosUsuario().role == "master";
     }
-    // Verifica se a atualização NÃO mexeu em campos sensíveis
+    // "Funcionário" = usuário com a funcionalidade de relatórios liberada
+    function ehFuncionario() {
+      return request.auth != null
+        && dadosUsuario().get('funcionalidades', {}).get('relatorios', false) == true;
+    }
     function naoAlterou(campos) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(campos);
     }
 
     match /usuarios/{userId} {
-      // O próprio dono lê seu documento; o master lê qualquer um
-      allow read: if request.auth != null && (request.auth.uid == userId || ehMaster());
+      // Dono lê o seu; master e funcionário podem ler para localizar clientes
+      allow read: if request.auth != null
+                  && (request.auth.uid == userId || ehMaster() || ehFuncionario());
 
-      // No cadastro, o usuário SÓ pode se criar como "cliente"
       allow create: if request.auth != null
                     && request.auth.uid == userId
                     && request.resource.data.role == "cliente";
 
-      // Master pode atualizar qualquer usuário (inclusive funcionalidades e role).
-      // O próprio dono pode atualizar seus dados, MAS não o "role" nem "funcionalidades".
+      // Master edita qualquer um; o dono edita seus dados exceto role e funcionalidades
       allow update: if ehMaster()
                     || (request.auth != null
                         && request.auth.uid == userId
@@ -32,7 +34,18 @@ service cloud.firestore {
 
       allow delete: if ehMaster();
 
-      // Subcoleções do próprio usuário (produtos, compras, vendas, margens...)
+      // Painel "Itens para Resolver": funcionário cria; dono lê e atualiza (concluir/foto)
+      match /itens_resolver/{item} {
+        allow read: if request.auth != null
+                    && (request.auth.uid == userId || ehMaster() || ehFuncionario());
+        allow create: if ehMaster() || ehFuncionario();
+        allow update: if request.auth != null
+                      && (request.auth.uid == userId || ehMaster());
+        allow delete: if request.auth != null
+                      && (request.auth.uid == userId || ehMaster());
+      }
+
+      // Demais subcoleções do próprio usuário (produtos, compras, vendas, margens...)
       match /{documento=**} {
         allow read, write: if request.auth != null && (request.auth.uid == userId || ehMaster());
       }
