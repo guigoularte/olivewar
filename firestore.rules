@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Função auxiliar: papel atual do usuário logado
+    function role() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role;
+    }
+
+    match /usuarios/{userId} {
+      // Só o próprio dono lê seu documento
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // No cadastro, o usuário SÓ pode se criar como "cliente"
+      allow create: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.role == "cliente";
+
+      // Ao atualizar, NÃO pode alterar o próprio "role"
+      // (promover a funcionário só pelo Console do Firebase)
+      allow update: if request.auth != null
+                    && request.auth.uid == userId
+                    && request.resource.data.role == resource.data.role;
+
+      allow delete: if false;
+
+      // Subcoleções do próprio usuário (produtos, compras, vendas...)
+      match /{documento=**} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Exemplo: coleção de relatórios acessível apenas a funcionários
+    match /relatorios/{doc} {
+      allow read, write: if request.auth != null && role() == "funcionario";
+    }
+  }
+}

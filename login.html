@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OliveWar - Acesso</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- EmailJS: SDK para enviar e-mail direto do navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script>
+        // ⚠️ SUBSTITUA pela sua Public Key do EmailJS (Account > General)
+        emailjs.init({ publicKey: "Jwl7iLqUNND6syxRU" });
+    </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -41,10 +47,22 @@
                     const nome = document.getElementById('nome').value;
                     console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
-                    
+
                     console.log("Tentando salvar nome no Firestore...");
-                    await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email });
-                    
+                    // Todo novo cadastro entra como "cliente" por padrão
+                    await setDoc(doc(db, "usuarios", cred.user.uid), { nome: nome, email: email, role: "cliente" });
+
+                    // Avisa o administrador por e-mail sobre o novo cadastro
+                    try {
+                        await emailjs.send("service_yuf3qik", "template_ljx1rge", {
+                            nome_usuario: nome,
+                            email_usuario: email,
+                            data_cadastro: new Date().toLocaleString("pt-BR")
+                        });
+                    } catch (mailErr) {
+                        console.error("Falha ao enviar e-mail de aviso:", mailErr);
+                    }
+
                     alert("Conta criada com sucesso!");
                 } else {
                     console.log("Tentando fazer login...");
