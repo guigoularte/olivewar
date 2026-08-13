@@ -28,6 +28,9 @@
             document.getElementById('telefone').value = d.telefone || '';
             document.getElementById('segmento').value = d.segmento || '';
             document.getElementById('faturamento').value = d.faturamento || '';
+            document.getElementById('cep').value = d.cep || '';
+            document.getElementById('cidade').value = d.cidade || '';
+            document.getElementById('estado').value = d.estado || '';
             document.getElementById('email').innerText = user.email || '';
         });
 
@@ -39,7 +42,10 @@
                     nome: document.getElementById('nome').value,
                     telefone: document.getElementById('telefone').value,
                     segmento: document.getElementById('segmento').value,
-                    faturamento: document.getElementById('faturamento').value
+                    faturamento: document.getElementById('faturamento').value,
+                    cep: document.getElementById('cep').value,
+                    cidade: document.getElementById('cidade').value,
+                    estado: document.getElementById('estado').value
                 }, { merge: true });
                 alert("Perfil atualizado com sucesso!");
                 window.location.href = "app.html";
@@ -84,6 +90,23 @@
                         <option value="R$ 50.000 a R$ 100.000">R$ 50.000 a R$ 100.000</option>
                         <option value="Acima de R$ 100.000">Acima de R$ 100.000</option>
                     </select>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold text-slate-600">CEP</label>
+                    <input type="text" id="cep" placeholder="CEP" class="w-full mt-1 px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+                </div>
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="text-xs font-semibold text-slate-600">Cidade</label>
+                        <input type="text" id="cidade" placeholder="Cidade" class="w-full mt-1 px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+                    </div>
+                    <div class="w-24">
+                        <label class="text-xs font-semibold text-slate-600">Estado</label>
+                        <select id="estado" class="w-full mt-1 px-3 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" required>
+                            <option value="">UF</option>
+                            <option>AC</option><option>AL</option><option>AP</option><option>AM</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MT</option><option>MS</option><option>MG</option><option>PA</option><option>PB</option><option>PR</option><option>PE</option><option>PI</option><option>RJ</option><option>RN</option><option>RS</option><option>RO</option><option>RR</option><option>SC</option><option>SP</option><option>SE</option><option>TO</option>
+                        </select>
+                    </div>
                 </div>
 
                 <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-2xl text-sm hover:bg-blue-700 transition shadow-lg">Salvar alterações</button>

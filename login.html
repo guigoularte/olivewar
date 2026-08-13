@@ -32,6 +32,9 @@
             document.getElementById('telefone').required = ehCadastro;
             document.getElementById('segmento').required = ehCadastro;
             document.getElementById('faturamento').required = ehCadastro;
+            document.getElementById('cep').required = ehCadastro;
+            document.getElementById('cidade').required = ehCadastro;
+            document.getElementById('estado').required = ehCadastro;
             
             titulo.innerText = ehCadastro ? "Criar Conta" : "Login";
             document.getElementById('btn-submit').innerText = ehCadastro ? "Cadastrar" : "Entrar";
@@ -51,6 +54,9 @@
                     const telefone = document.getElementById('telefone').value;
                     const segmento = document.getElementById('segmento').value;
                     const faturamento = document.getElementById('faturamento').value;
+                    const cep = document.getElementById('cep').value;
+                    const cidade = document.getElementById('cidade').value;
+                    const estado = document.getElementById('estado').value;
                     console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
@@ -62,6 +68,9 @@
                         telefone: telefone,
                         segmento: segmento,
                         faturamento: faturamento,
+                        cep: cep,
+                        cidade: cidade,
+                        estado: estado,
                         role: "cliente",
                         // Funcionalidades pagas começam desligadas
                         funcionalidades: { calculoMargem: false, relatorios: false }
@@ -75,6 +84,9 @@
                             telefone_usuario: telefone,
                             segmento_usuario: segmento,
                             faturamento_usuario: faturamento,
+                            cep_usuario: cep,
+                            cidade_usuario: cidade,
+                            estado_usuario: estado,
                             data_cadastro: new Date().toLocaleString("pt-BR")
                         });
                     } catch (mailErr) {
@@ -104,6 +116,14 @@
                 <input type="text" id="nome" placeholder="Nome completo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="tel" id="telefone" placeholder="Telefone (WhatsApp) ativo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="text" id="segmento" placeholder="Segmento da empresa (ex: Lanchonete)" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                <input type="text" id="cep" placeholder="CEP" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                <div class="flex gap-3">
+                    <input type="text" id="cidade" placeholder="Cidade" class="flex-1 px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
+                    <select id="estado" class="w-28 px-3 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm text-slate-500">
+                        <option value="">UF</option>
+                        <option>AC</option><option>AL</option><option>AP</option><option>AM</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MT</option><option>MS</option><option>MG</option><option>PA</option><option>PB</option><option>PR</option><option>PE</option><option>PI</option><option>RJ</option><option>RN</option><option>RS</option><option>RO</option><option>RR</option><option>SC</option><option>SP</option><option>SE</option><option>TO</option>
+                    </select>
+                </div>
                 <select id="faturamento" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm text-slate-500">
                     <option value="">Faturamento médio mensal</option>
                     <option value="Até R$ 5.000">Até R$ 5.000</option>
