@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OliveWar - Cálculo de Margem</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF: geração de PDF no navegador -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -16,6 +18,8 @@
         const db = getFirestore(app);
 
         let usuarioAtual = null;
+        let editandoId = null; // id do produto em edição (null = novo)
+        let produtosSalvos = {}; // cache dos produtos salvos por id
 
         onAuthStateChanged(auth, (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -93,38 +97,154 @@
             });
             if (ingredientes.length === 0) { alert("Adicione pelo menos um ingrediente."); return; }
 
+            const dados = {
+                nomeProduto,
+                ingredientes,
+                precoVenda: num(document.getElementById('preco-venda').value),
+                data: new Date().toISOString()
+            };
+
             try {
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "margens"), {
-                    nomeProduto,
-                    ingredientes,
-                    precoVenda: num(document.getElementById('preco-venda').value),
-                    data: new Date().toISOString()
-                });
-                alert("Produto salvo com sucesso!");
+                if (editandoId) {
+                    // Atualiza o produto existente
+                    await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "margens", editandoId), dados);
+                    alert("Produto atualizado com sucesso!");
+                } else {
+                    await addDoc(collection(db, "usuarios", usuarioAtual.uid, "margens"), dados);
+                    alert("Produto salvo com sucesso!");
+                }
+                cancelarEdicao();
                 carregarSalvos();
             } catch (err) {
                 alert("Erro ao salvar: " + err.message);
             }
         };
 
+        // Carrega um produto salvo no formulário para edição
+        window.editarProduto = (id) => {
+            const p = produtosSalvos[id];
+            if (!p) return;
+            editandoId = id;
+            document.getElementById('nome-produto').value = p.nomeProduto || '';
+            document.getElementById('preco-venda').value = p.precoVenda ?? '';
+            document.getElementById('ingredientes').innerHTML = '';
+            (p.ingredientes || []).forEach((ing) => adicionarLinha(ing));
+            if ((p.ingredientes || []).length === 0) adicionarLinha();
+            document.getElementById('titulo-form').innerText = "Editando produto";
+            document.getElementById('btn-cancelar').classList.remove('hidden');
+            document.getElementById('btn-salvar').innerText = "Atualizar produto";
+            recalcular();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            document.getElementById('nome-produto').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.cancelarEdicao = () => {
+            editandoId = null;
+            document.getElementById('nome-produto').value = '';
+            document.getElementById('preco-venda').value = '';
+            document.getElementById('ingredientes').innerHTML = '';
+            adicionarLinha();
+            document.getElementById('titulo-form').innerText = "Novo produto";
+            document.getElementById('btn-cancelar').classList.add('hidden');
+            document.getElementById('btn-salvar').innerText = "Salvar produto";
+            recalcular();
+        };
+
+        const custoDe = (p) => (p.ingredientes || []).reduce((s, i) => s + (i.pesoComprado > 0 ? (i.valorPago / i.pesoComprado) * i.pesoUsado : 0), 0);
+
         async function carregarSalvos() {
             const snap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "margens"));
             const lista = document.getElementById('lista-salvos');
             lista.innerHTML = '';
+            produtosSalvos = {};
             if (snap.empty) { lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhum produto salvo ainda.</p>'; return; }
             snap.forEach((d) => {
                 const p = d.data();
-                const custo = (p.ingredientes || []).reduce((s, i) => s + (i.pesoComprado > 0 ? (i.valorPago / i.pesoComprado) * i.pesoUsado : 0), 0);
+                produtosSalvos[d.id] = p;
+                const custo = custoDe(p);
                 const margem = p.precoVenda > 0 ? ((p.precoVenda - custo) / p.precoVenda) * 100 : 0;
-                lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 flex justify-between items-center text-sm">
-                    <div>
-                        <span class="font-bold text-slate-800">${p.nomeProduto}</span>
-                        <div class="text-xs text-slate-500">Custo ${brl(custo)} · Margem ${margem.toFixed(1).replace(".", ",")}%</div>
+                lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 text-sm">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="font-bold text-slate-800">${p.nomeProduto}</span>
+                            <div class="text-xs text-slate-500">Venda ${brl(p.precoVenda || 0)} · Custo ${brl(custo)} · Margem ${margem.toFixed(1).replace(".", ",")}%</div>
+                        </div>
                     </div>
-                    <button onclick="excluirSalvo('${d.id}')" class="text-red-500 text-xs font-semibold">Excluir</button>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="editarProduto('${d.id}')" class="flex-1 bg-slate-100 text-slate-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-slate-200">✏️ Editar</button>
+                        <button onclick="exportarPDF('${d.id}')" class="flex-1 bg-blue-50 text-blue-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-blue-100">📄 PDF</button>
+                        <button onclick="excluirSalvo('${d.id}')" class="flex-1 bg-red-50 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-100">🗑️ Excluir</button>
+                    </div>
                 </div>`;
             });
         }
+
+        // Gera o PDF do produto e abre o compartilhamento (WhatsApp, e-mail, etc.)
+        window.exportarPDF = async (id) => {
+            const p = produtosSalvos[id];
+            if (!p) return;
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            const custo = custoDe(p);
+            const lucro = (p.precoVenda || 0) - custo;
+            const margem = p.precoVenda > 0 ? (lucro / p.precoVenda) * 100 : 0;
+
+            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
+            pdf.text("OliveWar - Cálculo de Margem", 14, 20);
+            pdf.setFontSize(13); pdf.setTextColor(0, 0, 0);
+            pdf.text(`Produto: ${p.nomeProduto}`, 14, 32);
+            pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
+            pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, 38);
+
+            // Cabeçalho da tabela
+            let y = 50;
+            pdf.setFontSize(10); pdf.setTextColor(0, 0, 0);
+            pdf.text("Ingrediente", 14, y);
+            pdf.text("Valor pago", 80, y);
+            pdf.text("Comprado", 115, y);
+            pdf.text("Usado", 145, y);
+            pdf.text("Custo", 172, y);
+            pdf.setDrawColor(200); pdf.line(14, y + 2, 196, y + 2);
+            y += 8;
+
+            (p.ingredientes || []).forEach((i) => {
+                const c = i.pesoComprado > 0 ? (i.valorPago / i.pesoComprado) * i.pesoUsado : 0;
+                pdf.text(String(i.nome || ""), 14, y);
+                pdf.text(brl(i.valorPago || 0), 80, y);
+                pdf.text(String(i.pesoComprado ?? ""), 115, y);
+                pdf.text(String(i.pesoUsado ?? ""), 145, y);
+                pdf.text(brl(c), 172, y);
+                y += 7;
+                if (y > 270) { pdf.addPage(); y = 20; }
+            });
+
+            y += 4; pdf.line(14, y, 196, y); y += 10;
+            pdf.setFontSize(12);
+            pdf.text(`Preço de venda: ${brl(p.precoVenda || 0)}`, 14, y); y += 8;
+            pdf.text(`Custo total: ${brl(custo)}`, 14, y); y += 8;
+            pdf.setTextColor(lucro >= 0 ? 22 : 200, lucro >= 0 ? 130 : 0, lucro >= 0 ? 60 : 0);
+            pdf.text(`Lucro: ${brl(lucro)}   |   Margem: ${margem.toFixed(1).replace(".", ",")}%`, 14, y);
+
+            const nomeArq = `margem-${(p.nomeProduto || "produto").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+
+            // Tenta compartilhar (WhatsApp, e-mail...) via menu nativo do celular
+            try {
+                const blob = pdf.output("blob");
+                const file = new File([blob], nomeArq, { type: "application/pdf" });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: p.nomeProduto,
+                        text: `Cálculo de margem - ${p.nomeProduto} (Margem ${margem.toFixed(1).replace(".", ",")}%)`
+                    });
+                    return;
+                }
+            } catch (e) {
+                console.log("Compartilhamento cancelado ou indisponível:", e);
+            }
+            // Fallback (desktop): baixa o arquivo
+            pdf.save(nomeArq);
+        };
 
         window.excluirSalvo = async (id) => {
             if (!confirm("Excluir este produto?")) return;
@@ -142,6 +262,7 @@
                 <div class="w-8"></div>
             </div>
 
+            <h2 id="titulo-form" class="text-sm font-bold text-slate-700 mb-2">Novo produto</h2>
             <input type="text" id="nome-produto" placeholder="Nome do produto (ex: Hambúrguer)" class="w-full p-2.5 border rounded-xl text-sm mb-3 outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
 
             <p class="text-[11px] text-slate-500 mb-2 leading-snug">Informe o <b>valor pago</b> e o <b>peso comprado</b> da embalagem, e o <b>peso usado</b> por unidade. Use a mesma unidade (g, kg, ml...) nos dois pesos.</p>
@@ -170,7 +291,10 @@
                 </div>
             </div>
 
-            <button type="button" onclick="salvarProduto()" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition mb-5">Salvar produto</button>
+            <div class="flex gap-2 mb-5">
+                <button type="button" id="btn-cancelar" onclick="cancelarEdicao()" class="hidden flex-1 bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-300 transition">Cancelar</button>
+                <button type="button" id="btn-salvar" onclick="salvarProduto()" class="flex-1 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition">Salvar produto</button>
+            </div>
 
             <h2 class="text-sm font-bold text-slate-700 mb-2">Produtos salvos</h2>
             <div id="lista-salvos" class="space-y-2 mb-2"></div>

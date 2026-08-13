@@ -43,14 +43,27 @@
         };
 
         async function carregarProdutos() {
-            const querySnapshot = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "produtos"));
             const lista = document.getElementById('lista-produtos');
             lista.innerHTML = '';
+
+            // Produtos cadastrados manualmente
+            const querySnapshot = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "produtos"));
             querySnapshot.forEach((doc) => {
                 const p = doc.data();
                 lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 flex justify-between items-center text-sm">
                     <span class="font-bold text-slate-800">${p.nome}</span>
                     <span class="text-blue-600 font-semibold">R$ ${p.preco}</span>
+                </div>`;
+            });
+
+            // Produtos vindos do Cálculo de Margem (nome + preço de venda)
+            const margensSnap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "margens"));
+            margensSnap.forEach((doc) => {
+                const m = doc.data();
+                const preco = Number(m.precoVenda || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+                lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-blue-200 flex justify-between items-center text-sm">
+                    <span class="font-bold text-slate-800">${m.nomeProduto} <span class="text-[10px] font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded ml-1">Margem</span></span>
+                    <span class="text-blue-600 font-semibold">R$ ${preco}</span>
                 </div>`;
             });
         }
