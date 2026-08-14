@@ -5,25 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OliveWar - Escrever Relatórios</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let usuarioAtual = null;
-        let nomeFuncionario = "";
-        let itens = []; // { descricao, foto }
-
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
-            usuarioAtual = user;
-
             const snap = await getDoc(doc(db, "usuarios", user.uid));
             const dados = snap.exists() ? snap.data() : {};
             const permitido = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.relatorios);
@@ -32,214 +25,46 @@
                 window.location.href = "app.html";
                 return;
             }
-            nomeFuncionario = dados.nome || user.email;
-
             document.getElementById('conteudo').classList.remove('hidden');
-            carregarClientes();
         });
-
-        // Lista os clientes para o funcionário escolher quem foi visitado.
-        // Robusto: lista todos, exceto master e o próprio funcionário (cobre contas antigas sem "role").
-        async function carregarClientes() {
-            const select = document.getElementById('cliente');
-            try {
-                const snap = await getDocs(collection(db, "usuarios"));
-                let qtd = 0;
-                snap.forEach((d) => {
-                    if (d.id === usuarioAtual.uid) return;
-                    const u = d.data();
-                    if (u.role === "master") return;
-                    const opt = document.createElement('option');
-                    opt.value = d.id;
-                    opt.textContent = `${u.nome || "(sem nome)"} — ${u.email || ""}`;
-                    select.appendChild(opt);
-                    qtd++;
-                });
-                if (qtd === 0) {
-                    document.getElementById('aviso-clientes').innerText = "Nenhum cliente cadastrado ainda.";
-                }
-            } catch (err) {
-                document.getElementById('aviso-clientes').innerText = "Erro ao carregar clientes: " + err.message + " (verifique se as regras do Firestore foram publicadas).";
-            }
-        }
-
-        function comprimirImagem(file, maxLado = 900, qualidade = 0.6) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        let { width, height } = img;
-                        if (width > height && width > maxLado) { height = height * maxLado / width; width = maxLado; }
-                        else if (height > maxLado) { width = width * maxLado / height; height = maxLado; }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width; canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        resolve(canvas.toDataURL('image/jpeg', qualidade));
-                    };
-                    img.onerror = reject;
-                    img.src = e.target.result;
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        window.adicionarItem = async () => {
-            const descricao = document.getElementById('descricao').value.trim();
-            const arquivo = document.getElementById('foto').files[0];
-            if (!descricao) { alert("Escreva a anotação do item."); return; }
-
-            let foto = "";
-            if (arquivo) {
-                document.getElementById('btn-add').innerText = "Processando foto...";
-                try { foto = await comprimirImagem(arquivo); }
-                catch (e) { alert("Não foi possível processar a foto."); }
-                document.getElementById('btn-add').innerText = "+ Adicionar item";
-            }
-
-            itens.push({ descricao, foto });
-            document.getElementById('descricao').value = "";
-            document.getElementById('foto').value = "";
-            renderItens();
-        };
-
-        window.removerItem = (i) => { itens.splice(i, 1); renderItens(); };
-
-        function renderItens() {
-            const lista = document.getElementById('lista-itens');
-            lista.innerHTML = '';
-            itens.forEach((it, i) => {
-                lista.innerHTML += `<div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 text-sm">
-                    <div class="flex justify-between items-start gap-2">
-                        <p class="text-slate-700 flex-1">${it.descricao}</p>
-                        <button onclick="removerItem(${i})" class="text-red-500 font-bold">&times;</button>
-                    </div>
-                    ${it.foto ? `<img src="${it.foto}" class="mt-2 rounded-lg w-full max-h-40 object-cover">` : ''}
-                </div>`;
-            });
-            document.getElementById('contador').innerText = itens.length;
-        }
-
-        // Gera um PDF do relatório
-        function gerarPDF(clienteNome, listaItens) {
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF();
-            let y = 20;
-            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("OliveWar - Relatório de Visita", 14, y); y += 10;
-            pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
-            pdf.text(`Cliente: ${clienteNome}`, 14, y); y += 6;
-            pdf.text(`Funcionário: ${nomeFuncionario}`, 14, y); y += 6;
-            pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
-            pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, y); y += 10;
-
-            listaItens.forEach((it, idx) => {
-                if (y > 250) { pdf.addPage(); y = 20; }
-                pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
-                const linhas = pdf.splitTextToSize(`${idx + 1}. ${it.descricao || ""}`, 180);
-                pdf.text(linhas, 14, y);
-                y += linhas.length * 6;
-                const foto = it.foto || it.fotoAntes;
-                if (foto) {
-                    if (y > 210) { pdf.addPage(); y = 20; }
-                    try { pdf.addImage(foto, "JPEG", 14, y, 60, 45); y += 50; }
-                    catch (e) { y += 2; }
-                }
-                y += 4;
-            });
-            return pdf;
-        }
-
-        async function compartilharPDF(pdf, nomeArq, textoWhats) {
-            try {
-                const blob = pdf.output("blob");
-                const file = new File([blob], nomeArq, { type: "application/pdf" });
-                if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({ files: [file], title: "Relatório de Visita", text: textoWhats });
-                    return;
-                }
-            } catch (e) { console.log("Compartilhamento cancelado:", e); }
-            pdf.save(nomeArq); // fallback desktop
-        }
-
-        // Envia os itens para o cliente + salva o relatório no histórico
-        window.enviarParaCliente = async () => {
-            const select = document.getElementById('cliente');
-            const clienteId = select.value;
-            if (!clienteId) { alert("Selecione o cliente visitado."); return; }
-            if (itens.length === 0) { alert("Adicione pelo menos um item ao relatório."); return; }
-            const clienteNome = select.options[select.selectedIndex].text;
-
-            const btn = document.getElementById('btn-enviar');
-            btn.disabled = true; btn.innerText = "Enviando...";
-            try {
-                // 1) Itens interativos para o painel "Itens para Resolver" do cliente
-                for (const it of itens) {
-                    await addDoc(collection(db, "usuarios", clienteId, "itens_resolver"), {
-                        descricao: it.descricao,
-                        fotoAntes: it.foto || "",
-                        status: "pendente",
-                        fotoDepois: "",
-                        funcionario: nomeFuncionario,
-                        data: new Date().toISOString()
-                    });
-                }
-
-                const relatorio = {
-                    funcionario: nomeFuncionario,
-                    clienteNome: clienteNome,
-                    itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
-                    data: new Date().toISOString()
-                };
-                // 2) Registro do relatório para o cliente (somente leitura)
-                await addDoc(collection(db, "usuarios", clienteId, "relatorios"), relatorio);
-                // 3) Histórico do relatório para o funcionário
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId });
-
-                // Oferece envio do PDF por WhatsApp
-                const pdf = gerarPDF(clienteNome, itens);
-                await compartilharPDF(pdf, "relatorio-visita.pdf", `Relatório de visita - ${clienteNome}`);
-
-                alert("Relatório enviado com sucesso!");
-                itens = [];
-                renderItens();
-                select.value = "";
-            } catch (err) {
-                alert("Erro ao enviar: " + err.message);
-            } finally {
-                btn.disabled = false; btn.innerText = "Enviar relatório ao cliente";
-            }
-        };
     </script>
 </head>
 <body class="bg-slate-100 flex items-center justify-center min-h-screen">
     <div class="w-full max-w-none sm:max-w-sm bg-[#f4f7fb] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-slate-300 flex flex-col justify-between p-6 overflow-hidden">
-        <div id="conteudo" class="hidden overflow-y-auto">
-            <div class="flex items-center justify-between mb-4">
+        <div id="conteudo" class="hidden">
+            <div class="flex items-center justify-between mb-6">
                 <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
                 <h1 class="text-lg font-black text-blue-950">Escrever Relatórios</h1>
                 <div class="w-8"></div>
             </div>
 
-            <label class="text-xs font-semibold text-slate-600">Cliente visitado</label>
-            <select id="cliente" class="w-full mt-1 mb-1 p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Selecione o cliente</option>
-            </select>
-            <p id="aviso-clientes" class="text-[11px] text-slate-400 mb-3"></p>
+            <div class="space-y-4">
+                <!-- 1ª Visita -->
+                <a href="relatorio_primeira_visita.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                    <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Relatório de 1ª Visita</span>
+                </a>
 
-            <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 space-y-2 mb-3">
-                <label class="text-xs font-semibold text-slate-600">Novo item</label>
-                <textarea id="descricao" rows="2" placeholder="Anotação (o que você observou neste item)" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                <input type="file" id="foto" accept="image/*" capture="environment" class="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:font-semibold">
-                <button type="button" id="btn-add" onclick="adicionarItem()" class="w-full bg-slate-100 text-slate-700 font-bold py-2 rounded-lg text-sm hover:bg-slate-200 transition">+ Adicionar item</button>
+                <!-- Checklist de Boas Práticas -->
+                <a href="checklist.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                    <div class="p-3 bg-green-50 text-green-700 rounded-xl group-hover:bg-green-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Checklist de Boas Práticas</span>
+                </a>
+
+                <!-- Relatório de Vistoria -->
+                <a href="relatorio_vistoria.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-amber-300/80 hover:border-amber-500 transition group">
+                    <div class="p-3 bg-amber-50 text-amber-700 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6h2v6H9zm4 0V7h2v10h-2zM5 17v-2h2v2H5zM3 21h18M4 3h16a1 1 0 011 1v13a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Relatório de Vistoria</span>
+                </a>
             </div>
 
-            <h2 class="text-sm font-bold text-slate-700 mb-2">Itens do relatório (<span id="contador">0</span>)</h2>
-            <div id="lista-itens" class="space-y-2 mb-4"></div>
-
-            <button type="button" id="btn-enviar" onclick="enviarParaCliente()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700 transition">Enviar relatório ao cliente</button>
-            <p class="text-[11px] text-slate-400 mt-2 text-center">Ao enviar, você pode compartilhar o PDF por WhatsApp.</p>
+            <p class="text-[11px] text-slate-400 mt-4 text-center">A vistoria é enviada ao cliente. As demais ficam salvas, geram PDF e são enviadas ao administrador por e-mail.</p>
         </div>
 
         <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
