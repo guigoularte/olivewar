@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OliveWar - Relatórios</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let usuarioAtual = null;
+        let relatorios = {}; // cache por id
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            usuarioAtual = user;
+
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const dados = snap.exists() ? snap.data() : {};
+            const ehFuncionario = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.relatorios);
+
+            // Funcionário vê o que enviou; cliente vê o que recebeu
+            const sub = ehFuncionario ? "relatorios_enviados" : "relatorios";
+            document.getElementById('subtitulo').innerText = ehFuncionario
+                ? "Histórico de relatórios que você enviou"
+                : "Relatórios recebidos (somente leitura)";
+            carregar(sub, ehFuncionario);
+        });
+
+        async function carregar(sub, ehFuncionario) {
+            const rsnap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, sub));
+            const lista = document.getElementById('lista');
+            lista.innerHTML = '';
+            relatorios = {};
+            if (rsnap.empty) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum relatório ainda.</p>'; return; }
+
+            const docs = rsnap.docs.slice().sort((a, b) => (b.data().data || "").localeCompare(a.data().data || ""));
+            docs.forEach((d) => {
+                const r = d.data();
+                relatorios[d.id] = r;
+                const dataFmt = r.data ? new Date(r.data).toLocaleString("pt-BR") : "";
+                const cabecalho = ehFuncionario ? `Para: ${r.clienteNome || "cliente"}` : `De: ${r.funcionario || "funcionário"}`;
+                const itensHtml = (r.itens || []).map((it, i) => `
+                    <div class="border-t border-slate-100 pt-2 mt-2">
+                        <p class="text-sm text-slate-700">${i + 1}. ${it.descricao || ""}</p>
+                        ${it.fotoAntes ? `<img src="${it.fotoAntes}" class="mt-1 rounded-lg w-full max-h-40 object-cover">` : ''}
+                    </div>`).join('');
+
+                lista.innerHTML += `<div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-start gap-2">
+                        <div>
+                            <div class="font-bold text-slate-800 text-sm">${cabecalho}</div>
+                            <div class="text-[10px] text-slate-400">${dataFmt} · ${(r.itens || []).length} item(ns)</div>
+                        </div>
+                        <button onclick="baixarPDF('${d.id}')" class="bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-100 whitespace-nowrap">📄 PDF</button>
+                    </div>
+                    ${itensHtml}
+                </div>`;
+            });
+        }
+
+        window.baixarPDF = async (id) => {
+            const r = relatorios[id];
+            if (!r) return;
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            let y = 20;
+            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
+            pdf.text("OliveWar - Relatório de Visita", 14, y); y += 10;
+            pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
+            if (r.clienteNome) { pdf.text(`Cliente: ${r.clienteNome}`, 14, y); y += 6; }
+            pdf.text(`Funcionário: ${r.funcionario || ""}`, 14, y); y += 6;
+            pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
+            pdf.text(`Data: ${r.data ? new Date(r.data).toLocaleString("pt-BR") : ""}`, 14, y); y += 10;
+
+            (r.itens || []).forEach((it, idx) => {
+                if (y > 250) { pdf.addPage(); y = 20; }
+                pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
+                const linhas = pdf.splitTextToSize(`${idx + 1}. ${it.descricao || ""}`, 180);
+                pdf.text(linhas, 14, y); y += linhas.length * 6;
+                if (it.fotoAntes) {
+                    if (y > 210) { pdf.addPage(); y = 20; }
+                    try { pdf.addImage(it.fotoAntes, "JPEG", 14, y, 60, 45); y += 50; } catch (e) { y += 2; }
+                }
+                y += 4;
+            });
+
+            const nomeArq = "relatorio.pdf";
+            try {
+                const blob = pdf.output("blob");
+                const file = new File([blob], nomeArq, { type: "application/pdf" });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], title: "Relatório", text: "Relatório de visita" });
+                    return;
+                }
+            } catch (e) { console.log(e); }
+            pdf.save(nomeArq);
+        };
+    </script>
+</head>
+<body class="bg-slate-100 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#f4f7fb] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-slate-300 flex flex-col justify-between p-6 overflow-hidden">
+        <div class="overflow-y-auto">
+            <div class="flex items-center justify-between mb-2">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Relatórios</h1>
+                <div class="w-8"></div>
+            </div>
+            <p id="subtitulo" class="text-[11px] text-slate-400 mb-4"></p>
+            <div id="lista" class="space-y-3"></div>
+        </div>
+
+        <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
+            <a href="app.html" class="text-blue-900"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+            <a href="configuracoes.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg></a>
+            <a href="perfil.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></a>
+        </div>
+    </div>
+</body>
+</html>

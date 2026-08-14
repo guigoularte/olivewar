@@ -45,6 +45,14 @@ service cloud.firestore {
                       && (request.auth.uid == userId || ehMaster());
       }
 
+      // Registro de relatórios do cliente (somente leitura para ele; funcionário cria)
+      match /relatorios/{rel} {
+        allow read: if request.auth != null
+                    && (request.auth.uid == userId || ehMaster() || ehFuncionario());
+        allow create: if ehMaster() || ehFuncionario();
+        allow update, delete: if ehMaster();
+      }
+
       // Demais subcoleções do próprio usuário (produtos, compras, vendas, margens...)
       match /{documento=**} {
         allow read, write: if request.auth != null && (request.auth.uid == userId || ehMaster());
