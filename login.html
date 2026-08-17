@@ -13,7 +13,7 @@
     </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
@@ -41,6 +41,24 @@
             document.getElementById('texto-alternativa').innerHTML = ehCadastro 
                 ? 'Já tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline">Entrar</button>'
                 : 'Não tem uma conta? <button type="button" onclick="alternarModo()" class="text-blue-600 font-semibold underline">Criar conta</button>';
+        };
+
+       window.recuperarSenha = async () => {
+            const email = document.getElementById('email').value.trim();
+            if (!email) {
+                alert("Digite seu e-mail no campo acima e clique novamente em \"Esqueci minha senha\".");
+                document.getElementById('email').focus();
+                return;
+            }
+            try {
+                await sendPasswordResetEmail(auth, email);
+                alert("Enviamos um link de recuperação para " + email + ". Verifique sua caixa de entrada e o spam.");
+            } catch (err) {
+                console.error("Erro ao recuperar senha:", err);
+                if (err.code === "auth/invalid-email") alert("E-mail inválido. Confira e tente de novo.");
+                else if (err.code === "auth/user-not-found") alert("Não encontramos uma conta com esse e-mail.");
+                else alert("Não foi possível enviar o e-mail: " + err.message);
+            }
         };
 
        window.handleAuth = async (e) => {
@@ -145,6 +163,10 @@
             <button type="submit" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl transition cursor-pointer shadow-lg">
                 Entrar
             </button>
+
+            <div class="text-center">
+                <button type="button" onclick="recuperarSenha()" class="text-xs text-blue-600 font-semibold underline cursor-pointer">Esqueci minha senha</button>
+            </div>
         </form>
 
         <div class="mt-6 text-center text-xs text-slate-500">
