@@ -39,9 +39,9 @@ window.oliverPdfFooter = function (pdf) {
         pdf.setLineWidth(0.3);
         pdf.line(14, h - 14, w - 14, h - 14);
         pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(8);
+        pdf.setFontSize(7.5);
         pdf.setTextColor(150, 150, 150);
-        pdf.text("Gerado pelo Oliver · " + new Date().toLocaleString("pt-BR"), 14, h - 9);
+        pdf.text("Gerado por Oliver · Dúvidas e sugestões: WhatsApp (51) 98928-6351 — fale com o Guilherme", 14, h - 9);
         pdf.text("Pág. " + i + "/" + total, w - 14, h - 9, { align: "right" });
     }
     pdf.setTextColor(0, 0, 0);
