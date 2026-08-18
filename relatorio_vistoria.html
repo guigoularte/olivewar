@@ -13,12 +13,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Persistência offline: grava no aparelho e sincroniza quando a internet voltar
+        const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 
         // EmailJS (reutiliza o mesmo serviço; crie um template de relatórios)
         const EMAIL_SERVICE = "service_yuf3qik";
@@ -165,24 +166,33 @@
             const btn = document.getElementById('btn-enviar');
             btn.disabled = true; btn.innerText = "Enviando...";
             try {
-                for (const it of itens) {
-                    await addDoc(collection(db, "usuarios", clienteId, "itens_resolver"), {
-                        descricao: it.descricao, fotoAntes: it.foto || "", status: "pendente",
-                        fotoDepois: "", funcionario: nomeFuncionario, data: new Date().toISOString()
-                    });
-                }
                 const relatorio = {
                     tipo: "vistoria", funcionario: nomeFuncionario, clienteNome,
                     itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
                     data: new Date().toISOString()
                 };
-                await addDoc(collection(db, "usuarios", clienteId, "relatorios"), relatorio);
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId });
+                // Dispara todas as gravações (ficam salvas no aparelho mesmo offline)
+                const promessas = [];
+                for (const it of itens) {
+                    promessas.push(addDoc(collection(db, "usuarios", clienteId, "itens_resolver"), {
+                        descricao: it.descricao, fotoAntes: it.foto || "", status: "pendente",
+                        fotoDepois: "", funcionario: nomeFuncionario, data: new Date().toISOString()
+                    }));
+                }
+                promessas.push(addDoc(collection(db, "usuarios", clienteId, "relatorios"), relatorio));
+                promessas.push(addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId }));
 
-                await enviarEmailAdmin(clienteNome, itens);
                 const pdf = gerarPDF(clienteNome, itens);
                 await compartilharPDF(pdf, "relatorio-vistoria.pdf", `Relatório de vistoria - ${clienteNome}`);
 
+                if (!navigator.onLine) {
+                    alert("Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
+                    itens = []; renderItens(); select.value = "";
+                    return;
+                }
+
+                await Promise.all(promessas);
+                await enviarEmailAdmin(clienteNome, itens);
                 alert("Relatório enviado com sucesso!");
                 itens = []; renderItens(); select.value = "";
             } catch (err) {

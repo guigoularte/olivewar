@@ -13,12 +13,13 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Persistência offline: grava no aparelho e sincroniza quando a internet voltar
+        const db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 
         const EMAIL_SERVICE = "service_yuf3qik";
         const EMAIL_TEMPLATE = "template_r7hf9fm";
@@ -188,12 +189,18 @@
                     itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
                     data: new Date().toISOString()
                 };
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
+                const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
 
-                await enviarEmailAdmin(clienteNome, campos, itens);
                 const pdf = gerarPDF(clienteNome, campos, itens);
                 await compartilharPDF(pdf, "relatorio-primeira-visita.pdf", `Relatório de 1ª visita - ${clienteNome}`);
 
+                if (!navigator.onLine) {
+                    alert("Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
+                    window.location.href = "relatorios.html";
+                    return;
+                }
+                await gravacao;
+                await enviarEmailAdmin(clienteNome, campos, itens);
                 alert("Relatório salvo com sucesso!");
                 window.location.href = "relatorios.html";
             } catch (err) {
