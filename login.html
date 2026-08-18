@@ -90,8 +90,12 @@
                         cidade: cidade,
                         estado: estado,
                         role: "cliente",
-                        // Funcionalidades pagas começam desligadas
-                        funcionalidades: { calculoMargem: false, relatorios: false }
+                        // Básicas ligadas; pagas/funcionário desligadas
+                        funcionalidades: {
+                            produtos: true, compras: true, vendas: true,
+                            itensResolver: true, relatoriosHistorico: true,
+                            calculoMargem: false, relatorios: false
+                        }
                     });
 
                     // Avisa o administrador por e-mail sobre o novo cadastro

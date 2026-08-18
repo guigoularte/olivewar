@@ -8,7 +8,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -17,9 +17,13 @@
 
         let usuarioAtual = null;
 
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             usuarioAtual = user;
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const dd = snap.exists() ? snap.data() : {}; const fx = dd.funcionalidades || {};
+            const ok = dd.role === "master" || (('itensResolver' in fx) ? fx.itensResolver : true);
+            if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
             carregarItens();
         });
 

@@ -25,6 +25,9 @@
 
             const snap = await getDoc(doc(db, "usuarios", user.uid));
             const dados = snap.exists() ? snap.data() : {};
+            const fx = dados.funcionalidades || {};
+            const acessoOk = dados.role === "master" || (('relatoriosHistorico' in fx) ? fx.relatoriosHistorico : true);
+            if (!acessoOk) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
             const ehFuncionario = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.relatorios);
 
             // Funcionário vê o que enviou; cliente vê o que recebeu

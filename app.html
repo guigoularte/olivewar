@@ -38,15 +38,25 @@
                 const ehMaster = dados.role === "master";
                 const func = dados.funcionalidades || {};
 
-                const mostrar = (id) => {
-                    const el = document.getElementById(id);
-                    if (el) { el.classList.remove('hidden'); el.classList.add('flex'); }
-                };
-
-                // Master vê tudo; demais veem conforme as permissões liberadas
-                if (ehMaster || func.calculoMargem) mostrar('menu-margem');
-                if (ehMaster || func.relatorios) mostrar('menu-relatorios');
-                if (ehMaster) mostrar('menu-admin');
+                // Mapa de funcionalidades -> card do menu (padrao = ligado por padrão)
+                const FEATS = [
+                    { id: 'menu-relatorios', key: 'relatorios', padrao: false },
+                    { id: 'menu-itens', key: 'itensResolver', padrao: true },
+                    { id: 'menu-relhist', key: 'relatoriosHistorico', padrao: true },
+                    { id: 'menu-produtos', key: 'produtos', padrao: true },
+                    { id: 'menu-compras', key: 'compras', padrao: true },
+                    { id: 'menu-vendas', key: 'vendas', padrao: true },
+                    { id: 'menu-margem', key: 'calculoMargem', padrao: false }
+                ];
+                FEATS.forEach((f) => {
+                    const el = document.getElementById(f.id);
+                    if (!el) return;
+                    const permitido = ehMaster || ((f.key in func) ? func[f.key] : f.padrao);
+                    el.style.display = permitido ? 'flex' : 'none';
+                });
+                // Painel Master só para o master
+                const elAdmin = document.getElementById('menu-admin');
+                if (elAdmin) elAdmin.style.display = ehMaster ? 'flex' : 'none';
             } catch (error) {
                 console.error("Erro ao buscar nome:", error);
                 document.getElementById('nome-usuario').innerText = "Olá, Usuário";
@@ -84,7 +94,7 @@
                 </a>
 
                 <!-- Itens para Resolver (relatórios recebidos do funcionário) -->
-                <a href="itens_resolver.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <a id="menu-itens" href="itens_resolver.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-green-50 text-green-700 rounded-xl group-hover:bg-green-600 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                     </div>
@@ -92,7 +102,7 @@
                 </a>
 
                 <!-- Relatórios (registro/histórico, somente leitura) -->
-                <a href="relatorios_view.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <a id="menu-relhist" href="relatorios_view.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-amber-50 text-amber-700 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6h2v6H9zm4 0V7h2v10h-2zM5 17v-2h2v2H5zM3 21h18M4 3h16a1 1 0 011 1v13a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1z"></path></svg>
                     </div>
@@ -100,7 +110,7 @@
                 </a>
 
                 <!-- Produtos/Serviços -->
-                <a href="produtos.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <a id="menu-produtos" href="produtos.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
                     </div>
@@ -108,7 +118,7 @@
                 </a>
 
                 <!-- Compras -->
-                <a href="compras.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <a id="menu-compras" href="compras.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                     </div>
@@ -116,7 +126,7 @@
                 </a>
 
                 <!-- Vendas -->
-                <a href="vendas.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
+                <a id="menu-vendas" href="vendas.html" class="flex items-center p-4 bg-white rounded-2xl shadow-sm border border-slate-200/80 hover:border-blue-500 transition group">
                     <div class="p-3 bg-blue-50 text-blue-900 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     </div>
