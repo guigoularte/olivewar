@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliveWar - Relatório de 1ª Visita</title>
+    <title>Oliver - Relatório de 1ª Visita</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
@@ -119,7 +119,7 @@
             const pdf = new jsPDF();
             let y = 20;
             pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("OliveWar - Relatório de 1ª Visita", 14, y); y += 10;
+            pdf.text("Oliver - Relatório de 1ª Visita", 14, y); y += 10;
             pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
             pdf.text(`Cliente: ${clienteNome}`, 14, y); y += 6;
             pdf.text(`Funcionário: ${nomeFuncionario}`, 14, y); y += 6;

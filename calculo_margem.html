@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliveWar - Cálculo de Margem</title>
+    <title>Oliver - Cálculo de Margem</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- jsPDF: geração de PDF no navegador -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -201,7 +201,7 @@
             const margem = p.precoVenda > 0 ? (lucro / p.precoVenda) * 100 : 0;
 
             pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("OliveWar - Cálculo de Margem", 14, 20);
+            pdf.text("Oliver - Cálculo de Margem", 14, 20);
             pdf.setFontSize(13); pdf.setTextColor(0, 0, 0);
             pdf.text(`Produto: ${p.nomeProduto}`, 14, 32);
             pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
