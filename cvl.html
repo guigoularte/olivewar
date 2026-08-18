@@ -6,6 +6,7 @@
     <title>Oliver - Cálculo de Margem Completo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -228,10 +229,9 @@
         window.exportarPDF = (id) => {
             const s = id ? salvos[id] : state;
             const bak = state; state = s; const c = calcular();
-            const { jsPDF } = window.jspdf; const pdf = new jsPDF(); let y = 18;
-            pdf.setFontSize(16); pdf.setTextColor(23,37,84); pdf.text("Oliver - Análise CVL", 14, y); y += 8;
-            pdf.setFontSize(12); pdf.setTextColor(0,0,0); pdf.text(`Produto: ${s.nome || ""}`, 14, y); y += 8;
-            pdf.setFontSize(10);
+            const { jsPDF } = window.jspdf; const pdf = new jsPDF();
+            let y = oliverPdfHeader(pdf, "Análise CVL", s.nome || "");
+            pdf.setFontSize(10); pdf.setTextColor(0,0,0);
             const L = (t, v) => { pdf.text(`${t}: ${v}`, 14, y); y += 6; };
             L("Preço de venda", brl(c.pv)); L("Custo variável unitário (CVU)", brl(c.cvu));
             L("Margem de contribuição (MCU)", brl(c.mcu)); L("Índice de margem (IMC)", pct(c.imc));
@@ -241,6 +241,7 @@
             y += 4; pdf.setFontSize(11); pdf.text("Itens:", 14, y); y += 6; pdf.setFontSize(9);
             (s.itens || []).forEach(it => { pdf.text(`- ${it.descricao || ""} (${it.qtdReceita}${it.unidade}) = ${brl(c.custoNoProduto(it))}`, 14, y); y += 5; if (y > 285){pdf.addPage();y=18;} });
             state = bak;
+            oliverPdfFooter(pdf);
             pdf.save(`cvl-${(s.nome||'produto').toLowerCase().replace(/\s+/g,'-')}.pdf`);
         };
     </script>

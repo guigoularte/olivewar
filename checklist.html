@@ -6,6 +6,7 @@
     <title>Oliver - Checklist de Boas Práticas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>emailjs.init({ publicKey: "Jwl7iLqUNND6syxRU" });</script>
     <script type="module">
@@ -132,9 +133,7 @@
         function gerarPDF(clienteNome, dados) {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF();
-            let y = 18;
-            pdf.setFontSize(16); pdf.setTextColor(23, 37, 84);
-            pdf.text("Oliver - Checklist de Boas Práticas (RDC 275)", 14, y); y += 8;
+            let y = oliverPdfHeader(pdf, "Checklist RDC 275", clienteNome || "");
             pdf.setFontSize(10); pdf.setTextColor(0, 0, 0);
             pdf.text(`Cliente: ${clienteNome}`, 14, y); y += 5;
             pdf.text(`Funcionário: ${nomeFuncionario}`, 14, y); y += 5;
@@ -157,6 +156,7 @@
                 if (obs) { pdf.setTextColor(0,0,120); const l = pdf.splitTextToSize(`Obs: ${obs}`, 182); if (y + l.length*4 > 285){pdf.addPage();y=18;} pdf.text(l, 14, y); y += l.length*4 + 2; }
                 y += 2;
             });
+            oliverPdfFooter(pdf);
             return pdf;
         }
 

@@ -6,6 +6,7 @@
     <title>Oliver - Fluxo de Caixa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -149,12 +150,9 @@
             if (movs.length === 0) { alert("Nada para exportar neste período."); return; }
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF();
-            let y = 18;
             let ent = 0, sai = 0; movs.forEach(m => m.tipo === "entrada" ? ent += m.valor : sai += m.valor);
-            pdf.setFontSize(16); pdf.setTextColor(23, 37, 84);
-            pdf.text("Oliver - Fluxo de Caixa", 14, y); y += 8;
+            let y = oliverPdfHeader(pdf, "Fluxo de Caixa", nomeAlvo || "");
             pdf.setFontSize(10); pdf.setTextColor(0, 0, 0);
-            if (nomeAlvo) { pdf.text(`Usuário: ${nomeAlvo}`, 14, y); y += 5; }
             const mes = document.getElementById('filtro-mes').value;
             pdf.text(`Período: ${mes ? mes.split("-").reverse().join("/") : "Todos"}`, 14, y); y += 5;
             pdf.text(`Entradas: ${brl(ent)}  |  Saídas: ${brl(sai)}  |  Saldo: ${brl(ent - sai)}`, 14, y); y += 8;
@@ -173,6 +171,7 @@
                 pdf.text(`${entrada ? '+' : '-'} ${brl(m.valor)}`, 175, y);
                 y += 7;
             });
+            oliverPdfFooter(pdf);
             pdf.save("fluxo-caixa.pdf");
         };
     </script>

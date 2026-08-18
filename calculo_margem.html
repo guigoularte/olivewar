@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- jsPDF: geração de PDF no navegador -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -200,15 +201,10 @@
             const lucro = (p.precoVenda || 0) - custo;
             const margem = p.precoVenda > 0 ? (lucro / p.precoVenda) * 100 : 0;
 
-            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("Oliver - Cálculo de Margem", 14, 20);
-            pdf.setFontSize(13); pdf.setTextColor(0, 0, 0);
-            pdf.text(`Produto: ${p.nomeProduto}`, 14, 32);
-            pdf.setFontSize(9); pdf.setTextColor(120, 120, 120);
-            pdf.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, 38);
+            oliverPdfHeader(pdf, "Cálculo de Margem", p.nomeProduto || "");
 
             // Cabeçalho da tabela
-            let y = 50;
+            let y = 48;
             pdf.setFontSize(10); pdf.setTextColor(0, 0, 0);
             pdf.text("Ingrediente", 14, y);
             pdf.text("Valor pago", 80, y);
@@ -236,6 +232,7 @@
             pdf.setTextColor(lucro >= 0 ? 22 : 200, lucro >= 0 ? 130 : 0, lucro >= 0 ? 60 : 0);
             pdf.text(`Lucro: ${brl(lucro)}   |   Margem: ${margem.toFixed(1).replace(".", ",")}%`, 14, y);
 
+            oliverPdfFooter(pdf);
             const nomeArq = `margem-${(p.nomeProduto || "produto").replace(/\s+/g, "-").toLowerCase()}.pdf`;
 
             // Tenta compartilhar (WhatsApp, e-mail...) via menu nativo do celular

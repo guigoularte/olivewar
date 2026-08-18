@@ -6,6 +6,7 @@
     <title>Oliver - Relatórios</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -75,9 +76,7 @@
             if (!r) return;
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF();
-            let y = 20;
-            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("Oliver - Relatório de Visita", 14, y); y += 10;
+            let y = oliverPdfHeader(pdf, "Relatório de Visita", r.clienteNome || r.funcionario || "");
             pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
             if (r.clienteNome) { pdf.text(`Cliente: ${r.clienteNome}`, 14, y); y += 6; }
             pdf.text(`Funcionário: ${r.funcionario || ""}`, 14, y); y += 6;
@@ -96,6 +95,7 @@
                 y += 4;
             });
 
+            oliverPdfFooter(pdf);
             const nomeArq = "relatorio.pdf";
             try {
                 const blob = pdf.output("blob");

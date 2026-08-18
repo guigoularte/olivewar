@@ -6,6 +6,7 @@
     <title>Oliver - Relatório de Vistoria</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
     <script>emailjs.init({ publicKey: "Jwl7iLqUNND6syxRU" });</script>
     <script type="module">
@@ -110,9 +111,7 @@
         function gerarPDF(clienteNome, listaItens) {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF();
-            let y = 20;
-            pdf.setFontSize(18); pdf.setTextColor(23, 37, 84);
-            pdf.text("Oliver - Relatório de Vistoria", 14, y); y += 10;
+            let y = oliverPdfHeader(pdf, "Relatório de Vistoria", clienteNome || "");
             pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
             pdf.text(`Cliente: ${clienteNome}`, 14, y); y += 6;
             pdf.text(`Funcionário: ${nomeFuncionario}`, 14, y); y += 6;
@@ -126,6 +125,7 @@
                 if (it.foto) { if (y > 210) { pdf.addPage(); y = 20; } try { pdf.addImage(it.foto, "JPEG", 14, y, 60, 45); y += 50; } catch (e) { y += 2; } }
                 y += 4;
             });
+            oliverPdfFooter(pdf);
             return pdf;
         }
 
