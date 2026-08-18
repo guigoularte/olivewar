@@ -101,10 +101,10 @@
             grupo.forEach(r => {
                 const lbl = r.closest('.opcao');
                 lbl.classList.remove('bg-green-500','bg-red-500','bg-slate-400','text-white','border-transparent');
-                lbl.classList.add('border-slate-300','text-slate-600');
+                lbl.classList.add('border-blue-950','text-slate-600');
             });
             const lbl = input.closest('.opcao');
-            lbl.classList.remove('border-slate-300','text-slate-600');
+            lbl.classList.remove('border-blue-950','text-slate-600');
             const cor = input.value === 'Sim' ? 'bg-green-500' : input.value === 'Não' ? 'bg-red-500' : 'bg-slate-400';
             lbl.classList.add(cor,'text-white','border-transparent');
             atualizarResumo();
@@ -213,8 +213,8 @@
         };
     </script>
 </head>
-<body class="bg-slate-100 flex items-center justify-center min-h-screen">
-    <div class="w-full max-w-none sm:max-w-sm bg-[#f4f7fb] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-slate-300 flex flex-col justify-between p-6 overflow-hidden">
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
         <div id="conteudo" class="hidden overflow-y-auto">
             <div class="flex items-center justify-between mb-3">
                 <a href="relatorios.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
