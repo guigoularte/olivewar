@@ -18,7 +18,6 @@
         // Funcionalidades controláveis pelo master (padrao = ligado por padrão em novas contas)
         const FUNCS = [
             { chave: "produtos", label: "Produtos/Serviços", padrao: true },
-            { chave: "compras", label: "Compras", padrao: true },
             { chave: "vendas", label: "Vendas", padrao: true },
             { chave: "fluxoCaixa", label: "Fluxo de Caixa", padrao: true },
             { chave: "itensResolver", label: "Itens para Resolver", padrao: true },
@@ -72,6 +71,7 @@
                             <div class="text-[10px] text-slate-400">${u.segmento || ""} ${u.telefone ? "· " + u.telefone : ""}</div>
                         </div>
                         <div class="border-t border-slate-100 pt-2">${toggles}</div>
+                        <a href="fluxo_caixa.html?uid=${d.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
                     </div>`;
             });
 

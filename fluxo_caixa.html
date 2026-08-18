@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Oliver - Fluxo de Caixa</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -15,16 +16,37 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let usuarioAtual = null;
+        let usuarioAtual = null;   // quem está logado
+        let alvoUid = null;        // de quem são os dados exibidos
+        let somenteLeitura = false;
+        let todas = [];            // todos os lançamentos carregados
+        let nomeAlvo = "";
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             usuarioAtual = user;
             const snap = await getDoc(doc(db, "usuarios", user.uid));
             const dd = snap.exists() ? snap.data() : {}; const fx = dd.funcionalidades || {};
-            const ok = dd.role === "master" || (('fluxoCaixa' in fx) ? fx.fluxoCaixa : true);
-            if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
+            const ehMaster = dd.role === "master";
+
+            // Modo master: ?uid=... para ver os dados de outro usuário
+            const params = new URLSearchParams(location.search);
+            const uidParam = params.get("uid");
+            if (uidParam && ehMaster && uidParam !== user.uid) {
+                alvoUid = uidParam; somenteLeitura = true;
+                const alvoSnap = await getDoc(doc(db, "usuarios", uidParam));
+                nomeAlvo = alvoSnap.exists() ? (alvoSnap.data().nome || alvoSnap.data().email || "usuário") : "usuário";
+                document.getElementById('banner-master').classList.remove('hidden');
+                document.getElementById('nome-alvo').innerText = nomeAlvo;
+                document.getElementById('form').style.display = "none";
+            } else {
+                alvoUid = user.uid;
+                const ok = ehMaster || (('fluxoCaixa' in fx) ? fx.fluxoCaixa : true);
+                if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
+            }
+
             document.getElementById('data').value = new Date().toISOString().slice(0, 10);
+            document.getElementById('filtro-mes').value = new Date().toISOString().slice(0, 7);
             carregar();
         });
 
@@ -44,7 +66,7 @@
             };
             if (!mov.descricao || mov.valor <= 0) { alert("Preencha a descrição e um valor maior que zero."); return; }
             try {
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "fluxo_caixa"), mov);
+                await addDoc(collection(db, "usuarios", alvoUid, "fluxo_caixa"), mov);
                 document.getElementById('form').reset();
                 document.getElementById('data').value = new Date().toISOString().slice(0, 10);
                 carregar();
@@ -53,16 +75,28 @@
 
         window.excluir = async (id) => {
             if (!confirm("Excluir este lançamento?")) return;
-            await deleteDoc(doc(db, "usuarios", usuarioAtual.uid, "fluxo_caixa", id));
+            await deleteDoc(doc(db, "usuarios", alvoUid, "fluxo_caixa", id));
             carregar();
         };
 
         async function carregar() {
-            const snap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "fluxo_caixa"));
-            const movs = [];
-            snap.forEach((d) => movs.push({ id: d.id, ...d.data() }));
-            movs.sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+            const snap = await getDocs(collection(db, "usuarios", alvoUid, "fluxo_caixa"));
+            todas = [];
+            snap.forEach((d) => todas.push({ id: d.id, ...d.data() }));
+            render();
+        }
 
+        function filtradas() {
+            const mes = document.getElementById('filtro-mes').value;   // AAAA-MM ou ""
+            const tipo = document.getElementById('filtro-tipo').value; // "", entrada, saida
+            return todas
+                .filter(m => !mes || (m.data || "").startsWith(mes))
+                .filter(m => !tipo || m.tipo === tipo)
+                .sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+        }
+
+        window.render = () => {
+            const movs = filtradas();
             let entradas = 0, saidas = 0;
             movs.forEach((m) => { if (m.tipo === "entrada") entradas += m.valor; else saidas += m.valor; });
             const saldo = entradas - saidas;
@@ -71,11 +105,11 @@
             document.getElementById('tot-saidas').innerText = brl(saidas);
             const elSaldo = document.getElementById('tot-saldo');
             elSaldo.innerText = brl(saldo);
-            elSaldo.className = "font-black " + (saldo >= 0 ? "text-green-300" : "text-red-300");
+            elSaldo.className = "font-black text-[13px] " + (saldo >= 0 ? "text-green-300" : "text-red-300");
 
             const tbody = document.getElementById('tabela');
             tbody.innerHTML = '';
-            if (movs.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="text-center text-slate-400 text-xs py-6">Nenhum lançamento ainda.</td></tr>'; return; }
+            if (movs.length === 0) { tbody.innerHTML = '<tr><td colspan="3" class="text-center text-slate-400 text-xs py-6">Nenhum lançamento no período.</td></tr>'; return; }
             movs.forEach((m) => {
                 const entrada = m.tipo === "entrada";
                 const dataFmt = m.data ? m.data.split("-").reverse().join("/") : "";
@@ -85,10 +119,62 @@
                         <div class="text-[10px] text-slate-400">${dataFmt}${m.categoria ? " · " + m.categoria : ""}${m.forma ? " · " + m.forma : ""}</div>
                     </td>
                     <td class="py-2 text-right whitespace-nowrap font-bold text-[13px] ${entrada ? 'text-green-600' : 'text-red-600'}">${entrada ? '+' : '-'} ${brl(m.valor)}</td>
-                    <td class="py-2 pl-2 text-right"><button onclick="excluir('${m.id}')" class="text-slate-300 hover:text-red-500 text-xs">✕</button></td>
+                    <td class="py-2 pl-2 text-right">${somenteLeitura ? '' : `<button onclick="excluir('${m.id}')" class="text-slate-300 hover:text-red-500 text-xs">✕</button>`}</td>
                 </tr>`;
             });
-        }
+        };
+
+        // Exportar CSV (abre no Excel)
+        window.exportarCSV = () => {
+            const movs = filtradas();
+            if (movs.length === 0) { alert("Nada para exportar neste período."); return; }
+            const linhas = [["Data", "Tipo", "Descrição", "Categoria", "Forma", "Valor"]];
+            movs.forEach(m => linhas.push([
+                m.data ? m.data.split("-").reverse().join("/") : "",
+                m.tipo === "entrada" ? "Entrada" : "Saída",
+                m.descricao || "", m.categoria || "", m.forma || "",
+                Number(m.valor || 0).toFixed(2).replace(".", ",")
+            ]));
+            const csv = "﻿" + linhas.map(l => l.map(c => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "fluxo-caixa.csv";
+            a.click();
+        };
+
+        // Exportar PDF
+        window.exportarPDF = () => {
+            const movs = filtradas();
+            if (movs.length === 0) { alert("Nada para exportar neste período."); return; }
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            let y = 18;
+            let ent = 0, sai = 0; movs.forEach(m => m.tipo === "entrada" ? ent += m.valor : sai += m.valor);
+            pdf.setFontSize(16); pdf.setTextColor(23, 37, 84);
+            pdf.text("Oliver - Fluxo de Caixa", 14, y); y += 8;
+            pdf.setFontSize(10); pdf.setTextColor(0, 0, 0);
+            if (nomeAlvo) { pdf.text(`Usuário: ${nomeAlvo}`, 14, y); y += 5; }
+            const mes = document.getElementById('filtro-mes').value;
+            pdf.text(`Período: ${mes ? mes.split("-").reverse().join("/") : "Todos"}`, 14, y); y += 5;
+            pdf.text(`Entradas: ${brl(ent)}  |  Saídas: ${brl(sai)}  |  Saldo: ${brl(ent - sai)}`, 14, y); y += 8;
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, "bold");
+            pdf.text("Data", 14, y); pdf.text("Descrição", 38, y); pdf.text("Categoria", 110, y); pdf.text("Valor", 175, y);
+            pdf.setFont(undefined, "normal"); pdf.setDrawColor(200); pdf.line(14, y + 1.5, 196, y + 1.5); y += 6;
+            movs.forEach(m => {
+                if (y > 285) { pdf.addPage(); y = 18; }
+                const entrada = m.tipo === "entrada";
+                pdf.setTextColor(60, 60, 60);
+                pdf.text(m.data ? m.data.split("-").reverse().join("/") : "", 14, y);
+                pdf.text(pdf.splitTextToSize(m.descricao || "", 68), 38, y);
+                pdf.text(pdf.splitTextToSize(m.categoria || "", 60), 110, y);
+                pdf.setTextColor(entrada ? 20 : 200, entrada ? 130 : 0, entrada ? 60 : 0);
+                pdf.text(`${entrada ? '+' : '-'} ${brl(m.valor)}`, 175, y);
+                y += 7;
+            });
+            pdf.save("fluxo-caixa.pdf");
+        };
     </script>
 </head>
 <body class="bg-slate-100 flex items-center justify-center min-h-screen">
@@ -100,11 +186,32 @@
                 <div class="w-8"></div>
             </div>
 
+            <div id="banner-master" class="hidden bg-purple-100 text-purple-800 text-xs font-semibold rounded-xl px-3 py-2 mb-3 text-center">
+                👁 Visualizando dados de <span id="nome-alvo"></span> (somente leitura)
+            </div>
+
             <!-- Resumo -->
-            <div class="bg-blue-950 text-white p-4 rounded-2xl grid grid-cols-3 gap-2 text-center mb-4">
+            <div class="bg-blue-950 text-white p-4 rounded-2xl grid grid-cols-3 gap-2 text-center mb-3">
                 <div><div class="text-[10px] uppercase tracking-wide text-blue-200">Entradas</div><div id="tot-entradas" class="font-bold text-green-300 text-[13px]">R$ 0,00</div></div>
                 <div><div class="text-[10px] uppercase tracking-wide text-blue-200">Saídas</div><div id="tot-saidas" class="font-bold text-red-300 text-[13px]">R$ 0,00</div></div>
                 <div><div class="text-[10px] uppercase tracking-wide text-blue-200">Saldo</div><div id="tot-saldo" class="font-black text-[13px]">R$ 0,00</div></div>
+            </div>
+
+            <!-- Filtros e exportação -->
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-3">
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="month" id="filtro-mes" onchange="render()" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="filtro-tipo" onchange="render()" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">Todos os tipos</option>
+                        <option value="entrada">Só entradas</option>
+                        <option value="saida">Só saídas</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" onclick="document.getElementById('filtro-mes').value='';render()" class="flex-1 bg-slate-100 text-slate-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-slate-200">Ver tudo</button>
+                    <button type="button" onclick="exportarCSV()" class="flex-1 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">⬇ CSV</button>
+                    <button type="button" onclick="exportarPDF()" class="flex-1 bg-blue-50 text-blue-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-blue-100">📄 PDF</button>
+                </div>
             </div>
 
             <!-- Formulário -->
