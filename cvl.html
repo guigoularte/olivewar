@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Cálculo de Margem Completo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let usuarioAtual = null;
+        let editId = null;
+        let salvos = {};
+        let state = novaAnalise();
+
+        function novaAnalise() {
+            return {
+                nome: "", precoVenda: 0, volume: 0, participacao: 0, custoFixoTotal: 0,
+                itens: []
+            };
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            usuarioAtual = user;
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const dd = snap.exists() ? snap.data() : {}; const fx = dd.funcionalidades || {};
+            const ok = dd.role === "master" || (('cvlCompleto' in fx) ? fx.cvlCompleto : false);
+            if (!ok) { alert("Esta funcionalidade está disponível apenas no plano completo."); window.location.href = "app.html"; return; }
+            document.getElementById('conteudo').classList.remove('hidden');
+            if (state.itens.length === 0) addItem();
+            carregarSalvos();
+            irPara(1);
+        });
+
+        const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const pct = (n) => (Number(n || 0) * 100).toFixed(1).replace(".", ",") + "%";
+        const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
+
+        // ---------- Cálculos CVL ----------
+        function calcular() {
+            const custoUnit = (it) => it.qtdEmbalagem > 0 ? it.precoCompra / it.qtdEmbalagem : 0;
+            const custoNoProduto = (it) => it.qtdReceita * custoUnit(it);
+            const cvu = state.itens.reduce((s, it) => s + custoNoProduto(it), 0);
+            const pv = state.precoVenda;
+            const mcu = pv - cvu;
+            const imc = pv > 0 ? mcu / pv : 0;
+            const receita = pv * state.volume;
+            const cfProp = state.custoFixoTotal * (state.participacao / 100);
+            const pecUn = mcu > 0 ? cfProp / mcu : 0;
+            const pecRs = pecUn * pv;
+            const lucro = (mcu * state.volume) - cfProp;
+            const lucratividade = receita > 0 ? lucro / receita : 0;
+            return { custoUnit, custoNoProduto, cvu, pv, mcu, imc, receita, cfProp, pecUn, pecRs, lucro, lucratividade };
+        }
+
+        // ---------- Navegação entre etapas ----------
+        window.irPara = (n) => {
+            for (let i = 1; i <= 3; i++) {
+                document.getElementById('etapa-' + i).style.display = (i === n) ? 'block' : 'none';
+                const b = document.getElementById('passo-' + i);
+                b.className = "flex-1 h-1.5 rounded-full " + (i <= n ? "bg-orange-500" : "bg-slate-200");
+            }
+            if (n === 2) renderItens();
+            if (n === 3) renderResultado();
+            document.getElementById('conteudo').scrollTop = 0;
+        };
+
+        window.proximo = (n) => {
+            if (n === 2) {
+                state.nome = document.getElementById('nome').value.trim();
+                state.precoVenda = num(document.getElementById('precoVenda').value);
+                state.volume = num(document.getElementById('volume').value);
+                state.participacao = num(document.getElementById('participacao').value);
+                state.custoFixoTotal = num(document.getElementById('custoFixoTotal').value);
+                if (!state.nome || state.precoVenda <= 0) { alert("Informe o nome e o preço de venda."); return; }
+            }
+            irPara(n);
+        };
+
+        // ---------- Etapa 2: itens ----------
+        window.addItem = (dados = {}) => {
+            state.itens.push({
+                tipo: dados.tipo || "ingrediente",
+                descricao: dados.descricao || "",
+                unidade: dados.unidade || "",
+                qtdReceita: dados.qtdReceita ?? "",
+                precoCompra: dados.precoCompra ?? "",
+                qtdEmbalagem: dados.qtdEmbalagem ?? ""
+            });
+            if (document.getElementById('etapa-2').style.display !== 'none') renderItens();
+        };
+
+        window.removerItem = (i) => { state.itens.splice(i, 1); renderItens(); };
+
+        window.atualizarItem = (i, campo, valor) => {
+            state.itens[i][campo] = (campo === "descricao" || campo === "unidade" || campo === "tipo") ? valor : num(valor);
+            atualizarTotais();
+        };
+
+        function renderItens() {
+            const cont = document.getElementById('lista-itens');
+            cont.innerHTML = '';
+            state.itens.forEach((it, i) => {
+                cont.innerHTML += `<div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-3">
+                    <div class="flex gap-2 mb-2">
+                        <select onchange="atualizarItem(${i},'tipo',this.value)" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                            <option value="ingrediente" ${it.tipo === 'ingrediente' ? 'selected' : ''}>Ingrediente</option>
+                            <option value="embalagem" ${it.tipo === 'embalagem' ? 'selected' : ''}>Embalagem</option>
+                        </select>
+                        <input value="${it.descricao}" oninput="atualizarItem(${i},'descricao',this.value)" placeholder="Descrição (ex: Carne)" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                        <button onclick="removerItem(${i})" class="text-red-500 font-bold px-1">&times;</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <input value="${it.qtdReceita}" oninput="atualizarItem(${i},'qtdReceita',this.value)" type="number" step="any" placeholder="Qtd usada" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                        <input value="${it.unidade}" oninput="atualizarItem(${i},'unidade',this.value)" placeholder="Unid (g/un)" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                        <div class="text-right text-[11px] text-slate-500 self-center">Custo: <b class="text-slate-700 custo-item-${i}">R$ 0,00</b></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input value="${it.precoCompra}" oninput="atualizarItem(${i},'precoCompra',this.value)" type="number" step="any" placeholder="Preço da compra R$" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                        <input value="${it.qtdEmbalagem}" oninput="atualizarItem(${i},'qtdEmbalagem',this.value)" type="number" step="any" placeholder="Qtd na embalagem" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                    </div>
+                </div>`;
+            });
+            atualizarTotais();
+        }
+
+        function atualizarTotais() {
+            const c = calcular();
+            state.itens.forEach((it, i) => {
+                const el = document.querySelector('.custo-item-' + i);
+                if (el) el.innerText = brl(c.custoNoProduto(it));
+            });
+            const cvuEl = document.getElementById('cvu-parcial');
+            if (cvuEl) cvuEl.innerText = brl(c.cvu);
+        }
+
+        // ---------- Etapa 3: resultado ----------
+        function renderResultado() {
+            const c = calcular();
+            const linha = (label, valor, cor = "text-slate-800") => `<div class="flex justify-between py-1.5 border-b border-slate-100 text-sm"><span class="text-slate-600">${label}</span><span class="font-bold ${cor}">${valor}</span></div>`;
+            document.getElementById('resultado').innerHTML = `
+                <div class="bg-blue-950 text-white p-4 rounded-2xl mb-4 text-center">
+                    <div class="text-[11px] uppercase tracking-wide text-blue-200">Lucro mensal esperado</div>
+                    <div class="text-2xl font-black ${c.lucro >= 0 ? 'text-green-300' : 'text-red-300'}">${brl(c.lucro)}</div>
+                    <div class="text-[11px] text-blue-200 mt-1">Lucratividade: ${pct(c.lucratividade)}</div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4">
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">Por unidade</h3>
+                    ${linha("Preço de venda", brl(c.pv))}
+                    ${linha("Custo variável (CVU)", brl(c.cvu), "text-red-600")}
+                    ${linha("Margem de contribuição (MCU)", brl(c.mcu), c.mcu >= 0 ? "text-green-600" : "text-red-600")}
+                    ${linha("Índice de margem (IMC)", pct(c.imc))}
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-4">
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">Mês</h3>
+                    ${linha("Receita mensal", brl(c.receita))}
+                    ${linha("Custo fixo proporcional", brl(c.cfProp), "text-red-600")}
+                    ${linha("Ponto de equilíbrio (un)", Math.ceil(c.pecUn) + " un")}
+                    ${linha("Ponto de equilíbrio (R$)", brl(c.pecRs))}
+                </div>`;
+        }
+
+        // ---------- Salvar / carregar ----------
+        window.salvar = async () => {
+            if (!state.nome) { alert("Volte à etapa 1 e informe o nome do produto."); return; }
+            const dados = { ...state, data: new Date().toISOString() };
+            try {
+                if (editId) { await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "cvl", editId), dados); alert("Análise atualizada!"); }
+                else { await addDoc(collection(db, "usuarios", usuarioAtual.uid, "cvl"), dados); alert("Análise salva!"); }
+                editId = null; carregarSalvos();
+            } catch (e) { alert("Erro ao salvar: " + e.message); }
+        };
+
+        async function carregarSalvos() {
+            const snap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "cvl"));
+            salvos = {}; const lista = document.getElementById('lista-salvos');
+            lista.innerHTML = '';
+            if (snap.empty) { lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhuma análise salva.</p>'; return; }
+            snap.forEach((d) => {
+                salvos[d.id] = d.data();
+                const st = d.data(); const bak = state; state = st; const c = calcular(); state = bak;
+                lista.innerHTML += `<div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 text-sm">
+                    <div class="flex justify-between items-start">
+                        <div><span class="font-bold text-slate-800">${st.nome || "(sem nome)"}</span>
+                        <div class="text-[10px] text-slate-500">Lucro ${brl(c.lucro)} · ${pct(c.lucratividade)}</div></div>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="abrir('${d.id}')" class="flex-1 bg-slate-100 text-slate-700 text-xs font-semibold py-1.5 rounded-lg">✏️ Abrir</button>
+                        <button onclick="exportarPDF('${d.id}')" class="flex-1 bg-blue-50 text-blue-700 text-xs font-semibold py-1.5 rounded-lg">📄 PDF</button>
+                        <button onclick="excluir('${d.id}')" class="flex-1 bg-red-50 text-red-600 text-xs font-semibold py-1.5 rounded-lg">🗑️</button>
+                    </div>
+                </div>`;
+            });
+        }
+
+        window.abrir = (id) => {
+            const s = salvos[id]; if (!s) return;
+            state = JSON.parse(JSON.stringify(s)); editId = id;
+            document.getElementById('nome').value = state.nome || "";
+            document.getElementById('precoVenda').value = state.precoVenda || "";
+            document.getElementById('volume').value = state.volume || "";
+            document.getElementById('participacao').value = state.participacao || "";
+            document.getElementById('custoFixoTotal').value = state.custoFixoTotal || "";
+            irPara(1);
+        };
+
+        window.novo = () => {
+            state = novaAnalise(); editId = null; addItem();
+            ['nome','precoVenda','volume','participacao','custoFixoTotal'].forEach(id => document.getElementById(id).value = "");
+            irPara(1);
+        };
+
+        window.excluir = async (id) => {
+            if (!confirm("Excluir esta análise?")) return;
+            await deleteDoc(doc(db, "usuarios", usuarioAtual.uid, "cvl", id));
+            carregarSalvos();
+        };
+
+        window.exportarPDF = (id) => {
+            const s = id ? salvos[id] : state;
+            const bak = state; state = s; const c = calcular();
+            const { jsPDF } = window.jspdf; const pdf = new jsPDF(); let y = 18;
+            pdf.setFontSize(16); pdf.setTextColor(23,37,84); pdf.text("Oliver - Análise CVL", 14, y); y += 8;
+            pdf.setFontSize(12); pdf.setTextColor(0,0,0); pdf.text(`Produto: ${s.nome || ""}`, 14, y); y += 8;
+            pdf.setFontSize(10);
+            const L = (t, v) => { pdf.text(`${t}: ${v}`, 14, y); y += 6; };
+            L("Preço de venda", brl(c.pv)); L("Custo variável unitário (CVU)", brl(c.cvu));
+            L("Margem de contribuição (MCU)", brl(c.mcu)); L("Índice de margem (IMC)", pct(c.imc));
+            L("Receita mensal", brl(c.receita)); L("Custo fixo proporcional", brl(c.cfProp));
+            L("Ponto de equilíbrio", Math.ceil(c.pecUn) + " un / " + brl(c.pecRs));
+            L("Lucro mensal", brl(c.lucro)); L("Lucratividade", pct(c.lucratividade));
+            y += 4; pdf.setFontSize(11); pdf.text("Itens:", 14, y); y += 6; pdf.setFontSize(9);
+            (s.itens || []).forEach(it => { pdf.text(`- ${it.descricao || ""} (${it.qtdReceita}${it.unidade}) = ${brl(c.custoNoProduto(it))}`, 14, y); y += 5; if (y > 285){pdf.addPage();y=18;} });
+            state = bak;
+            pdf.save(`cvl-${(s.nome||'produto').toLowerCase().replace(/\s+/g,'-')}.pdf`);
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-blue-950">Margem Completo</h1>
+                <button onclick="novo()" class="text-orange-600 text-xs font-bold">+ Novo</button>
+            </div>
+
+            <div class="flex gap-1 mb-4">
+                <div id="passo-1" class="flex-1 h-1.5 rounded-full bg-orange-500"></div>
+                <div id="passo-2" class="flex-1 h-1.5 rounded-full bg-slate-200"></div>
+                <div id="passo-3" class="flex-1 h-1.5 rounded-full bg-slate-200"></div>
+            </div>
+
+            <!-- ETAPA 1 -->
+            <div id="etapa-1">
+                <h2 class="text-sm font-bold text-slate-700 mb-2">1. Dados do produto e da empresa</h2>
+                <div class="space-y-2">
+                    <input id="nome" placeholder="Nome do produto (ex: Xis Salada)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input id="precoVenda" type="number" step="any" placeholder="Preço de venda unitário (R$)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input id="volume" type="number" step="any" placeholder="Volume médio de vendas/mês (un)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input id="participacao" type="number" step="any" placeholder="Participação nas vendas (%) ex: 23" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input id="custoFixoTotal" type="number" step="any" placeholder="Custo fixo mensal total da empresa (R$)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+                <button onclick="proximo(2)" class="w-full mt-4 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700">Avançar →</button>
+
+                <h2 class="text-sm font-bold text-slate-700 mt-6 mb-2">Análises salvas</h2>
+                <div id="lista-salvos" class="space-y-2"></div>
+            </div>
+
+            <!-- ETAPA 2 -->
+            <div id="etapa-2" style="display:none">
+                <h2 class="text-sm font-bold text-slate-700 mb-1">2. Ficha técnica e custos</h2>
+                <p class="text-[11px] text-slate-500 mb-3">Adicione cada ingrediente/embalagem: quanto usa por unidade e o preço/quantidade da compra.</p>
+                <div id="lista-itens"></div>
+                <button onclick="addItem()" class="w-full border-2 border-dashed border-orange-300 text-orange-600 font-bold py-2 rounded-xl text-sm hover:bg-orange-50 mb-3">+ Adicionar item</button>
+                <div class="bg-white p-2.5 rounded-xl border border-slate-200 text-sm flex justify-between mb-4"><span class="text-slate-600 font-semibold">Custo variável (CVU)</span><b id="cvu-parcial" class="text-red-600">R$ 0,00</b></div>
+                <div class="flex gap-2">
+                    <button onclick="irPara(1)" class="flex-1 bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm">← Voltar</button>
+                    <button onclick="irPara(3)" class="flex-1 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700">Ver resultado →</button>
+                </div>
+            </div>
+
+            <!-- ETAPA 3 -->
+            <div id="etapa-3" style="display:none">
+                <h2 class="text-sm font-bold text-slate-700 mb-3">3. Resultado da análise CVL</h2>
+                <div id="resultado"></div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="irPara(2)" class="flex-1 bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm">← Voltar</button>
+                    <button onclick="salvar()" class="flex-1 bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-green-700">Salvar</button>
+                    <button onclick="exportarPDF()" class="flex-1 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700">PDF</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
+            <a href="app.html" class="text-blue-900"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+            <a href="configuracoes.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg></a>
+            <a href="perfil.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></a>
+        </div>
+    </div>
+</body>
+</html>
