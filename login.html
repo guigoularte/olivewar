@@ -14,8 +14,8 @@
     </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -116,10 +116,27 @@
                         console.error("Falha ao enviar e-mail de aviso:", mailErr);
                     }
 
-                    alert("Conta criada com sucesso!");
+                    // Envia link de confirmação e não deixa entrar até confirmar
+                    try { await sendEmailVerification(cred.user); } catch (ve) { console.error("Falha ao enviar verificação:", ve); }
+                    await signOut(auth);
+                    alert("Conta criada! Enviamos um link de confirmação para " + email + ".\n\nAbra seu e-mail (verifique também o spam), confirme e depois faça login.");
+                    window.alternarModo(); // volta para o modo Login
+                    return;
                 } else {
                     console.log("Tentando fazer login...");
-                    await signInWithEmailAndPassword(auth, email, password);
+                    const cred = await signInWithEmailAndPassword(auth, email, password);
+
+                    // Exige e-mail confirmado (master é isento)
+                    if (!cred.user.emailVerified) {
+                        const docSnap = await getDoc(doc(db, "usuarios", cred.user.uid));
+                        const ehMaster = docSnap.exists() && docSnap.data().role === "master";
+                        if (!ehMaster) {
+                            try { await sendEmailVerification(cred.user); } catch (ve) {}
+                            await signOut(auth);
+                            alert("Seu e-mail ainda não foi confirmado. Reenviamos o link de confirmação para " + email + ".\n\nConfirme e tente entrar novamente.");
+                            return;
+                        }
+                    }
                 }
                 window.location.href = "app.html";
             } catch (err) {
