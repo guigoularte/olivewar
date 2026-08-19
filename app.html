@@ -39,6 +39,10 @@
                 const ehMaster = dados.role === "master";
                 const func = dados.funcionalidades || {};
 
+                // Guarda permissões e nome para a barra lateral (desktop) de todas as telas
+                localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func }));
+                localStorage.setItem('oliverNome', (dados.nome || "Usuário").trim().split(" ")[0]);
+
                 // Mapa de funcionalidades -> card do menu (padrao = ligado por padrão)
                 const FEATS = [
                     { id: 'menu-relatorios', key: 'relatorios', padrao: false },
@@ -79,7 +83,7 @@
         <!-- Conteúdo do Topo -->
         <div>
             <!-- Cabeçalho / Perfil (Apenas Nome, sem E-mail) -->
-            <div class="px-8 pt-11 pb-7 text-center bg-gradient-to-br from-orange-500 via-orange-500 to-amber-400 shadow-sm">
+            <div class="oliver-hide-dt px-8 pt-11 pb-7 text-center bg-gradient-to-br from-orange-500 via-orange-500 to-amber-400 shadow-sm">
                 <h1 class="text-4xl font-black text-white tracking-tight drop-shadow-sm">Oliver</h1>
                 <div class="mx-auto my-2 h-1 w-16 rounded-full bg-white/75"></div>
                 <h2 id="nome-usuario" class="text-lg font-bold text-white/95">Carregando...</h2>

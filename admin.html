@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -50,20 +50,44 @@
             const lista = document.getElementById('lista-usuarios');
             lista.innerHTML = '';
 
-            snap.forEach((d) => {
-                const u = d.data();
-                if (d.id === meuUid) return; // não lista o próprio master
-                const func = u.funcionalidades || {};
+            // Separa usuários e identifica os "clientes" (não-master, não-funcionário)
+            const usuarios = [];
+            snap.forEach((d) => { if (d.id !== meuUid) usuarios.push({ id: d.id, ...d.data() }); });
+            const ehFuncionario = (u) => u.funcionalidades && u.funcionalidades.relatorios;
+            const clientes = usuarios.filter(u => u.role !== "master" && !ehFuncionario(u));
 
+            usuarios.forEach((u) => {
+                const func = u.funcionalidades || {};
                 const toggles = FUNCS.map(f => `
                     <label class="flex items-center justify-between text-xs py-1">
                         <span class="text-slate-600">${f.label}</span>
-                        <input type="checkbox" data-uid="${d.id}" data-func="${f.chave}"
+                        <input type="checkbox" data-uid="${u.id}" data-func="${f.chave}"
                             ${temFunc(func, f) ? "checked" : ""}
                             onchange="alternarFunc(this)"
                             class="w-9 h-5 accent-blue-600 cursor-pointer">
                     </label>
                 `).join('');
+
+                // Bloco de atribuição de clientes (apenas para funcionários)
+                let blocoClientes = '';
+                if (ehFuncionario(u)) {
+                    const permitidos = u.clientesPermitidos || [];
+                    const opcoes = clientes.length === 0
+                        ? '<p class="text-[10px] text-slate-400">Nenhum cliente cadastrado ainda.</p>'
+                        : clientes.map(c => `
+                            <label class="flex items-center justify-between text-xs py-1">
+                                <span class="text-slate-600 truncate">${c.nome || c.email || "(sem nome)"}</span>
+                                <input type="checkbox" onchange="alternarCliente('${u.id}','${c.id}',this.checked)"
+                                    ${permitidos.includes(c.id) ? "checked" : ""}
+                                    class="w-9 h-5 accent-orange-500 cursor-pointer">
+                            </label>`).join('');
+                    blocoClientes = `
+                        <details class="border-t border-slate-100 pt-2 mt-2">
+                            <summary class="text-xs font-bold text-orange-600 cursor-pointer">🧑‍🤝‍🧑 Clientes atendidos</summary>
+                            <p class="text-[10px] text-slate-400 mb-1 mt-1">Nenhum marcado = acesso a todos os clientes.</p>
+                            ${opcoes}
+                        </details>`;
+                }
 
                 lista.innerHTML += `
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
@@ -73,12 +97,24 @@
                             <div class="text-[10px] text-slate-400">${u.segmento || ""} ${u.telefone ? "· " + u.telefone : ""}</div>
                         </div>
                         <div class="border-t border-slate-100 pt-2">${toggles}</div>
-                        <a href="fluxo_caixa.html?uid=${d.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
+                        ${blocoClientes}
+                        <a href="fluxo_caixa.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
                     </div>`;
             });
 
             if (lista.innerHTML === '') lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhum outro usuário cadastrado.</p>';
         }
+
+        // Atribui/remove um cliente da lista de atendimento do funcionário
+        window.alternarCliente = async (funcUid, clienteUid, marcado) => {
+            try {
+                await updateDoc(doc(db, "usuarios", funcUid), {
+                    clientesPermitidos: marcado ? arrayUnion(clienteUid) : arrayRemove(clienteUid)
+                });
+            } catch (err) {
+                alert("Erro ao atualizar clientes: " + err.message);
+            }
+        };
 
         // Liga/desliga uma funcionalidade de um usuário
         window.alternarFunc = async (input) => {

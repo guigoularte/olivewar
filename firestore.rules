@@ -16,6 +16,12 @@ service cloud.firestore {
     function naoAlterou(campos) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(campos);
     }
+    // Funcionário só atende clientes atribuídos (lista vazia/ausente = todos)
+    function clientePermitido(userId) {
+      return !('clientesPermitidos' in dadosUsuario())
+        || dadosUsuario().clientesPermitidos.size() == 0
+        || userId in dadosUsuario().clientesPermitidos;
+    }
 
     match /usuarios/{userId} {
       // Dono lê o seu; master e funcionário podem ler para localizar clientes
@@ -26,11 +32,11 @@ service cloud.firestore {
                     && request.auth.uid == userId
                     && request.resource.data.role == "cliente";
 
-      // Master edita qualquer um; o dono edita seus dados exceto role e funcionalidades
+      // Master edita qualquer um; o dono edita seus dados exceto role, funcionalidades e clientesPermitidos
       allow update: if ehMaster()
                     || (request.auth != null
                         && request.auth.uid == userId
-                        && naoAlterou(['role', 'funcionalidades']));
+                        && naoAlterou(['role', 'funcionalidades', 'clientesPermitidos']));
 
       allow delete: if ehMaster();
 
@@ -38,7 +44,7 @@ service cloud.firestore {
       match /itens_resolver/{item} {
         allow read: if request.auth != null
                     && (request.auth.uid == userId || ehMaster() || ehFuncionario());
-        allow create: if ehMaster() || ehFuncionario();
+        allow create: if ehMaster() || (ehFuncionario() && clientePermitido(userId));
         allow update: if request.auth != null
                       && (request.auth.uid == userId || ehMaster());
         allow delete: if request.auth != null
@@ -49,7 +55,7 @@ service cloud.firestore {
       match /relatorios/{rel} {
         allow read: if request.auth != null
                     && (request.auth.uid == userId || ehMaster() || ehFuncionario());
-        allow create: if ehMaster() || ehFuncionario();
+        allow create: if ehMaster() || (ehFuncionario() && clientePermitido(userId));
         allow update, delete: if ehMaster();
       }
 

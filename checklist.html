@@ -24,7 +24,7 @@
         const EMAIL_SERVICE = "service_yuf3qik";
         const EMAIL_TEMPLATE = "template_r7hf9fm";
 
-        let usuarioAtual = null, nomeFuncionario = "", checklist = [];
+        let usuarioAtual = null, nomeFuncionario = "", checklist = [], clientesPermitidos = [];
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -34,6 +34,7 @@
             const permitido = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.relatorios);
             if (!permitido) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
             nomeFuncionario = dados.nome || user.email;
+            clientesPermitidos = (dados.role === "master") ? [] : (dados.clientesPermitidos || []);
             document.getElementById('conteudo').classList.remove('hidden');
             carregarClientes();
             carregarChecklist();
@@ -47,6 +48,7 @@
                     if (d.id === usuarioAtual.uid) return;
                     const u = d.data();
                     if (u.role === "master") return;
+                    if (clientesPermitidos.length && !clientesPermitidos.includes(d.id)) return;
                     const opt = document.createElement('option');
                     opt.value = d.id; opt.textContent = `${u.nome || "(sem nome)"} — ${u.email || ""}`;
                     select.appendChild(opt);
