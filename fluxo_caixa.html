@@ -50,10 +50,41 @@
             document.getElementById('data').value = new Date().toISOString().slice(0, 10);
             document.getElementById('filtro-mes').value = new Date().toISOString().slice(0, 7);
             carregar();
+            carregarProdutos();
         });
 
         const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
+
+        // Carrega produtos cadastrados (Produtos/Serviços + Cálculo de Margem) para venda rápida
+        async function carregarProdutos() {
+            const sel = document.getElementById('produto-select');
+            if (!sel) return;
+            const itens = [];
+            try {
+                const ps = await getDocs(collection(db, "usuarios", alvoUid, "produtos"));
+                ps.forEach(d => { const p = d.data(); if (p.nome) itens.push({ nome: p.nome, preco: num(p.preco) }); });
+                const ms = await getDocs(collection(db, "usuarios", alvoUid, "margens"));
+                ms.forEach(d => { const m = d.data(); if (m.nomeProduto) itens.push({ nome: m.nomeProduto, preco: num(m.precoVenda) }); });
+            } catch (e) { console.error(e); }
+            itens.sort((a, b) => a.nome.localeCompare(b.nome));
+            itens.forEach(it => {
+                const o = document.createElement('option');
+                o.value = JSON.stringify(it);
+                o.textContent = `${it.nome} — ${brl(it.preco)}`;
+                sel.appendChild(o);
+            });
+        }
+
+        // Ao escolher um produto, preenche como entrada (venda)
+        window.selecionarProduto = (el) => {
+            if (!el.value) return;
+            const it = JSON.parse(el.value);
+            document.getElementById('tipo').value = "entrada";
+            document.getElementById('descricao').value = it.nome;
+            document.getElementById('valor').value = it.preco;
+            document.getElementById('categoria').value = "Vendas";
+        };
 
         window.salvar = async (e) => {
             e.preventDefault();
@@ -218,11 +249,14 @@
             <form id="form" onsubmit="salvar(event)" class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 space-y-2 mb-4">
                 <div class="grid grid-cols-2 gap-2">
                     <select id="tipo" class="p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="entrada">Entrada</option>
-                        <option value="saida" selected>Saída</option>
+                        <option value="entrada" selected>Entrada</option>
+                        <option value="saida">Saída</option>
                     </select>
                     <input type="date" id="data" class="p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
+                <select id="produto-select" onchange="selecionarProduto(this)" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-emerald-50 text-emerald-800">
+                    <option value="">🛒 Venda rápida: escolher produto cadastrado</option>
+                </select>
                 <input type="text" id="descricao" placeholder="Descrição" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
                 <div class="grid grid-cols-2 gap-2">
                     <input type="number" step="any" id="valor" placeholder="Valor R$" class="p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
