@@ -175,25 +175,48 @@
             pdf.save(nomeArq);
         }
 
-        async function enviarEmail(clienteNome, dados) {
+        async function enviarEmail(clienteNome, dados, novoCliente) {
             const naoConf = [];
             checklist.forEach(sec => sec.subs.forEach(sub => sub.itens.forEach(it => {
                 if (dados.respostas[it.codigo] === 'Não') naoConf.push(`${it.codigo} ${it.texto}`);
             })));
-            const conteudo = `Conforme: ${dados.sim} | Não conforme: ${dados.nao} | N/A: ${dados.na}\n\nNÃO CONFORMES:\n` + (naoConf.join("\n") || "Nenhum");
+            let conteudo = "";
+            if (novoCliente) {
+                conteudo += "⚠️ NOVO CLIENTE (não cadastrado):\nEmpresa: " + novoCliente.empresa
+                    + "\nAtendido por: " + (novoCliente.atendente || "-")
+                    + "\nWhatsApp: " + (novoCliente.whatsapp || "-") + "\n\n";
+            }
+            conteudo += `Conforme: ${dados.sim} | Não conforme: ${dados.nao} | N/A: ${dados.na}\n\nNÃO CONFORMES:\n` + (naoConf.join("\n") || "Nenhum");
             try {
                 await emailjs.send(EMAIL_SERVICE, EMAIL_TEMPLATE, {
-                    tipo_relatorio: "Checklist de Boas Práticas (RDC 275)",
+                    tipo_relatorio: novoCliente ? "Checklist RDC 275 (NOVO CLIENTE)" : "Checklist de Boas Práticas (RDC 275)",
                     funcionario: nomeFuncionario, cliente: clienteNome, conteudo,
                     data: new Date().toLocaleString("pt-BR")
                 });
             } catch (e) { console.error("Falha e-mail:", e); }
         }
 
+        window.toggleNovoCliente = () => {
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
+            document.getElementById('bloco-novo-cliente').classList.toggle('hidden', !ehNovo);
+            document.getElementById('cliente').disabled = ehNovo;
+        };
+
         window.salvar = async () => {
             const select = document.getElementById('cliente');
-            const clienteId = select.value;
-            const clienteNome = clienteId ? select.options[select.selectedIndex].text : "(sem cliente)";
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
+            let clienteId = null, clienteNome = "(sem cliente)", novoCliente = null;
+            if (ehNovo) {
+                const atendente = document.getElementById('nc-atendente').value.trim();
+                const empresa = document.getElementById('nc-empresa').value.trim();
+                const whatsapp = document.getElementById('nc-whatsapp').value.trim();
+                if (!empresa) { alert("Informe o nome da empresa do cliente."); return; }
+                novoCliente = { atendente, empresa, whatsapp };
+                clienteNome = empresa + (atendente ? " (" + atendente + ")" : "");
+            } else {
+                clienteId = select.value;
+                clienteNome = clienteId ? select.options[select.selectedIndex].text : "(sem cliente)";
+            }
             const dados = coletar();
             if (dados.sim + dados.nao + dados.na === 0) { alert("Marque pelo menos um item do checklist."); return; }
 
@@ -202,6 +225,7 @@
             try {
                 const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), {
                     tipo: "checklist", funcionario: nomeFuncionario, clienteId: clienteId || "", clienteNome,
+                    novoCliente: novoCliente || null,
                     resumo: { sim: dados.sim, nao: dados.nao, na: dados.na },
                     respostas: dados.respostas, observacoes: dados.observacoes,
                     data: new Date().toISOString()
@@ -214,7 +238,7 @@
                     return;
                 }
                 await gravacao;
-                await enviarEmail(clienteNome, dados);
+                await enviarEmail(clienteNome, dados, novoCliente);
                 alert("Checklist salvo com sucesso!");
                 window.location.href = "relatorios.html";
             } catch (err) {
@@ -233,9 +257,19 @@
             </div>
 
             <label class="text-xs font-semibold text-slate-600">Cliente</label>
-            <select id="cliente" class="w-full mt-1 mb-2 p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+            <select id="cliente" class="w-full mt-1 mb-1 p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione o cliente</option>
             </select>
+
+            <label class="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2 cursor-pointer">
+                <input type="checkbox" id="novo-cliente-check" onchange="toggleNovoCliente()" class="w-4 h-4 accent-amber-500"> Cliente não cadastrado
+            </label>
+            <div id="bloco-novo-cliente" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2 mb-3">
+                <input id="nc-atendente" placeholder="Nome de quem atendeu" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <input id="nc-empresa" placeholder="Nome da empresa" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <input id="nc-whatsapp" type="tel" placeholder="WhatsApp do cliente" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <p class="text-[10px] text-amber-700">Este cliente não fica salvo. O administrador recebe um e-mail avisando do novo contato.</p>
+            </div>
 
             <div class="bg-blue-950 text-white text-xs font-semibold rounded-xl px-3 py-2 mb-3 text-center" id="resumo">Conforme: 0 · Não conforme: 0 · N/A: 0</div>
 

@@ -133,6 +133,7 @@
                 if (its.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Itens</p>` + its.map(i => `<div class="text-sm text-slate-700">• ${i.descricao}${i.unidade ? " (" + i.unidade + ")" : ""}</div>`).join("");
             } else if (a.tipo === "relatorio") {
                 corpo = linha("Tipo", r.tipo || "relatório") + linha("Cliente", r.clienteNome) + linha("Funcionário", r.funcionario);
+                if (r.novoCliente) corpo += linha("🆕 Novo cliente", r.novoCliente.empresa) + linha("Atendido por", r.novoCliente.atendente) + linha("WhatsApp", r.novoCliente.whatsapp);
                 if (r.resumo) corpo += linha("Conforme", r.resumo.sim) + linha("Não conforme", r.resumo.nao) + linha("N/A", r.resumo.na);
                 if (r.responsavel) corpo += linha("Responsável", r.responsavel);
                 if (r.objetivo) corpo += `<p class="text-xs font-bold text-slate-600 mt-2">Objetivo</p><p class="text-sm text-slate-700">${r.objetivo}</p>`;

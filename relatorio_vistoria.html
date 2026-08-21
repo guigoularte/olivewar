@@ -145,11 +145,18 @@
             pdf.save(nomeArq);
         }
 
-        async function enviarEmailAdmin(clienteNome, listaItens) {
-            const conteudo = listaItens.map((it, i) => `${i + 1}. ${it.descricao}`).join("\n");
+        async function enviarEmailAdmin(clienteNome, listaItens, novoCliente) {
+            let conteudo = "";
+            if (novoCliente) {
+                conteudo += "⚠️ NOVO CLIENTE (não cadastrado):\n"
+                    + "Empresa: " + novoCliente.empresa + "\n"
+                    + "Atendido por: " + (novoCliente.atendente || "-") + "\n"
+                    + "WhatsApp: " + (novoCliente.whatsapp || "-") + "\n\n";
+            }
+            conteudo += listaItens.map((it, i) => `${i + 1}. ${it.descricao}`).join("\n");
             try {
                 await emailjs.send(EMAIL_SERVICE, EMAIL_TEMPLATE, {
-                    tipo_relatorio: "Relatório de Vistoria",
+                    tipo_relatorio: novoCliente ? "Relatório de Vistoria (NOVO CLIENTE)" : "Relatório de Vistoria",
                     funcionario: nomeFuncionario,
                     cliente: clienteNome,
                     conteudo: conteudo,
@@ -158,45 +165,76 @@
             } catch (e) { console.error("Falha ao enviar e-mail ao admin:", e); }
         }
 
+        window.toggleNovoCliente = () => {
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
+            document.getElementById('bloco-novo-cliente').classList.toggle('hidden', !ehNovo);
+            document.getElementById('cliente').disabled = ehNovo;
+        };
+
+        function limparForm() {
+            itens = []; renderItens();
+            document.getElementById('cliente').value = "";
+            document.getElementById('novo-cliente-check').checked = false;
+            ['nc-atendente', 'nc-empresa', 'nc-whatsapp'].forEach(id => document.getElementById(id).value = "");
+            document.getElementById('bloco-novo-cliente').classList.add('hidden');
+            document.getElementById('cliente').disabled = false;
+        }
+
         window.enviarParaCliente = async () => {
             const select = document.getElementById('cliente');
-            const clienteId = select.value;
-            if (!clienteId) { alert("Selecione o cliente visitado."); return; }
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
             if (itens.length === 0) { alert("Adicione pelo menos um item ao relatório."); return; }
-            const clienteNome = select.options[select.selectedIndex].text;
+
+            let clienteId = null, clienteNome = "", novoCliente = null;
+            if (ehNovo) {
+                const atendente = document.getElementById('nc-atendente').value.trim();
+                const empresa = document.getElementById('nc-empresa').value.trim();
+                const whatsapp = document.getElementById('nc-whatsapp').value.trim();
+                if (!empresa) { alert("Informe o nome da empresa do cliente."); return; }
+                novoCliente = { atendente, empresa, whatsapp };
+                clienteNome = empresa + (atendente ? " (" + atendente + ")" : "");
+            } else {
+                clienteId = select.value;
+                if (!clienteId) { alert("Selecione o cliente ou marque 'Cliente não cadastrado'."); return; }
+                clienteNome = select.options[select.selectedIndex].text;
+            }
 
             const btn = document.getElementById('btn-enviar');
             btn.disabled = true; btn.innerText = "Enviando...";
             try {
                 const relatorio = {
                     tipo: "vistoria", funcionario: nomeFuncionario, clienteNome,
+                    novoCliente: novoCliente || null,
                     itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
                     data: new Date().toISOString()
                 };
-                // Dispara todas as gravações (ficam salvas no aparelho mesmo offline)
+                // Dispara as gravações (ficam salvas no aparelho mesmo offline)
                 const promessas = [];
-                for (const it of itens) {
-                    promessas.push(addDoc(collection(db, "usuarios", clienteId, "itens_resolver"), {
-                        descricao: it.descricao, fotoAntes: it.foto || "", status: "pendente",
-                        fotoDepois: "", funcionario: nomeFuncionario, data: new Date().toISOString()
-                    }));
+                if (clienteId) {
+                    // Cliente cadastrado: envia para o painel dele
+                    for (const it of itens) {
+                        promessas.push(addDoc(collection(db, "usuarios", clienteId, "itens_resolver"), {
+                            descricao: it.descricao, fotoAntes: it.foto || "", status: "pendente",
+                            fotoDepois: "", funcionario: nomeFuncionario, data: new Date().toISOString()
+                        }));
+                    }
+                    promessas.push(addDoc(collection(db, "usuarios", clienteId, "relatorios"), relatorio));
                 }
-                promessas.push(addDoc(collection(db, "usuarios", clienteId, "relatorios"), relatorio));
-                promessas.push(addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId }));
+                // Histórico do funcionário (sempre)
+                promessas.push(addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId: clienteId || "" }));
 
                 const pdf = gerarPDF(clienteNome, itens);
                 await compartilharPDF(pdf, "relatorio-vistoria.pdf", `Relatório de vistoria - ${clienteNome}`);
 
                 if (!navigator.onLine) {
                     alert("Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
-                    itens = []; renderItens(); select.value = "";
-                    return;
+                    limparForm(); return;
                 }
 
                 await Promise.all(promessas);
-                await enviarEmailAdmin(clienteNome, itens);
-                alert("Relatório enviado com sucesso!");
-                itens = []; renderItens(); select.value = "";
+                await enviarEmailAdmin(clienteNome, itens, novoCliente);
+                alert("Relatório enviado com sucesso!" + (novoCliente ? "\nO administrador foi avisado do novo cliente." : ""));
+                limparForm();
             } catch (err) {
                 alert("Erro ao enviar: " + err.message);
             } finally { btn.disabled = false; btn.innerText = "Enviar relatório ao cliente"; }
@@ -216,7 +254,17 @@
             <select id="cliente" class="w-full mt-1 mb-1 p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">Selecione o cliente</option>
             </select>
-            <p id="aviso-clientes" class="text-[11px] text-slate-400 mb-3"></p>
+            <p id="aviso-clientes" class="text-[11px] text-slate-400 mb-1"></p>
+
+            <label class="flex items-center gap-2 text-xs font-semibold text-amber-700 mb-2 cursor-pointer">
+                <input type="checkbox" id="novo-cliente-check" onchange="toggleNovoCliente()" class="w-4 h-4 accent-amber-500"> Cliente não cadastrado
+            </label>
+            <div id="bloco-novo-cliente" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2 mb-3">
+                <input id="nc-atendente" placeholder="Nome de quem atendeu" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <input id="nc-empresa" placeholder="Nome da empresa" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <input id="nc-whatsapp" type="tel" placeholder="WhatsApp do cliente" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400">
+                <p class="text-[10px] text-amber-700">Este cliente não fica salvo. O administrador recebe um e-mail avisando do novo contato.</p>
+            </div>
 
             <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 space-y-2 mb-3">
                 <label class="text-xs font-semibold text-slate-600">Novo item</label>
