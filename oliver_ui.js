@@ -103,9 +103,9 @@
         var card = document.querySelector('body > div[class*="max-w-sm"], body > div[class*="max-w-none"]');
         if (card) card.classList.add("oliver-card");
 
-        // Sidebar só nas telas internas (não no login/boas-vindas)
-        var pagina = (location.pathname.split("/").pop() || "app.html");
-        var semSidebar = (pagina === "login.html" || pagina === "index.html" || pagina === "");
+        // Sidebar só nas telas internas (não no login/boas-vindas nem na raiz "/")
+        var pagina = location.pathname.split("/").pop();
+        var semSidebar = (pagina === "" || pagina === "login.html" || pagina === "index.html");
         if (card && !semSidebar) {
             montarSidebar();
             aplicarModo();
