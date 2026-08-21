@@ -53,20 +53,20 @@
                 const quem = dados.nome || dados.email || "cliente";
 
                 (await subcol(u.id, "fluxo_caixa")).forEach(m => atividades.push({
-                    quando: m.criadoEm || m.data, quem, tipo: "caixa",
+                    quando: m.criadoEm || m.data, quem, tipo: "caixa", raw: m,
                     texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "")
                 }));
                 (await subcol(u.id, "produtos")).forEach(p => atividades.push({
-                    quando: p.data, quem, tipo: "produto", texto: "Cadastrou produto: " + (p.nome || "")
+                    quando: p.data, quem, tipo: "produto", raw: p, texto: "Cadastrou produto: " + (p.nome || "")
                 }));
                 (await subcol(u.id, "margens")).forEach(p => atividades.push({
-                    quando: p.data, quem, tipo: "margem", texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
+                    quando: p.data, quem, tipo: "margem", raw: p, texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
                 }));
                 (await subcol(u.id, "cvl")).forEach(c => atividades.push({
-                    quando: c.data, quem, tipo: "cvl", texto: "Salvou análise CVL: " + (c.nome || "")
+                    quando: c.data, quem, tipo: "cvl", raw: c, texto: "Salvou análise CVL: " + (c.nome || "")
                 }));
                 (await subcol(u.id, "relatorios_enviados")).forEach(r => atividades.push({
-                    quando: r.data, quem, tipo: "relatorio",
+                    quando: r.data, quem, tipo: "relatorio", raw: r,
                     texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "")
                 }));
             }
@@ -80,29 +80,93 @@
             render();
         }
 
+        let listaAtual = [];
         window.render = () => {
             const fq = document.getElementById('filtro-quem').value;
             const ft = document.getElementById('filtro-tipo').value;
-            const lista = atividades.filter(a => (!fq || a.quem === fq) && (!ft || a.tipo === ft)).slice(0, 300);
-            document.getElementById('contador').innerText = lista.length + " atividade(s)";
+            listaAtual = atividades.filter(a => (!fq || a.quem === fq) && (!ft || a.tipo === ft)).slice(0, 300);
+            document.getElementById('contador').innerText = listaAtual.length + " atividade(s)";
             const c = document.getElementById('lista');
             c.innerHTML = '';
-            if (lista.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhuma atividade encontrada.</p>'; return; }
-            lista.forEach(a => {
+            if (listaAtual.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhuma atividade encontrada.</p>'; return; }
+            listaAtual.forEach((a, i) => {
                 const t = TIPOS[a.tipo] || { icone: "•", cor: "text-slate-600 bg-slate-50" };
                 const data = a.quando ? new Date(a.quando).toLocaleString("pt-BR") : "";
-                c.innerHTML += `<div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-start gap-3 mb-2">
+                c.innerHTML += `<button onclick="abrirDetalhe(${i})" class="w-full text-left bg-white p-3 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 flex items-center gap-3 mb-2">
                     <div class="w-9 h-9 rounded-xl flex items-center justify-center ${t.cor} shrink-0">${t.icone}</div>
                     <div class="flex-1 min-w-0">
                         <div class="text-sm text-slate-800">${a.texto}</div>
                         <div class="text-[10px] text-slate-400">${a.quem} · ${data}</div>
                     </div>
-                </div>`;
+                    <span class="text-slate-300 text-lg">›</span>
+                </button>`;
             });
         };
+
+        const linha = (rot, val) => val || val === 0 ? `<div class="flex justify-between py-1 border-b border-slate-100 text-sm"><span class="text-slate-500">${rot}</span><span class="font-semibold text-slate-800 text-right">${val}</span></div>` : "";
+
+        function detalheHTML(a) {
+            const r = a.raw || {};
+            const data = a.quando ? new Date(a.quando).toLocaleString("pt-BR") : "";
+            let corpo = "";
+            if (a.tipo === "caixa") {
+                corpo = linha("Tipo", r.tipo === "entrada" ? "Entrada" : "Saída")
+                    + linha("Valor", brl(r.valor)) + linha("Descrição", r.descricao)
+                    + linha("Categoria", r.categoria) + linha("Forma de pagamento", r.forma)
+                    + linha("Data", r.data ? r.data.split("-").reverse().join("/") : "");
+            } else if (a.tipo === "produto") {
+                corpo = linha("Produto", r.nome) + linha("Preço", brl(r.preco));
+                const ings = r.ingredientes || [];
+                if (ings.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Ingredientes</p>` + ings.map(i => `<div class="text-sm text-slate-700">• ${i.nome}${i.unidade ? " (" + i.unidade + ")" : ""}</div>`).join("");
+            } else if (a.tipo === "margem") {
+                const custo = (r.ingredientes || []).reduce((s, i) => s + (i.pesoComprado > 0 ? (i.valorPago / i.pesoComprado) * i.pesoUsado : 0), 0);
+                const margem = r.precoVenda > 0 ? ((r.precoVenda - custo) / r.precoVenda) * 100 : 0;
+                corpo = linha("Produto", r.nomeProduto) + linha("Preço de venda", brl(r.precoVenda))
+                    + linha("Custo total", brl(custo)) + linha("Margem", margem.toFixed(1).replace(".", ",") + "%");
+                const ings = r.ingredientes || [];
+                if (ings.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Ingredientes</p>` + ings.map(i => `<div class="text-sm text-slate-700">• ${i.nome}: pagou ${brl(i.valorPago)} / ${i.pesoComprado}, usa ${i.pesoUsado}</div>`).join("");
+            } else if (a.tipo === "cvl") {
+                corpo = linha("Produto", r.nome) + linha("Preço de venda", brl(r.precoVenda))
+                    + linha("Volume mensal", r.volume) + linha("Participação", (r.participacao || 0) + "%")
+                    + linha("Custo fixo total", brl(r.custoFixoTotal));
+                const its = r.itens || [];
+                if (its.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Itens</p>` + its.map(i => `<div class="text-sm text-slate-700">• ${i.descricao}${i.unidade ? " (" + i.unidade + ")" : ""}</div>`).join("");
+            } else if (a.tipo === "relatorio") {
+                corpo = linha("Tipo", r.tipo || "relatório") + linha("Cliente", r.clienteNome) + linha("Funcionário", r.funcionario);
+                if (r.resumo) corpo += linha("Conforme", r.resumo.sim) + linha("Não conforme", r.resumo.nao) + linha("N/A", r.resumo.na);
+                if (r.responsavel) corpo += linha("Responsável", r.responsavel);
+                if (r.objetivo) corpo += `<p class="text-xs font-bold text-slate-600 mt-2">Objetivo</p><p class="text-sm text-slate-700">${r.objetivo}</p>`;
+                if (r.observacoes) corpo += `<p class="text-xs font-bold text-slate-600 mt-2">Observações</p><p class="text-sm text-slate-700">${r.observacoes}</p>`;
+                const its = r.itens || [];
+                if (its.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Itens</p>` + its.map((i, idx) => `<div class="text-sm text-slate-700 mb-1">${idx + 1}. ${i.descricao || ""}${i.fotoAntes ? `<img src="${i.fotoAntes}" class="mt-1 rounded-lg w-full max-h-44 object-cover">` : ""}</div>`).join("");
+            }
+            return `<div class="mb-1">${linha("Quem", a.quem)}${linha("Quando", data)}</div>${corpo}`;
+        }
+
+        window.abrirDetalhe = (i) => {
+            const a = listaAtual[i];
+            if (!a) return;
+            const t = TIPOS[a.tipo] || { icone: "•" };
+            const nomes = { caixa: "Fluxo de Caixa", produto: "Produto", margem: "Cálculo de Margem", cvl: "Margem Completo (CVL)", relatorio: "Relatório" };
+            document.getElementById('modal-titulo').innerText = t.icone + " " + (nomes[a.tipo] || "Detalhe");
+            document.getElementById('modal-corpo').innerHTML = detalheHTML(a);
+            document.getElementById('modal').classList.remove('hidden');
+        };
+        window.fecharDetalhe = () => document.getElementById('modal').classList.add('hidden');
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <!-- Modal de detalhes -->
+    <div id="modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onclick="if(event.target===this)fecharDetalhe()">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-slate-100">
+                <h3 id="modal-titulo" class="font-black text-blue-950">Detalhe</h3>
+                <button onclick="fecharDetalhe()" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+            </div>
+            <div id="modal-corpo" class="p-4 overflow-y-auto text-sm"></div>
+        </div>
+    </div>
+
     <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
         <div id="conteudo" class="hidden overflow-y-auto">
             <div class="flex items-center justify-between mb-3">
