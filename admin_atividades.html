@@ -49,22 +49,25 @@
             const usuarios = await getDocs(collection(db, "usuarios"));
             for (const u of usuarios.docs) {
                 const dados = u.data();
-                if (dados.role === "master") continue;
-                const quem = dados.nome || dados.email || "cliente";
+                const quem = dados.nome || dados.email || "usuário";
 
-                (await subcol(u.id, "fluxo_caixa")).forEach(m => atividades.push({
-                    quando: m.criadoEm || m.data, quem, tipo: "caixa", raw: m,
-                    texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "")
-                }));
-                (await subcol(u.id, "produtos")).forEach(p => atividades.push({
-                    quando: p.data, quem, tipo: "produto", raw: p, texto: "Cadastrou produto: " + (p.nome || "")
-                }));
-                (await subcol(u.id, "margens")).forEach(p => atividades.push({
-                    quando: p.data, quem, tipo: "margem", raw: p, texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
-                }));
-                (await subcol(u.id, "cvl")).forEach(c => atividades.push({
-                    quando: c.data, quem, tipo: "cvl", raw: c, texto: "Salvou análise CVL: " + (c.nome || "")
-                }));
+                // Dados pessoais (caixa/produtos/cálculos) só de clientes/funcionários
+                if (dados.role !== "master") {
+                    (await subcol(u.id, "fluxo_caixa")).forEach(m => atividades.push({
+                        quando: m.criadoEm || m.data, quem, tipo: "caixa", raw: m,
+                        texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "")
+                    }));
+                    (await subcol(u.id, "produtos")).forEach(p => atividades.push({
+                        quando: p.data, quem, tipo: "produto", raw: p, texto: "Cadastrou produto: " + (p.nome || "")
+                    }));
+                    (await subcol(u.id, "margens")).forEach(p => atividades.push({
+                        quando: p.data, quem, tipo: "margem", raw: p, texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
+                    }));
+                    (await subcol(u.id, "cvl")).forEach(c => atividades.push({
+                        quando: c.data, quem, tipo: "cvl", raw: c, texto: "Salvou análise CVL: " + (c.nome || "")
+                    }));
+                }
+                // Relatórios: inclui os gerados por qualquer um (funcionário ou master)
                 (await subcol(u.id, "relatorios_enviados")).forEach(r => atividades.push({
                     quando: r.data, quem, tipo: "relatorio", raw: r,
                     texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "")

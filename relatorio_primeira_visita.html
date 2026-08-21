@@ -37,6 +37,7 @@
             clientesPermitidos = (dados.role === "master") ? [] : (dados.clientesPermitidos || []);
             document.getElementById('conteudo').classList.remove('hidden');
             carregarClientes();
+            ativarRascunho();
         });
 
         async function carregarClientes() {
@@ -109,6 +110,7 @@
                 </div>`;
             });
             document.getElementById('contador').innerText = itens.length;
+            salvarRascunho();
         }
 
         function coletarCampos() {
@@ -117,6 +119,57 @@
                 objetivo: document.getElementById('objetivo').value.trim(),
                 observacoes: document.getElementById('observacoes').value.trim()
             };
+        }
+
+        // ---------- Rascunho automático ----------
+        const DRAFT_KEY = "oliver_rascunho_primeira_visita";
+        function coletarRascunho() {
+            return {
+                clienteId: document.getElementById('cliente').value,
+                ehNovo: document.getElementById('novo-cliente-check').checked,
+                atendente: document.getElementById('nc-atendente').value,
+                empresa: document.getElementById('nc-empresa').value,
+                whatsapp: document.getElementById('nc-whatsapp').value,
+                responsavel: document.getElementById('responsavel').value,
+                objetivo: document.getElementById('objetivo').value,
+                observacoes: document.getElementById('observacoes').value,
+                descricaoPendente: document.getElementById('descricao').value,
+                itens: itens
+            };
+        }
+        function temConteudo(d) { return d && ((d.itens && d.itens.length) || (d.descricaoPendente || "").trim() || (d.observacoes || "").trim() || (d.responsavel || "").trim() || (d.empresa || "").trim()); }
+        function salvarRascunho() {
+            const d = coletarRascunho();
+            if (!temConteudo(d)) { localStorage.removeItem(DRAFT_KEY); return; }
+            try { localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); }
+            catch (e) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, itens: d.itens.map(i => ({ descricao: i.descricao, foto: "" })) })); } catch (_) { } }
+        }
+        function limparRascunho() { localStorage.removeItem(DRAFT_KEY); }
+        function aplicarRascunho(d) {
+            itens = (d.itens || []).slice();
+            document.getElementById('cliente').value = d.clienteId || "";
+            document.getElementById('novo-cliente-check').checked = !!d.ehNovo;
+            document.getElementById('nc-atendente').value = d.atendente || "";
+            document.getElementById('nc-empresa').value = d.empresa || "";
+            document.getElementById('nc-whatsapp').value = d.whatsapp || "";
+            document.getElementById('responsavel').value = d.responsavel || "";
+            document.getElementById('objetivo').value = d.objetivo || "";
+            document.getElementById('observacoes').value = d.observacoes || "";
+            document.getElementById('descricao').value = d.descricaoPendente || "";
+            toggleNovoCliente();
+            renderItens();
+        }
+        function verificarRascunho() {
+            let d = null; try { d = JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch (e) { }
+            if (temConteudo(d)) { window._rascunho = d; document.getElementById('banner-rascunho').classList.remove('hidden'); }
+        }
+        window.restaurarRascunho = () => { aplicarRascunho(window._rascunho); document.getElementById('banner-rascunho').classList.add('hidden'); };
+        window.descartarRascunho = () => { limparRascunho(); document.getElementById('banner-rascunho').classList.add('hidden'); };
+        function ativarRascunho() {
+            ["descricao", "nc-atendente", "nc-empresa", "nc-whatsapp", "responsavel", "objetivo", "observacoes"].forEach(id => document.getElementById(id).addEventListener("input", salvarRascunho));
+            document.getElementById("cliente").addEventListener("change", salvarRascunho);
+            document.getElementById("novo-cliente-check").addEventListener("change", salvarRascunho);
+            verificarRascunho();
         }
 
         function gerarPDF(clienteNome, campos, listaItens) {
@@ -215,17 +268,17 @@
                 };
                 const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
 
+                if (navigator.onLine) {
+                    await gravacao;   // confirma o salvamento ANTES de sair pro WhatsApp
+                    await enviarEmailAdmin(clienteNome, campos, itens, novoCliente);
+                }
                 const pdf = gerarPDF(clienteNome, campos, itens);
                 await compartilharPDF(pdf, "relatorio-primeira-visita.pdf", `Relatório de 1ª visita - ${clienteNome}`);
 
-                if (!navigator.onLine) {
-                    alert("Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
-                    window.location.href = "relatorios.html";
-                    return;
-                }
-                await gravacao;
-                await enviarEmailAdmin(clienteNome, campos, itens, novoCliente);
-                alert("Relatório salvo com sucesso!");
+                limparRascunho();
+                alert(navigator.onLine
+                    ? "Relatório salvo com sucesso!"
+                    : "Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
                 window.location.href = "relatorios.html";
             } catch (err) {
                 alert("Erro ao salvar: " + err.message);
@@ -240,6 +293,14 @@
                 <a href="relatorios.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
                 <h1 class="text-lg font-black text-blue-950">1ª Visita</h1>
                 <div class="w-8"></div>
+            </div>
+
+            <div id="banner-rascunho" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3">
+                <p class="text-xs text-blue-800 font-semibold mb-2">📝 Você tem um rascunho não enviado.</p>
+                <div class="flex gap-2">
+                    <button type="button" onclick="restaurarRascunho()" class="flex-1 bg-blue-600 text-white text-xs font-bold py-1.5 rounded-lg">Restaurar</button>
+                    <button type="button" onclick="descartarRascunho()" class="flex-1 bg-slate-200 text-slate-700 text-xs font-bold py-1.5 rounded-lg">Descartar</button>
+                </div>
             </div>
 
             <label class="text-xs font-semibold text-slate-600">Cliente</label>
