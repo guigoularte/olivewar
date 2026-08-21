@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, getDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -17,6 +17,9 @@
         const db = getFirestore(app);
 
         let usuarioAtual = null;
+        let editId = null;
+        let ingredientes = [];   // [{nome, unidade}]
+        let produtosCache = {};
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -25,73 +28,155 @@
             const dd = snap.exists() ? snap.data() : {}; const fx = dd.funcionalidades || {};
             const ok = dd.role === "master" || (('produtos' in fx) ? fx.produtos : true);
             if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
+            renderIngredientes();
             carregarProdutos();
         });
 
+        const num = (v) => parseFloat(String(v).replace(",", ".")) || 0;
+        const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+        // ---- Ingredientes ----
+        window.addIngrediente = (dados = {}) => {
+            ingredientes.push({ nome: dados.nome || "", unidade: dados.unidade || "" });
+            renderIngredientes();
+        };
+        window.removerIngrediente = (i) => { ingredientes.splice(i, 1); renderIngredientes(); };
+        window.attIngrediente = (i, campo, val) => { ingredientes[i][campo] = val; };
+
+        function renderIngredientes() {
+            const c = document.getElementById('ingredientes');
+            c.innerHTML = '';
+            ingredientes.forEach((ing, i) => {
+                c.innerHTML += `<div class="flex gap-2 mb-2">
+                    <input value="${ing.nome}" oninput="attIngrediente(${i},'nome',this.value)" placeholder="Ingrediente (ex: Carne)" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <input value="${ing.unidade}" oninput="attIngrediente(${i},'unidade',this.value)" placeholder="Unid (g/un)" class="w-20 p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500">
+                    <button type="button" onclick="removerIngrediente(${i})" class="text-red-500 font-bold px-1">&times;</button>
+                </div>`;
+            });
+        }
+
+        // ---- Salvar / editar ----
         window.salvarProduto = async (e) => {
             e.preventDefault();
-            const nomeProd = document.getElementById('nome-produto').value;
-            const precoNum = parseFloat(String(document.getElementById('preco-produto').value).replace(",", ".")) || 0;
+            const nomeProd = document.getElementById('nome-produto').value.trim();
+            const precoNum = num(document.getElementById('preco-produto').value);
+            if (!nomeProd) { alert("Informe o nome do produto."); return; }
             if (precoNum <= 0) { alert("Informe um preço válido (ex: 12,50)."); return; }
 
+            const dados = {
+                nome: nomeProd,
+                preco: precoNum,
+                ingredientes: ingredientes.filter(x => x.nome.trim()).map(x => ({ nome: x.nome.trim(), unidade: (x.unidade || "").trim() })),
+                data: new Date().toISOString()
+            };
             try {
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "produtos"), {
-                    nome: nomeProd,
-                    preco: precoNum,
-                    data: new Date().toISOString()
-                });
-                document.getElementById('form-produto').reset();
+                if (editId) {
+                    await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "produtos", editId), dados);
+                    alert("Produto atualizado!");
+                } else {
+                    await addDoc(collection(db, "usuarios", usuarioAtual.uid, "produtos"), dados);
+                    alert("Produto cadastrado!");
+                }
+                cancelarEdicao();
                 carregarProdutos();
-                alert("Produto cadastrado com sucesso!");
-            } catch (err) {
-                alert("Erro ao salvar: " + err.message);
-            }
+            } catch (err) { alert("Erro ao salvar: " + err.message); }
+        };
+
+        window.editarProduto = (id) => {
+            const p = produtosCache[id];
+            if (!p) return;
+            editId = id;
+            document.getElementById('nome-produto').value = p.nome || "";
+            document.getElementById('preco-produto').value = p.preco != null ? String(p.preco).replace(".", ",") : "";
+            ingredientes = (p.ingredientes || []).map(x => ({ nome: x.nome || "", unidade: x.unidade || "" }));
+            renderIngredientes();
+            document.getElementById('titulo-form').innerText = "Editar produto";
+            document.getElementById('btn-salvar').innerText = "Salvar alterações";
+            document.getElementById('btn-cancelar').classList.remove('hidden');
+            window.scrollTo(0, 0);
+        };
+
+        window.cancelarEdicao = () => {
+            editId = null;
+            document.getElementById('form-produto').reset();
+            ingredientes = [];
+            renderIngredientes();
+            document.getElementById('titulo-form').innerText = "Novo produto";
+            document.getElementById('btn-salvar').innerText = "Adicionar Produto";
+            document.getElementById('btn-cancelar').classList.add('hidden');
+        };
+
+        window.excluirProduto = async (id) => {
+            if (!confirm("Excluir este produto?")) return;
+            await deleteDoc(doc(db, "usuarios", usuarioAtual.uid, "produtos", id));
+            carregarProdutos();
         };
 
         async function carregarProdutos() {
             const lista = document.getElementById('lista-produtos');
             lista.innerHTML = '';
+            produtosCache = {};
 
-            // Produtos cadastrados manualmente
             const querySnapshot = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "produtos"));
-            querySnapshot.forEach((doc) => {
-                const p = doc.data();
-                const precoFmt = Number(String(p.preco).replace(",", ".") || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-                lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 flex justify-between items-center text-sm">
-                    <span class="font-bold text-slate-800">${p.nome}</span>
-                    <span class="text-blue-600 font-semibold">R$ ${precoFmt}</span>
+            querySnapshot.forEach((d) => {
+                const p = d.data();
+                produtosCache[d.id] = p;
+                const qtdIng = (p.ingredientes || []).length;
+                lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-slate-200 text-sm">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-slate-800">${p.nome}</span>
+                        <span class="text-blue-600 font-semibold">R$ ${brl(num(p.preco))}</span>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">${qtdIng} ingrediente(s)</div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="editarProduto('${d.id}')" class="flex-1 bg-slate-100 text-slate-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-slate-200">✏️ Editar</button>
+                        <button onclick="excluirProduto('${d.id}')" class="flex-1 bg-red-50 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-100">🗑️ Excluir</button>
+                    </div>
                 </div>`;
             });
 
-            // Produtos vindos do Cálculo de Margem (nome + preço de venda)
+            // Produtos vindos do Cálculo de Margem (somente leitura)
             const margensSnap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "margens"));
-            margensSnap.forEach((doc) => {
-                const m = doc.data();
-                const preco = Number(m.precoVenda || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+            margensSnap.forEach((d) => {
+                const m = d.data();
                 lista.innerHTML += `<div class="p-3 bg-white rounded-xl shadow-sm border border-blue-200 flex justify-between items-center text-sm">
                     <span class="font-bold text-slate-800">${m.nomeProduto} <span class="text-[10px] font-semibold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded ml-1">Margem</span></span>
-                    <span class="text-blue-600 font-semibold">R$ ${preco}</span>
+                    <span class="text-blue-600 font-semibold">R$ ${brl(m.precoVenda)}</span>
                 </div>`;
             });
+
+            if (lista.innerHTML === '') lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhum produto ainda.</p>';
         }
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
     <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
-        <div>
-            <div class="flex items-center justify-between mb-6">
+        <div class="overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
                 <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
                 <h1 class="text-lg font-black text-blue-950">Produtos / Serviços</h1>
                 <div class="w-8"></div>
             </div>
 
-            <form id="form-produto" onsubmit="salvarProduto(event)" class="space-y-3 mb-6 bg-white p-4 rounded-2xl shadow-sm">
+            <form id="form-produto" onsubmit="salvarProduto(event)" class="space-y-3 mb-5 bg-white p-4 rounded-2xl shadow-sm">
+                <h2 id="titulo-form" class="text-sm font-bold text-slate-700">Novo produto</h2>
                 <input type="text" id="nome-produto" placeholder="Nome do Produto" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
                 <input type="text" inputmode="decimal" id="preco-produto" placeholder="Preço (R$) — ex: 12,50" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
-                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition">Adicionar Produto</button>
+
+                <div>
+                    <label class="text-xs font-semibold text-slate-600">Ingredientes (opcional)</label>
+                    <div id="ingredientes" class="mt-1"></div>
+                    <button type="button" onclick="addIngrediente()" class="w-full border-2 border-dashed border-blue-300 text-blue-600 font-bold py-1.5 rounded-xl text-xs hover:bg-blue-50">+ Adicionar ingrediente</button>
+                    <p class="text-[10px] text-slate-400 mt-1">Os ingredientes vão para o Cálculo de Margem e o Margem Completo, onde você informa o custo de compra e a quantidade usada.</p>
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="button" id="btn-cancelar" onclick="cancelarEdicao()" class="hidden flex-1 bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm">Cancelar</button>
+                    <button type="submit" id="btn-salvar" class="flex-1 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition">Adicionar Produto</button>
+                </div>
             </form>
 
-            <div id="lista-produtos" class="space-y-2 max-h-[320px] overflow-y-auto"></div>
+            <div id="lista-produtos" class="space-y-2"></div>
         </div>
 
         <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">

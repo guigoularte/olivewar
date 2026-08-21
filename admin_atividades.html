@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Atividades Recentes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let atividades = [];
+        const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+        const TIPOS = {
+            caixa: { icone: "💵", cor: "text-emerald-700 bg-emerald-50" },
+            produto: { icone: "📦", cor: "text-blue-700 bg-blue-50" },
+            margem: { icone: "🧮", cor: "text-orange-700 bg-orange-50" },
+            cvl: { icone: "📊", cor: "text-orange-700 bg-orange-50" },
+            relatorio: { icone: "📄", cor: "text-amber-700 bg-amber-50" }
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            if (!meu.exists() || meu.data().role !== "master") {
+                alert("Acesso restrito ao administrador.");
+                window.location.href = "app.html";
+                return;
+            }
+            document.getElementById('conteudo').classList.remove('hidden');
+            carregar();
+        });
+
+        async function subcol(uid, nome) {
+            try { const s = await getDocs(collection(db, "usuarios", uid, nome)); return s.docs.map(d => d.data()); }
+            catch (e) { return []; }
+        }
+
+        async function carregar() {
+            atividades = [];
+            const usuarios = await getDocs(collection(db, "usuarios"));
+            for (const u of usuarios.docs) {
+                const dados = u.data();
+                if (dados.role === "master") continue;
+                const quem = dados.nome || dados.email || "cliente";
+
+                (await subcol(u.id, "fluxo_caixa")).forEach(m => atividades.push({
+                    quando: m.criadoEm || m.data, quem, tipo: "caixa",
+                    texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "")
+                }));
+                (await subcol(u.id, "produtos")).forEach(p => atividades.push({
+                    quando: p.data, quem, tipo: "produto", texto: "Cadastrou produto: " + (p.nome || "")
+                }));
+                (await subcol(u.id, "margens")).forEach(p => atividades.push({
+                    quando: p.data, quem, tipo: "margem", texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
+                }));
+                (await subcol(u.id, "cvl")).forEach(c => atividades.push({
+                    quando: c.data, quem, tipo: "cvl", texto: "Salvou análise CVL: " + (c.nome || "")
+                }));
+                (await subcol(u.id, "relatorios_enviados")).forEach(r => atividades.push({
+                    quando: r.data, quem, tipo: "relatorio",
+                    texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "")
+                }));
+            }
+            atividades.sort((a, b) => (b.quando || "").localeCompare(a.quando || ""));
+
+            // filtros de usuário
+            const quens = [...new Set(atividades.map(a => a.quem))].sort();
+            const sel = document.getElementById('filtro-quem');
+            quens.forEach(q => { const o = document.createElement('option'); o.value = q; o.textContent = q; sel.appendChild(o); });
+
+            render();
+        }
+
+        window.render = () => {
+            const fq = document.getElementById('filtro-quem').value;
+            const ft = document.getElementById('filtro-tipo').value;
+            const lista = atividades.filter(a => (!fq || a.quem === fq) && (!ft || a.tipo === ft)).slice(0, 300);
+            document.getElementById('contador').innerText = lista.length + " atividade(s)";
+            const c = document.getElementById('lista');
+            c.innerHTML = '';
+            if (lista.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhuma atividade encontrada.</p>'; return; }
+            lista.forEach(a => {
+                const t = TIPOS[a.tipo] || { icone: "•", cor: "text-slate-600 bg-slate-50" };
+                const data = a.quando ? new Date(a.quando).toLocaleString("pt-BR") : "";
+                c.innerHTML += `<div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-start gap-3 mb-2">
+                    <div class="w-9 h-9 rounded-xl flex items-center justify-center ${t.cor} shrink-0">${t.icone}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm text-slate-800">${a.texto}</div>
+                        <div class="text-[10px] text-slate-400">${a.quem} · ${data}</div>
+                    </div>
+                </div>`;
+            });
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto">
+            <div class="flex items-center justify-between mb-3">
+                <a href="admin.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-blue-950">Atividades Recentes</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-3 grid grid-cols-2 gap-2">
+                <select id="filtro-quem" onchange="render()" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="">Todos os clientes</option>
+                </select>
+                <select id="filtro-tipo" onchange="render()" class="p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="">Todos os tipos</option>
+                    <option value="caixa">Fluxo de caixa</option>
+                    <option value="produto">Produtos</option>
+                    <option value="margem">Cálculo de margem</option>
+                    <option value="cvl">Margem completo</option>
+                    <option value="relatorio">Relatórios</option>
+                </select>
+            </div>
+            <p id="contador" class="text-[11px] text-slate-500 mb-2">Carregando...</p>
+
+            <div id="lista"></div>
+        </div>
+
+        <div class="bg-white border-t border-slate-200 -mx-6 -mb-6 px-8 py-4 flex justify-around items-center">
+            <a href="app.html" class="text-blue-900"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></a>
+            <a href="admin.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg></a>
+            <a href="perfil.html" class="text-slate-400 hover:text-blue-900"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg></a>
+        </div>
+    </div>
+</body>
+</html>

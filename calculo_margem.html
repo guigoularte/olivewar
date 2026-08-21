@@ -39,7 +39,34 @@
 
             adicionarLinha();
             carregarSalvos();
+            carregarProdutosImport();
         });
+
+        // Importar produto cadastrado em Produtos/Serviços
+        async function carregarProdutosImport() {
+            const sel = document.getElementById('importar-produto');
+            const ps = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "produtos"));
+            ps.forEach(d => {
+                const p = d.data();
+                const o = document.createElement('option');
+                o.value = d.id; o.textContent = p.nome + " — R$ " + Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+                o.dataset.p = JSON.stringify(p);
+                sel.appendChild(o);
+            });
+        }
+
+        window.importarProduto = (sel) => {
+            const opt = sel.options[sel.selectedIndex];
+            if (!opt.dataset.p) return;
+            const p = JSON.parse(opt.dataset.p);
+            document.getElementById('nome-produto').value = p.nome || "";
+            document.getElementById('preco-venda').value = p.preco != null ? p.preco : "";
+            document.getElementById('ingredientes').innerHTML = '';
+            const ings = p.ingredientes || [];
+            if (ings.length === 0) { adicionarLinha(); }
+            else { ings.forEach(ing => adicionarLinha({ nome: ing.nome })); }
+            recalcular();
+        };
 
         const brl = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return isNaN(n) ? 0 : n; };
@@ -272,6 +299,9 @@
             </div>
 
             <h2 id="titulo-form" class="text-sm font-bold text-slate-700 mb-2">Novo produto</h2>
+            <select id="importar-produto" onchange="importarProduto(this)" class="w-full p-2.5 border rounded-xl text-sm mb-2 outline-none focus:ring-2 focus:ring-blue-500 bg-emerald-50 text-emerald-800">
+                <option value="">📥 Importar produto cadastrado</option>
+            </select>
             <input type="text" id="nome-produto" placeholder="Nome do produto (ex: Hambúrguer)" class="w-full p-2.5 border rounded-xl text-sm mb-3 outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
 
             <p class="text-[11px] text-slate-500 mb-2 leading-snug">Informe o <b>valor pago</b> e o <b>peso comprado</b> da embalagem, e o <b>peso usado</b> por unidade. Use a mesma unidade (g, kg, ml...) nos dois pesos.</p>

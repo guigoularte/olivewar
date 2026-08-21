@@ -40,8 +40,37 @@
             document.getElementById('conteudo').classList.remove('hidden');
             if (state.itens.length === 0) addItem();
             carregarSalvos();
+            carregarProdutosImport();
             irPara(1);
         });
+
+        // Importar produto cadastrado em Produtos/Serviços
+        async function carregarProdutosImport() {
+            const sel = document.getElementById('importar-produto');
+            const ps = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "produtos"));
+            ps.forEach(d => {
+                const p = d.data();
+                const o = document.createElement('option');
+                o.value = d.id; o.textContent = p.nome + " — R$ " + Number(p.preco || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+                o.dataset.p = JSON.stringify(p);
+                sel.appendChild(o);
+            });
+        }
+
+        window.importarProduto = (sel) => {
+            const opt = sel.options[sel.selectedIndex];
+            if (!opt.dataset.p) return;
+            const p = JSON.parse(opt.dataset.p);
+            state.nome = p.nome || "";
+            state.precoVenda = num(p.preco);
+            state.itens = (p.ingredientes || []).map(ing => ({
+                tipo: "ingrediente", descricao: ing.nome || "", unidade: ing.unidade || "",
+                qtdReceita: "", precoCompra: "", qtdEmbalagem: ""
+            }));
+            if (state.itens.length === 0) state.itens = [];
+            document.getElementById('nome').value = state.nome;
+            document.getElementById('precoVenda').value = state.precoVenda || "";
+        };
 
         const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const pct = (n) => (Number(n || 0) * 100).toFixed(1).replace(".", ",") + "%";
@@ -265,6 +294,9 @@
             <!-- ETAPA 1 -->
             <div id="etapa-1">
                 <h2 class="text-sm font-bold text-slate-700 mb-2">1. Dados do produto e da empresa</h2>
+                <select id="importar-produto" onchange="importarProduto(this)" class="w-full p-2.5 border rounded-xl text-sm mb-2 outline-none focus:ring-2 focus:ring-orange-400 bg-emerald-50 text-emerald-800">
+                    <option value="">📥 Importar produto cadastrado</option>
+                </select>
                 <div class="space-y-2">
                     <input id="nome" placeholder="Nome do produto (ex: Xis Salada)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <input id="precoVenda" type="number" step="any" placeholder="Preço de venda unitário (R$)" class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-400">
