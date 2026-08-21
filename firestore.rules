@@ -36,7 +36,7 @@ service cloud.firestore {
       allow update: if ehMaster()
                     || (request.auth != null
                         && request.auth.uid == userId
-                        && naoAlterou(['role', 'funcionalidades', 'clientesPermitidos']));
+                        && naoAlterou(['role', 'funcionalidades', 'clientesPermitidos', 'categoria']));
 
       allow delete: if ehMaster();
 

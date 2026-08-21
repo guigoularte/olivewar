@@ -45,65 +45,135 @@
             carregarUsuarios(user.uid);
         });
 
+        let usuarios = [];
+        let aba = "novos";
+        let busca = "";
+        // Categoria: definida pelo master. Sem definição = "novo".
+        function categoriaDe(u) {
+            if (u.categoria === "cliente" || u.categoria === "funcionario") return u.categoria;
+            if (u.funcionalidades && u.funcionalidades.relatorios) return "funcionario";
+            return "novo";
+        }
+        const ehFuncionario = (u) => categoriaDe(u) === "funcionario";
+        const ROTULO = { novos: "novo(s)", clientes: "cliente(s)", funcionarios: "funcionário(s)" };
+
         async function carregarUsuarios(meuUid) {
             const snap = await getDocs(collection(db, "usuarios"));
-            const lista = document.getElementById('lista-usuarios');
-            lista.innerHTML = '';
-
-            // Separa usuários e identifica os "clientes" (não-master, não-funcionário)
-            const usuarios = [];
-            snap.forEach((d) => { if (d.id !== meuUid) usuarios.push({ id: d.id, ...d.data() }); });
-            const ehFuncionario = (u) => u.funcionalidades && u.funcionalidades.relatorios;
-            const clientes = usuarios.filter(u => u.role !== "master" && !ehFuncionario(u));
-
-            usuarios.forEach((u) => {
-                const func = u.funcionalidades || {};
-                const toggles = FUNCS.map(f => `
-                    <label class="flex items-center justify-between text-xs py-1">
-                        <span class="text-slate-600">${f.label}</span>
-                        <input type="checkbox" data-uid="${u.id}" data-func="${f.chave}"
-                            ${temFunc(func, f) ? "checked" : ""}
-                            onchange="alternarFunc(this)"
-                            class="w-9 h-5 accent-blue-600 cursor-pointer">
-                    </label>
-                `).join('');
-
-                // Bloco de atribuição de clientes (apenas para funcionários)
-                let blocoClientes = '';
-                if (ehFuncionario(u)) {
-                    const permitidos = u.clientesPermitidos || [];
-                    const opcoes = clientes.length === 0
-                        ? '<p class="text-[10px] text-slate-400">Nenhum cliente cadastrado ainda.</p>'
-                        : clientes.map(c => `
-                            <label class="flex items-center justify-between text-xs py-1">
-                                <span class="text-slate-600 truncate">${c.nome || c.email || "(sem nome)"}</span>
-                                <input type="checkbox" onchange="alternarCliente('${u.id}','${c.id}',this.checked)"
-                                    ${permitidos.includes(c.id) ? "checked" : ""}
-                                    class="w-9 h-5 accent-orange-500 cursor-pointer">
-                            </label>`).join('');
-                    blocoClientes = `
-                        <details class="border-t border-slate-100 pt-2 mt-2">
-                            <summary class="text-xs font-bold text-orange-600 cursor-pointer">🧑‍🤝‍🧑 Clientes atendidos</summary>
-                            <p class="text-[10px] text-slate-400 mb-1 mt-1">Nenhum marcado = acesso a todos os clientes.</p>
-                            ${opcoes}
-                        </details>`;
-                }
-
-                lista.innerHTML += `
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                        <div class="mb-2">
-                            <div class="font-bold text-slate-800 text-sm">${u.nome || "(sem nome)"}</div>
-                            <div class="text-[11px] text-slate-500">${u.email || ""}</div>
-                            <div class="text-[10px] text-slate-400">${u.segmento || ""} ${u.telefone ? "· " + u.telefone : ""}</div>
-                        </div>
-                        <div class="border-t border-slate-100 pt-2">${toggles}</div>
-                        ${blocoClientes}
-                        <a href="fluxo_caixa.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
-                    </div>`;
-            });
-
-            if (lista.innerHTML === '') lista.innerHTML = '<p class="text-xs text-slate-400 text-center">Nenhum outro usuário cadastrado.</p>';
+            usuarios = [];
+            snap.forEach((d) => { if (d.id !== meuUid && d.data().role !== "master") usuarios.push({ id: d.id, ...d.data() }); });
+            render();
         }
+
+        const tabCls = (ativo) => "flex-1 py-2 rounded-lg text-xs font-bold transition " + (ativo ? "bg-blue-600 text-white" : "bg-white text-slate-500 border border-slate-200");
+
+        window.trocarAba = (a) => {
+            aba = a;
+            document.getElementById('busca').value = ""; busca = "";
+            document.getElementById('tab-novos').className = tabCls(a === "novos");
+            document.getElementById('tab-clientes').className = tabCls(a === "clientes");
+            document.getElementById('tab-funcionarios').className = tabCls(a === "funcionarios");
+            render();
+        };
+        window.buscar = (v) => { busca = (v || "").toLowerCase(); render(); };
+        window.toggleCfg = (id) => { document.getElementById('cfg-' + id).classList.toggle('hidden'); };
+
+        // Contadores das abas
+        function atualizarContadores() {
+            const cont = { novos: 0, clientes: 0, funcionarios: 0 };
+            usuarios.forEach(u => { const c = categoriaDe(u); cont[c === "novo" ? "novos" : c === "cliente" ? "clientes" : "funcionarios"]++; });
+            document.getElementById('tab-novos').innerText = "Novos (" + cont.novos + ")";
+            document.getElementById('tab-clientes').innerText = "Clientes (" + cont.clientes + ")";
+            document.getElementById('tab-funcionarios').innerText = "Funcionários (" + cont.funcionarios + ")";
+        }
+
+        function render() {
+            atualizarContadores();
+            const alvo = aba === "novos" ? "novo" : aba === "clientes" ? "cliente" : "funcionario";
+            const lista = usuarios
+                .filter(u => categoriaDe(u) === alvo)
+                .filter(u => (u.nome || u.email || "").toLowerCase().includes(busca))
+                .sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || "", "pt", { sensitivity: "base" }));
+            const clientes = usuarios.filter(u => categoriaDe(u) === "cliente");
+            const cont = document.getElementById('lista-usuarios');
+            document.getElementById('contador').innerText = lista.length + " " + ROTULO[aba];
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum registro nesta aba.</p>'; return; }
+            cont.innerHTML = lista.map(u => cardHTML(u, clientes)).join('');
+        }
+
+        function cardHTML(u, clientes) {
+            const func = u.funcionalidades || {};
+            const cat = categoriaDe(u);
+            const seletorCategoria = `
+                <div class="mb-2">
+                    <label class="text-[10px] font-semibold text-slate-400">Categoria do usuário</label>
+                    <select onchange="definirCategoria('${u.id}', this.value)" class="w-full mt-1 p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500 font-semibold">
+                        <option value="novo" ${cat === "novo" ? "selected" : ""}>Novo usuário (não definido)</option>
+                        <option value="cliente" ${cat === "cliente" ? "selected" : ""}>Cliente</option>
+                        <option value="funcionario" ${cat === "funcionario" ? "selected" : ""}>Funcionário</option>
+                    </select>
+                </div>`;
+
+            const toggles = FUNCS.map(f => `
+                <label class="flex items-center justify-between text-xs py-1">
+                    <span class="text-slate-600">${f.label}</span>
+                    <input type="checkbox" data-uid="${u.id}" data-func="${f.chave}"
+                        ${temFunc(func, f) ? "checked" : ""} onchange="alternarFunc(this)"
+                        class="w-9 h-5 accent-blue-600 cursor-pointer">
+                </label>`).join('');
+
+            let blocoClientes = '';
+            if (ehFuncionario(u)) {
+                const permitidos = u.clientesPermitidos || [];
+                const opcoes = clientes.length === 0
+                    ? '<p class="text-[10px] text-slate-400">Nenhum cliente cadastrado ainda.</p>'
+                    : clientes.map(c => `
+                        <label class="flex items-center justify-between text-xs py-1">
+                            <span class="text-slate-600 truncate">${c.nome || c.email || "(sem nome)"}</span>
+                            <input type="checkbox" onchange="alternarCliente('${u.id}','${c.id}',this.checked)"
+                                ${permitidos.includes(c.id) ? "checked" : ""} class="w-9 h-5 accent-orange-500 cursor-pointer">
+                        </label>`).join('');
+                blocoClientes = `<details class="border-t border-slate-100 pt-2 mt-2">
+                        <summary class="text-xs font-bold text-orange-600 cursor-pointer">🧑‍🤝‍🧑 Clientes atendidos</summary>
+                        <p class="text-[10px] text-slate-400 mb-1 mt-1">Nenhum marcado = acesso a todos os clientes.</p>
+                        ${opcoes}</details>`;
+            }
+
+            return `<div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-2">
+                <div class="flex items-center justify-between p-3">
+                    <div class="min-w-0">
+                        <div class="font-bold text-slate-800 text-sm truncate">${u.nome || "(sem nome)"}</div>
+                        <div class="text-[11px] text-slate-500 truncate">${u.email || ""}</div>
+                    </div>
+                    <button onclick="toggleCfg('${u.id}')" title="Configurar" class="ml-2 shrink-0 w-9 h-9 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-base">⚙️</button>
+                </div>
+                <div id="cfg-${u.id}" class="hidden border-t border-slate-100 p-3">
+                    ${seletorCategoria}
+                    <p class="text-[10px] font-semibold text-slate-400 mb-1 border-t border-slate-100 pt-2">Funcionalidades liberadas</p>
+                    ${toggles}
+                    ${blocoClientes}
+                    <a href="fluxo_caixa.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
+                </div>
+            </div>`;
+        }
+
+        // Define a categoria do usuário (novo/cliente/funcionário)
+        window.definirCategoria = async (uid, cat) => {
+            const updates = { categoria: cat };
+            // Funcionário precisa poder escrever relatórios; cliente não
+            if (cat === "funcionario") updates["funcionalidades.relatorios"] = true;
+            if (cat === "cliente") updates["funcionalidades.relatorios"] = false;
+            try {
+                await updateDoc(doc(db, "usuarios", uid), updates);
+                const u = usuarios.find(x => x.id === uid);
+                if (u) {
+                    u.categoria = cat;
+                    u.funcionalidades = u.funcionalidades || {};
+                    if (cat === "funcionario") u.funcionalidades.relatorios = true;
+                    if (cat === "cliente") u.funcionalidades.relatorios = false;
+                }
+                render();
+            } catch (err) { alert("Erro ao definir categoria: " + err.message); }
+        };
 
         // Atribui/remove um cliente da lista de atendimento do funcionário
         window.alternarCliente = async (funcUid, clienteUid, marcado) => {
@@ -111,9 +181,9 @@
                 await updateDoc(doc(db, "usuarios", funcUid), {
                     clientesPermitidos: marcado ? arrayUnion(clienteUid) : arrayRemove(clienteUid)
                 });
-            } catch (err) {
-                alert("Erro ao atualizar clientes: " + err.message);
-            }
+                const u = usuarios.find(x => x.id === funcUid);
+                if (u) { u.clientesPermitidos = u.clientesPermitidos || []; if (marcado) u.clientesPermitidos.push(clienteUid); else u.clientesPermitidos = u.clientesPermitidos.filter(x => x !== clienteUid); }
+            } catch (err) { alert("Erro ao atualizar clientes: " + err.message); }
         };
 
         // Liga/desliga uma funcionalidade de um usuário
@@ -122,12 +192,14 @@
             const chave = input.dataset.func;
             input.disabled = true;
             try {
-                await updateDoc(doc(db, "usuarios", uid), {
-                    [`funcionalidades.${chave}`]: input.checked
-                });
+                await updateDoc(doc(db, "usuarios", uid), { [`funcionalidades.${chave}`]: input.checked });
+                const u = usuarios.find(x => x.id === uid);
+                if (u) { u.funcionalidades = u.funcionalidades || {}; u.funcionalidades[chave] = input.checked; }
+                // Ligar "Escrever Relatórios" transforma em funcionário → muda de aba
+                if (chave === "relatorios") render();
             } catch (err) {
                 alert("Erro ao atualizar: " + err.message);
-                input.checked = !input.checked; // desfaz visualmente
+                input.checked = !input.checked;
             } finally {
                 input.disabled = false;
             }
@@ -150,7 +222,16 @@
                 📋 Ver todos os relatórios dos funcionários
             </a>
 
-            <p class="text-[11px] text-slate-500 mb-3 leading-snug">Ligue ou desligue as funcionalidades de cada usuário. As alterações são salvas automaticamente.</p>
+            <!-- Abas -->
+            <div class="flex gap-1.5 mb-2">
+                <button id="tab-novos" onclick="trocarAba('novos')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-blue-600 text-white">Novos</button>
+                <button id="tab-clientes" onclick="trocarAba('clientes')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-white text-slate-500 border border-slate-200">Clientes</button>
+                <button id="tab-funcionarios" onclick="trocarAba('funcionarios')" class="flex-1 py-2 rounded-lg text-xs font-bold transition bg-white text-slate-500 border border-slate-200">Funcionários</button>
+            </div>
+
+            <!-- Busca -->
+            <input id="busca" oninput="buscar(this.value)" placeholder="🔍 Procurar pelo nome..." class="w-full p-2.5 border rounded-xl text-sm mb-2 outline-none focus:ring-2 focus:ring-blue-500">
+            <p id="contador" class="text-[11px] text-slate-500 mb-2">Carregando...</p>
 
             <div id="lista-usuarios" class="space-y-2"></div>
         </div>
