@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -25,7 +25,22 @@
             try {
                 // Busca o nome salvo no Firestore
                 const docRef = doc(db, "usuarios", user.uid);
-                const docSnap = await getDoc(docRef);
+                let docSnap = await getDoc(docRef);
+
+                // Auto-correção: se a conta existe no login mas não tem perfil no banco,
+                // cria um perfil mínimo (aparece no Painel Master, aba "Novos").
+                if (!docSnap.exists()) {
+                    try {
+                        await setDoc(docRef, {
+                            nome: "", email: user.email || "",
+                            role: "cliente",
+                            funcionalidades: { produtos: true, vendas: true, fluxoCaixa: true, itensResolver: true, relatoriosHistorico: true, calculoMargem: false, cvlCompleto: false, relatorios: false },
+                            criadoEm: new Date().toISOString(),
+                            perfilAutoCriado: true
+                        });
+                        docSnap = await getDoc(docRef);
+                    } catch (e) { console.error("Falha ao criar perfil ausente:", e); }
+                }
 
                 if (docSnap.exists() && docSnap.data().nome) {
                     const primeiroNome = docSnap.data().nome.trim().split(" ")[0];
