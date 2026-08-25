@@ -14,8 +14,8 @@
     </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification, signOut, deleteUser } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -29,6 +29,7 @@
             const titulo = document.getElementById('titulo-topo');
             
             document.getElementById('grupo-cadastro').style.display = ehCadastro ? 'block' : 'none';
+            document.getElementById('codigoEmpresa').required = ehCadastro;
             document.getElementById('nome').required = ehCadastro;
             document.getElementById('telefone').required = ehCadastro;
             document.getElementById('segmento').required = ehCadastro;
@@ -76,11 +77,31 @@
                     const cep = document.getElementById('cep').value;
                     const cidade = document.getElementById('cidade').value;
                     const estado = document.getElementById('estado').value;
+                    const codigoEmpresa = document.getElementById('codigoEmpresa').value.trim().toUpperCase();
+                    if (!codigoEmpresa) { alert("Digite o código da empresa (peça ao seu consultor/administrador)."); return; }
+
                     console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
+                    // Valida o código de convite. Só é possível ler as empresas após autenticar,
+                    // por isso validamos aqui; se o código for inválido, apagamos a conta recém-criada.
+                    let empresaId;
+                    try {
+                        const qs = await getDocs(query(collection(db, "empresas"), where("codigoConvite", "==", codigoEmpresa)));
+                        if (qs.empty) {
+                            try { await deleteUser(cred.user); } catch (delErr) { console.error("Falha ao remover conta órfã:", delErr); }
+                            alert("Código da empresa inválido. Confira com o seu consultor/administrador e tente de novo.");
+                            return;
+                        }
+                        empresaId = qs.docs[0].id;
+                    } catch (valErr) {
+                        try { await deleteUser(cred.user); } catch (delErr) { console.error("Falha ao remover conta órfã:", delErr); }
+                        alert("Não foi possível validar o código da empresa. Tente novamente em instantes.");
+                        return;
+                    }
+
                     console.log("Tentando salvar dados no Firestore...");
-                    // Todo novo cadastro entra como "cliente" por padrão
+                    // Todo novo cadastro entra como "cliente" por padrão, vinculado à empresa do código
                     await setDoc(doc(db, "usuarios", cred.user.uid), {
                         nome: nome,
                         email: email,
@@ -91,6 +112,7 @@
                         cidade: cidade,
                         estado: estado,
                         role: "cliente",
+                        empresaId: empresaId,
                         // Básicas ligadas; pagas/funcionário desligadas
                         funcionalidades: {
                             produtos: true, vendas: true,
@@ -153,6 +175,7 @@
         
         <form onsubmit="handleAuth(event)" class="space-y-4">
             <div id="grupo-cadastro" style="display: none;" class="space-y-4">
+                <input type="text" id="codigoEmpresa" placeholder="Código da empresa (ex: ABC234)" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="w-full px-4 py-3 border-2 border-orange-300 bg-orange-50 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-mono tracking-widest uppercase">
                 <input type="text" id="nome" placeholder="Nome completo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="tel" id="telefone" placeholder="Telefone (WhatsApp) ativo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="text" id="segmento" placeholder="Segmento da empresa (ex: Lanchonete)" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">

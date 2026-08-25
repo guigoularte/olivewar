@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Empresas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let meuUid = null;
+        let empresas = [];   // [{ id, ...data }]
+        let usuarios = [];   // [{ id, ...data }]
+
+        // Código de convite: 6 caracteres, sem letras/números ambíguos (0/O, 1/I).
+        function gerarCodigo() {
+            const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            let s = "";
+            for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)];
+            return s;
+        }
+        // Garante que o código não colida com nenhum já existente.
+        function codigoUnico() {
+            const usados = new Set(empresas.map(e => e.codigoConvite).filter(Boolean));
+            let cod;
+            do { cod = gerarCodigo(); } while (usados.has(cod));
+            return cod;
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            if (!meu.exists() || meu.data().role !== "master") {
+                alert("Acesso restrito ao administrador da plataforma.");
+                window.location.href = "app.html";
+                return;
+            }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            const [snapE, snapU] = await Promise.all([
+                getDocs(collection(db, "empresas")),
+                getDocs(collection(db, "usuarios"))
+            ]);
+            empresas = snapE.docs.map(d => ({ id: d.id, ...d.data() }));
+            usuarios = snapU.docs.map(d => ({ id: d.id, ...d.data() }));
+            render();
+        }
+
+        // Quantos usuários pertencem a cada empresa + quantos sem empresa.
+        function contarPorEmpresa() {
+            const cont = {};
+            let semEmpresa = 0;
+            usuarios.forEach(u => {
+                if (u.empresaId) cont[u.empresaId] = (cont[u.empresaId] || 0) + 1;
+                else semEmpresa++;
+            });
+            return { cont, semEmpresa };
+        }
+
+        function render() {
+            const { cont, semEmpresa } = contarPorEmpresa();
+            const alerta = document.getElementById('alerta-sem-empresa');
+            if (semEmpresa > 0) {
+                alerta.classList.remove('hidden');
+                document.getElementById('qtd-sem-empresa').innerText = semEmpresa;
+            } else {
+                alerta.classList.add('hidden');
+            }
+
+            const lista = document.getElementById('lista-empresas');
+            if (empresas.length === 0) {
+                lista.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhuma empresa cadastrada ainda. Crie a primeira acima.</p>';
+                return;
+            }
+            lista.innerHTML = empresas
+                .sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt", { sensitivity: "base" }))
+                .map(e => {
+                    const qtd = cont[e.id] || 0;
+                    const dono = usuarios.find(u => u.id === e.ownerUid);
+                    const donoTxt = dono ? (dono.nome || dono.email || e.ownerUid) : (e.ownerUid || "—");
+                    return `<div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-2 p-3">
+                        <div class="flex items-center justify-between">
+                            <div class="min-w-0">
+                                <div class="font-bold text-slate-800 text-sm truncate">${e.nome || "(sem nome)"}</div>
+                                <div class="text-[11px] text-slate-500 truncate">${qtd} usuário(s) · plano ${e.plano || "gratis"}</div>
+                            </div>
+                            <span class="ml-2 shrink-0 text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded-lg">Admin: ${donoTxt}</span>
+                        </div>
+                        <div class="mt-2 flex items-center gap-2">
+                            <div class="flex-1 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                                <div class="text-[10px] text-orange-500 font-semibold">Código de convite</div>
+                                <div class="font-mono font-black text-orange-700 tracking-widest text-lg">${e.codigoConvite || "—"}</div>
+                            </div>
+                            <button onclick="novoCodigo('${e.id}')" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg">🔄 Novo código</button>
+                        </div>
+                        <button onclick="atribuirSemEmpresa('${e.id}','${(e.nome||'').replace(/'/g,'')}')" class="w-full mt-2 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-lg">⬇ Trazer usuários sem empresa para esta</button>
+                    </div>`;
+                }).join('');
+        }
+
+        // Cria nova empresa. Por padrão o dono é você (master); ajuste depois se for outra pessoa.
+        window.criarEmpresa = async () => {
+            const nome = document.getElementById('novo-nome').value.trim();
+            if (!nome) { alert("Digite o nome da empresa."); return; }
+            const btn = document.getElementById('btn-criar');
+            btn.disabled = true; btn.innerText = "Criando...";
+            try {
+                await addDoc(collection(db, "empresas"), {
+                    nome,
+                    ownerUid: meuUid,           // dono inicial = você; troque no Console se necessário
+                    plano: "gratis",
+                    codigoConvite: codigoUnico(),
+                    criadoEm: serverTimestamp()
+                });
+                document.getElementById('novo-nome').value = "";
+                await carregar();
+            } catch (err) {
+                alert("Erro ao criar empresa: " + err.message);
+            } finally {
+                btn.disabled = false; btn.innerText = "Criar empresa";
+            }
+        };
+
+        // Gera um novo código de convite para a empresa (invalida o anterior).
+        window.novoCodigo = async (empresaId) => {
+            if (!confirm("Gerar um novo código? O código anterior deixa de funcionar.")) return;
+            try {
+                const novo = codigoUnico();
+                await updateDoc(doc(db, "empresas", empresaId), { codigoConvite: novo });
+                await carregar();
+            } catch (err) { alert("Erro ao gerar código: " + err.message); }
+        };
+
+        // Backfill: coloca todos os usuários SEM empresaId nesta empresa.
+        window.atribuirSemEmpresa = async (empresaId, nome) => {
+            const semEmpresa = usuarios.filter(u => !u.empresaId);
+            if (semEmpresa.length === 0) { alert("Não há usuários sem empresa."); return; }
+            if (!confirm(`Trazer ${semEmpresa.length} usuário(s) sem empresa para "${nome}"?`)) return;
+            try {
+                // writeBatch aguenta até 500 operações; suficiente para o volume atual.
+                let batch = writeBatch(db), n = 0;
+                for (const u of semEmpresa) {
+                    batch.update(doc(db, "usuarios", u.id), { empresaId });
+                    if (++n === 450) { await batch.commit(); batch = writeBatch(db); n = 0; }
+                }
+                if (n > 0) await batch.commit();
+                alert(`${semEmpresa.length} usuário(s) atribuído(s) a "${nome}".`);
+                await carregar();
+            } catch (err) { alert("Erro no backfill: " + err.message); }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <a href="admin.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Empresas</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <p class="text-[11px] text-slate-500 mb-4">Cada empresa tem seu próprio código de convite. Funcionários e clientes digitam o código no cadastro para entrar na empresa certa.</p>
+
+            <!-- Aviso de migração pendente -->
+            <div id="alerta-sem-empresa" class="hidden mb-4 bg-amber-50 border border-amber-300 rounded-xl p-3 text-[11px] text-amber-800">
+                ⚠️ Existem <b><span id="qtd-sem-empresa">0</span></b> usuário(s) sem empresa. Crie sua empresa abaixo e clique em <b>"Trazer usuários sem empresa"</b> para migrá-los.
+            </div>
+
+            <!-- Criar empresa -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-4">
+                <label class="text-[10px] font-semibold text-slate-400">Nova empresa</label>
+                <input id="novo-nome" placeholder="Nome da consultoria/empresa" class="w-full mt-1 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="btn-criar" onclick="criarEmpresa()" class="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">Criar empresa</button>
+            </div>
+
+            <div id="lista-empresas" class="space-y-2"></div>
+        </div>
+    </div>
+</body>
+</html>
