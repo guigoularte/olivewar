@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, serverTimestamp, writeBatch, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -105,6 +105,13 @@
                             </div>
                             <button onclick="novoCodigo('${e.id}')" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg">🔄 Novo código</button>
                         </div>
+                        <div class="mt-2 border-t border-slate-100 pt-2">
+                            <label class="text-[10px] font-semibold text-slate-400">Vincular usuário pelo código pessoal dele</label>
+                            <div class="flex items-center gap-2 mt-1">
+                                <input id="cod-${e.id}" placeholder="Ex: ABC234" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="flex-1 p-2 border rounded-lg text-sm font-mono tracking-widest uppercase outline-none focus:ring-2 focus:ring-blue-500">
+                                <button onclick="vincularPorCodigo('${e.id}')" class="shrink-0 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg">Vincular</button>
+                            </div>
+                        </div>
                         <button onclick="atribuirSemEmpresa('${e.id}','${(e.nome||'').replace(/'/g,'')}')" class="w-full mt-2 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-lg">⬇ Trazer usuários sem empresa para esta</button>
                     </div>`;
                 }).join('');
@@ -141,6 +148,28 @@
                 await updateDoc(doc(db, "empresas", empresaId), { codigoConvite: novo });
                 await carregar();
             } catch (err) { alert("Erro ao gerar código: " + err.message); }
+        };
+
+        // Vincula um usuário a esta empresa a partir do código pessoal (codigoAcesso) informado por ele.
+        window.vincularPorCodigo = async (empresaId) => {
+            const input = document.getElementById('cod-' + empresaId);
+            const codigo = (input.value || "").trim().toUpperCase();
+            if (!codigo) { alert("Digite o código do usuário."); return; }
+            try {
+                const qs = await getDocs(query(collection(db, "usuarios"), where("codigoAcesso", "==", codigo)));
+                if (qs.empty) { alert("Nenhum usuário encontrado com o código " + codigo + "."); return; }
+                const u = qs.docs[0];
+                const dados = u.data();
+                const nome = dados.nome || dados.email || u.id;
+                if (dados.empresaId && dados.empresaId !== empresaId) {
+                    const outra = empresas.find(e => e.id === dados.empresaId);
+                    if (!confirm(`"${nome}" já está na empresa "${outra ? outra.nome : dados.empresaId}". Mover para esta empresa?`)) return;
+                }
+                await updateDoc(doc(db, "usuarios", u.id), { empresaId });
+                input.value = "";
+                alert(`"${nome}" foi vinculado(a) a esta empresa.`);
+                await carregar();
+            } catch (err) { alert("Erro ao vincular: " + err.message); }
         };
 
         // Backfill: coloca todos os usuários SEM empresaId nesta empresa.

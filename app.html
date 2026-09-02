@@ -9,7 +9,15 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Código de acesso pessoal (6 caracteres, sem 0/O/1/I).
+        function gerarCodigoAcesso() {
+            const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            let s = "";
+            for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)];
+            return s;
+        }
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -34,6 +42,8 @@
                         await setDoc(docRef, {
                             nome: "", email: user.email || "",
                             role: "cliente",
+                            empresaId: null,
+                            codigoAcesso: gerarCodigoAcesso(),
                             funcionalidades: { produtos: true, vendas: true, fluxoCaixa: true, itensResolver: true, relatoriosHistorico: true, calculoMargem: false, cvlCompleto: false, relatorios: false },
                             criadoEm: new Date().toISOString(),
                             perfilAutoCriado: true
@@ -78,6 +88,25 @@
                 // Painel Master só para o master
                 const elAdmin = document.getElementById('menu-admin');
                 if (elAdmin) elAdmin.style.display = ehMaster ? 'flex' : 'none';
+
+                // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
+                if (!ehMaster && !dados.empresaId) {
+                    let codigo = dados.codigoAcesso;
+                    if (!codigo) {
+                        // Usuário antigo sem código: gera e salva agora
+                        codigo = gerarCodigoAcesso();
+                        try { await updateDoc(docRef, { codigoAcesso: codigo }); } catch (e) { console.error("Falha ao gerar código de acesso:", e); }
+                    }
+                    const banner = document.getElementById('banner-codigo');
+                    if (banner) {
+                        document.getElementById('codigo-acesso').innerText = codigo;
+                        window.copiarCodigoAcesso = async () => {
+                            try { await navigator.clipboard.writeText(codigo); alert("Código copiado: " + codigo); }
+                            catch (e) { alert("Seu código é: " + codigo); }
+                        };
+                        banner.classList.remove('hidden');
+                    }
+                }
             } catch (error) {
                 console.error("Erro ao buscar nome:", error);
                 document.getElementById('nome-usuario').innerText = "Olá, Usuário";
@@ -102,6 +131,16 @@
                 <h1 class="text-4xl font-black text-white tracking-tight drop-shadow-sm">Oliver</h1>
                 <div class="mx-auto my-2 h-1 w-16 rounded-full bg-white/75"></div>
                 <h2 id="nome-usuario" class="text-lg font-bold text-white/95">Carregando...</h2>
+            </div>
+
+            <!-- Aviso: cliente ainda não vinculado a uma empresa -->
+            <div id="banner-codigo" class="hidden mx-6 mt-5 bg-orange-50 border border-orange-300 rounded-2xl p-4">
+                <p class="text-xs font-bold text-orange-700 mb-1">🔑 Seu código de acesso</p>
+                <p class="text-[11px] text-orange-800/80 mb-2">Informe este código à sua consultoria para ela vincular você e liberar o acompanhamento.</p>
+                <div class="flex items-center gap-2">
+                    <span id="codigo-acesso" class="flex-1 text-center font-mono font-black tracking-[0.3em] text-2xl text-orange-700 bg-white rounded-xl py-2 border border-orange-200">------</span>
+                    <button onclick="copiarCodigoAcesso()" class="shrink-0 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-3 rounded-xl">Copiar</button>
+                </div>
             </div>
 
             <!-- Botões / Cards de Navegação -->

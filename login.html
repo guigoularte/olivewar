@@ -24,12 +24,19 @@
 
         let ehCadastro = false;
 
+        // Código de acesso pessoal (6 caracteres, sem 0/O/1/I). O cliente informa à empresa para ser vinculado.
+        function gerarCodigoAcesso() {
+            const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            let s = "";
+            for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)];
+            return s;
+        }
+
         window.alternarModo = () => {
             ehCadastro = !ehCadastro;
             const titulo = document.getElementById('titulo-topo');
             
             document.getElementById('grupo-cadastro').style.display = ehCadastro ? 'block' : 'none';
-            document.getElementById('codigoEmpresa').required = ehCadastro;
             document.getElementById('nome').required = ehCadastro;
             document.getElementById('telefone').required = ehCadastro;
             document.getElementById('segmento').required = ehCadastro;
@@ -78,30 +85,33 @@
                     const cidade = document.getElementById('cidade').value;
                     const estado = document.getElementById('estado').value;
                     const codigoEmpresa = document.getElementById('codigoEmpresa').value.trim().toUpperCase();
-                    if (!codigoEmpresa) { alert("Digite o código da empresa (peça ao seu consultor/administrador)."); return; }
 
                     console.log("Tentando criar usuário no Auth...");
                     const cred = await createUserWithEmailAndPassword(auth, email, password);
 
-                    // Valida o código de convite. Só é possível ler as empresas após autenticar,
-                    // por isso validamos aqui; se o código for inválido, apagamos a conta recém-criada.
-                    let empresaId;
-                    try {
-                        const qs = await getDocs(query(collection(db, "empresas"), where("codigoConvite", "==", codigoEmpresa)));
-                        if (qs.empty) {
+                    // Se a pessoa digitou um código de empresa, validamos e vinculamos.
+                    // Só é possível ler as empresas após autenticar; por isso validamos aqui.
+                    // Código em branco = cadastro livre (o cliente informa o código pessoal à empresa depois).
+                    let empresaId = null;
+                    if (codigoEmpresa) {
+                        try {
+                            const qs = await getDocs(query(collection(db, "empresas"), where("codigoConvite", "==", codigoEmpresa)));
+                            if (qs.empty) {
+                                try { await deleteUser(cred.user); } catch (delErr) { console.error("Falha ao remover conta órfã:", delErr); }
+                                alert("Código da empresa inválido. Confira com o seu consultor ou deixe em branco para se cadastrar sem código.");
+                                return;
+                            }
+                            empresaId = qs.docs[0].id;
+                        } catch (valErr) {
                             try { await deleteUser(cred.user); } catch (delErr) { console.error("Falha ao remover conta órfã:", delErr); }
-                            alert("Código da empresa inválido. Confira com o seu consultor/administrador e tente de novo.");
+                            alert("Não foi possível validar o código da empresa. Tente novamente em instantes.");
                             return;
                         }
-                        empresaId = qs.docs[0].id;
-                    } catch (valErr) {
-                        try { await deleteUser(cred.user); } catch (delErr) { console.error("Falha ao remover conta órfã:", delErr); }
-                        alert("Não foi possível validar o código da empresa. Tente novamente em instantes.");
-                        return;
                     }
 
                     console.log("Tentando salvar dados no Firestore...");
-                    // Todo novo cadastro entra como "cliente" por padrão, vinculado à empresa do código
+                    // Todo novo cadastro entra como "cliente" por padrão.
+                    // codigoAcesso = código pessoal que o cliente informa à empresa para ser vinculado.
                     await setDoc(doc(db, "usuarios", cred.user.uid), {
                         nome: nome,
                         email: email,
@@ -113,6 +123,7 @@
                         estado: estado,
                         role: "cliente",
                         empresaId: empresaId,
+                        codigoAcesso: gerarCodigoAcesso(),
                         // Básicas ligadas; pagas/funcionário desligadas
                         funcionalidades: {
                             produtos: true, vendas: true,
@@ -175,7 +186,8 @@
         
         <form onsubmit="handleAuth(event)" class="space-y-4">
             <div id="grupo-cadastro" style="display: none;" class="space-y-4">
-                <input type="text" id="codigoEmpresa" placeholder="Código da empresa (ex: ABC234)" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="w-full px-4 py-3 border-2 border-orange-300 bg-orange-50 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-mono tracking-widest uppercase">
+                <input type="text" id="codigoEmpresa" placeholder="Código da empresa (opcional)" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-mono tracking-widest uppercase">
+                <p class="text-[11px] text-slate-400 -mt-2 px-1">Tem um código da sua consultoria? Digite aqui. Se não tiver, deixe em branco — você receberá um código pessoal para informar a ela depois.</p>
                 <input type="text" id="nome" placeholder="Nome completo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="tel" id="telefone" placeholder="Telefone (WhatsApp) ativo" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">
                 <input type="text" id="segmento" placeholder="Segmento da empresa (ex: Lanchonete)" class="w-full px-4 py-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none text-sm">

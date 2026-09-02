@@ -49,6 +49,8 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
   - `relatorios: true` = é funcionário (pode escrever relatórios e ver lista de clientes)
 - `clientesPermitidos`: array de UIDs (funcionário só atende esses; vazio = todos)
 - `perfilAutoCriado`: true (quando o app criou o perfil por estar faltando)
+- `empresaId`: id da empresa (multiempresa; null = ainda não vinculado)
+- `codigoAcesso`: código pessoal (6 chars) que o cliente informa à empresa para ser vinculado
 
 Subcoleções de `usuarios/{uid}`:
 - `fluxo_caixa` — { tipo(entrada/saida), descricao, valor, categoria, forma, data, criadoEm, status(pago/a_pagar), vencimento }
@@ -84,7 +86,9 @@ Progresso por fase:
 - **Fase 0 (feito)** — coleção `empresas/{id}` = { nome, ownerUid, plano, codigoConvite, criadoEm }.
   `empresas.html` (só master, linkado no Painel Master): cria empresa, gera/renova código de convite (6 chars, sem 0/O/1/I),
   e faz **backfill** (bota todos os usuários sem `empresaId` numa empresa). Regras: `empresas` lê=autenticado, escreve=master.
-- **Fase 1 (feito)** — `login.html` no cadastro pede **Código da empresa**. Valida após criar no Auth; se inválido, apaga a conta órfã (deleteUser). Grava `empresaId` no usuário. `empresaId` protegido no update do próprio usuário (regras).
+- **Fase 1 (feito, fluxo revisado)** — cadastro é **LIVRE** (qualquer um cria conta). O código da empresa é **opcional** no `login.html`.
+  Fluxo principal invertido: cada usuário recebe um **`codigoAcesso`** pessoal (6 chars) gerado no cadastro; o cliente **informa esse código à empresa**, e a empresa o vincula em `empresas.html` (campo "Vincular usuário pelo código", seta `empresaId`).
+  `app.html` mostra um banner com o `codigoAcesso` enquanto o cliente não tiver `empresaId` (com botão Copiar); gera o código para usuários antigos sem ele. `empresaId` protegido no update do próprio usuário (regras). Se o código de empresa for digitado e inválido, apaga a conta órfã (deleteUser).
 - **Fase 2 (a fazer)** — isolar por `empresaId`: `admin.html`, `admin_relatorios.html`, `admin_atividades.html`, dropdown de clientes nos relatórios, `relatorios_view.html`, `itens_resolver.html`. SÓ deployar depois do backfill.
 - **Fase 3 (a fazer)** — `role: empresa_admin` com painel escopado + regras que impedem cruzar empresas + (opcional) seletor de empresa pro super-admin. Testar com 2 empresas.
 
