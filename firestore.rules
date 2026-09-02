@@ -25,10 +25,14 @@ service cloud.firestore {
 
     // Empresas (multiempresa): qualquer usuário autenticado pode ler
     // (necessário para resolver o código de convite no cadastro e listar).
-    // Só o master cria/edita/exclui empresas (por enquanto).
     match /empresas/{empresaId} {
       allow read: if request.auth != null;
-      allow create, update, delete: if ehMaster();
+      // Cadastro de empresa: o próprio usuário cria a empresa da qual é dono.
+      allow create: if request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid;
+      // Dono edita/exclui a sua empresa; master pode tudo.
+      allow update, delete: if ehMaster()
+                    || (request.auth != null && resource.data.ownerUid == request.auth.uid);
     }
 
     match /usuarios/{userId} {
@@ -38,7 +42,8 @@ service cloud.firestore {
 
       allow create: if request.auth != null
                     && request.auth.uid == userId
-                    && request.resource.data.role == "cliente";
+                    && (request.resource.data.role == "cliente"
+                        || request.resource.data.role == "empresa_admin");
 
       // Master edita qualquer um; o dono edita seus dados exceto campos administrativos
       // (role, funcionalidades, clientesPermitidos, categoria e empresaId).

@@ -8,16 +8,85 @@
     <script src="oliver_ui.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getAuth, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, doc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let empresaId = null;
+
         window.fazerLogout = async () => { await signOut(auth); window.location.href = "login.html"; };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            try {
+                const uSnap = await getDoc(doc(db, "usuarios", user.uid));
+                const dados = uSnap.exists() ? uSnap.data() : {};
+                const podeConfigEmpresa = (dados.role === "empresa_admin" || dados.role === "master") && dados.empresaId;
+                if (!podeConfigEmpresa) return;
+
+                empresaId = dados.empresaId;
+                const eSnap = await getDoc(doc(db, "empresas", empresaId));
+                if (!eSnap.exists()) return;
+                const e = eSnap.data();
+
+                document.getElementById('emp-nome').value = e.nome || "";
+                document.getElementById('emp-email').value = e.emailRelatorio || "";
+                document.getElementById('emp-telefone').value = e.telefoneRelatorio || "";
+                document.getElementById('emp-cor').value = e.corRelatorio || "#F97316";
+                document.getElementById('convite-codigo').innerText = e.codigoConvite || "—";
+                atualizarPreview();
+                document.getElementById('card-empresa').classList.remove('hidden');
+            } catch (err) { console.error("Erro ao carregar configurações da empresa:", err); }
+        });
+
+        // Prévia do cabeçalho do relatório
+        window.atualizarPreview = () => {
+            const nome = document.getElementById('emp-nome').value || "Nome da empresa";
+            const email = document.getElementById('emp-email').value;
+            const tel = document.getElementById('emp-telefone').value;
+            const cor = document.getElementById('emp-cor').value || "#F97316";
+            const prev = document.getElementById('preview');
+            prev.style.backgroundColor = cor;
+            // Texto claro/escuro conforme a cor
+            const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cor);
+            let claro = true;
+            if (m) { const lum = (0.299*parseInt(m[1],16)+0.587*parseInt(m[2],16)+0.114*parseInt(m[3],16))/255; claro = lum <= 0.6; }
+            prev.style.color = claro ? "#ffffff" : "#1e1e1e";
+            document.getElementById('prev-nome').innerText = nome;
+            document.getElementById('prev-contato').innerText = [email, tel].filter(Boolean).join("   —   ");
+        };
+
+        window.salvarEmpresa = async () => {
+            if (!empresaId) return;
+            const btn = document.getElementById('btn-salvar');
+            btn.disabled = true; btn.innerText = "Salvando...";
+            try {
+                const dados = {
+                    nome: document.getElementById('emp-nome').value.trim(),
+                    emailRelatorio: document.getElementById('emp-email').value.trim(),
+                    telefoneRelatorio: document.getElementById('emp-telefone').value.trim(),
+                    corRelatorio: document.getElementById('emp-cor').value || "#F97316"
+                };
+                await updateDoc(doc(db, "empresas", empresaId), dados);
+                // Atualiza a marca usada nos PDFs imediatamente
+                const marca = { nome: dados.nome || "Oliver", email: dados.emailRelatorio, telefone: dados.telefoneRelatorio, cor: dados.corRelatorio };
+                window.oliverBranding = marca;
+                localStorage.setItem('oliverBranding', JSON.stringify(marca));
+                alert("Configurações da empresa salvas!");
+            } catch (err) {
+                alert("Erro ao salvar: " + err.message);
+            } finally {
+                btn.disabled = false; btn.innerText = "Salvar";
+            }
+        };
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
     <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between p-6 overflow-hidden">
-        <div>
+        <div class="overflow-y-auto">
             <div class="flex items-center justify-between mb-6">
                 <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
                 <h1 class="text-lg font-black text-blue-950">Configurações</h1>
@@ -26,6 +95,42 @@
 
             <div class="space-y-3">
                 <a href="perfil.html" class="block p-4 bg-white rounded-2xl shadow-sm border border-slate-200 font-bold text-slate-800 text-sm hover:border-blue-500">👤 Editar Perfil / Nome</a>
+
+                <!-- Configurações da empresa (só admin da empresa / master) -->
+                <div id="card-empresa" class="hidden p-4 bg-white rounded-2xl shadow-sm border border-slate-200">
+                    <p class="font-black text-slate-800 text-sm mb-1">🏢 Identidade no Relatório</p>
+                    <p class="text-[11px] text-slate-400 mb-3">Aparece no cabeçalho dos PDFs gerados para os seus clientes.</p>
+
+                    <label class="text-[10px] font-semibold text-slate-400">Nome da empresa</label>
+                    <input id="emp-nome" oninput="atualizarPreview()" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+
+                    <label class="text-[10px] font-semibold text-slate-400">E-mail da empresa</label>
+                    <input id="emp-email" type="email" oninput="atualizarPreview()" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+
+                    <label class="text-[10px] font-semibold text-slate-400">Telefone da empresa</label>
+                    <input id="emp-telefone" oninput="atualizarPreview()" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+
+                    <label class="text-[10px] font-semibold text-slate-400">Cor do relatório</label>
+                    <div class="flex items-center gap-3 mt-1 mb-3">
+                        <input id="emp-cor" type="color" value="#F97316" oninput="atualizarPreview()" class="w-14 h-10 border rounded-lg cursor-pointer p-0.5">
+                        <span class="text-[11px] text-slate-400">Toque para escolher a cor da faixa do topo.</span>
+                    </div>
+
+                    <!-- Prévia -->
+                    <p class="text-[10px] font-semibold text-slate-400 mb-1">Prévia do cabeçalho</p>
+                    <div id="preview" class="rounded-lg px-3 py-3 mb-3" style="background-color:#F97316;color:#fff">
+                        <div id="prev-nome" class="font-black text-base leading-tight">Nome da empresa</div>
+                        <div id="prev-contato" class="text-[11px] opacity-90"></div>
+                    </div>
+
+                    <button id="btn-salvar" onclick="salvarEmpresa()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">Salvar</button>
+
+                    <div class="mt-3 border-t border-slate-100 pt-2">
+                        <p class="text-[10px] font-semibold text-slate-400">Código de convite da empresa</p>
+                        <p class="text-[11px] text-slate-500">Clientes podem usar este código no cadastro: <b id="convite-codigo" class="font-mono tracking-widest text-orange-600">—</b></p>
+                    </div>
+                </div>
+
                 <button onclick="fazerLogout()" class="w-full text-left p-4 bg-white rounded-2xl shadow-sm border border-slate-200 font-bold text-red-600 text-sm hover:border-red-500">🚪 Sair da Conta</button>
             </div>
         </div>

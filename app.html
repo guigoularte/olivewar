@@ -68,6 +68,29 @@
                 localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func }));
                 localStorage.setItem('oliverNome', (dados.nome || "Usuário").trim().split(" ")[0]);
 
+                // Carrega a "marca" da empresa (nome/e-mail/telefone/cor) para os PDFs.
+                // Fica cacheada em localStorage; o oliver_pdf.js lê dali em qualquer tela.
+                try {
+                    if (dados.empresaId) {
+                        const empSnap = await getDoc(doc(db, "empresas", dados.empresaId));
+                        if (empSnap.exists()) {
+                            const e = empSnap.data();
+                            const marca = {
+                                nome: e.nome || "Oliver",
+                                email: e.emailRelatorio || "",
+                                telefone: e.telefoneRelatorio || "",
+                                cor: e.corRelatorio || "#F97316"
+                            };
+                            window.oliverBranding = marca;
+                            localStorage.setItem('oliverBranding', JSON.stringify(marca));
+                        } else {
+                            localStorage.removeItem('oliverBranding');
+                        }
+                    } else {
+                        localStorage.removeItem('oliverBranding');
+                    }
+                } catch (e) { console.error("Falha ao carregar marca da empresa:", e); }
+
                 // Mapa de funcionalidades -> card do menu (padrao = ligado por padrão)
                 const FEATS = [
                     { id: 'menu-relatorios', key: 'relatorios', padrao: false },
