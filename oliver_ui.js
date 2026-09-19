@@ -19,6 +19,7 @@
 
     var LINKS = [
         { href: "app.html", label: "Início", icon: "🏠", always: true },
+        { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
         { href: "itens_resolver.html", label: "Itens para Resolver", icon: "✅", key: "itensResolver", padrao: true },
         { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },

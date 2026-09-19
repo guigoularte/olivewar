@@ -22,6 +22,19 @@ service cloud.firestore {
         || dadosUsuario().clientesPermitidos.size() == 0
         || userId in dadosUsuario().clientesPermitidos;
     }
+    function ehEmpresaAdmin() {
+      return request.auth != null && dadosUsuario().role == "empresa_admin";
+    }
+    // empresaId do usuário logado
+    function minhaEmpresaId() {
+      return dadosUsuario().get('empresaId', '');
+    }
+    // Pode usar o CRM da empresa: admin da empresa ou funcionário, da MESMA empresa (ou master)
+    function membroDaEmpresa(empresaId) {
+      return request.auth != null
+        && (ehEmpresaAdmin() || ehFuncionario())
+        && minhaEmpresaId() == empresaId;
+    }
 
     // Empresas (multiempresa): qualquer usuário autenticado pode ler
     // (necessário para resolver o código de convite no cadastro e listar).
@@ -33,6 +46,18 @@ service cloud.firestore {
       // Dono edita/exclui a sua empresa; master pode tudo.
       allow update, delete: if ehMaster()
                     || (request.auth != null && resource.data.ownerUid == request.auth.uid);
+
+      // CRM da empresa (contatos, agenda/compromissos, financeiro a pagar/receber).
+      // Acesso: master, ou membro (admin/funcionário) da MESMA empresa.
+      match /crm_contatos/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
+      match /crm_compromissos/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
+      match /crm_financeiro/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
     }
 
     match /usuarios/{userId} {

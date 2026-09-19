@@ -26,6 +26,7 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
 - `produtos.html` — produtos com preço (decimal) + ingredientes; editar/excluir; importável no cálculo de margem/CVL.
 - `calculo_margem.html` — margem simples (ingredientes: valor pago/peso comprado/peso usado). Importa produto.
 - `cvl.html` — "Cálculo de Margem Completo" (Análise CVL, wizard 3 etapas). Importa produto. Funcionalidade paga.
+- `crm.html` — **CRM da empresa** (só empresa_admin/funcionário/master). 3 abas: Contatos (add manual + importar clientes vinculados + importar CSV + notas por contato), Agenda (compromissos/visitas; funcionário vê os seus, admin vê todos), Financeiro (a receber/a pagar com vencimento, status e totais). Dados em subcoleções de `empresas/{id}`.
 - `relatorios.html` — hub "Escrever Relatórios" (só funcionário/master): 1ª Visita, Checklist, Vistoria.
 - `relatorio_primeira_visita.html`, `relatorio_vistoria.html`, `checklist.html` — os 3 tipos de relatório.
   - Persistência offline (initializeFirestore + persistentLocalCache). **Salvam antes de compartilhar o PDF**.
@@ -51,6 +52,13 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
 - `perfilAutoCriado`: true (quando o app criou o perfil por estar faltando)
 - `empresaId`: id da empresa (multiempresa; null = ainda não vinculado)
 - `codigoAcesso`: código pessoal (6 chars) que o cliente informa à empresa para ser vinculado
+
+**Novo cliente agora começa só com `fluxoCaixa: true`** (todas as outras funções false); a empresa libera as demais em `admin.html` depois de vincular pelo código.
+
+Subcoleções de `empresas/{empresaId}` (CRM — isoladas por empresa via regras):
+- `crm_contatos` — { nome, telefone, email, negocio, cidade, notas, origem(cadastro/manual/importado), usuarioUid?, criadoPor, criadoEm }
+- `crm_compromissos` — { titulo, data(ISO), tipo, descricao, contatoId?, contatoNome, funcionarioUid, funcionarioNome, status(pendente/concluido) }
+- `crm_financeiro` — { tipo(receber/pagar), descricao, valor, vencimento, contatoId?, contatoNome, status(pendente/quitado), criadoPor }
 
 Subcoleções de `usuarios/{uid}`:
 - `fluxo_caixa` — { tipo(entrada/saida), descricao, valor, categoria, forma, data, criadoEm, status(pago/a_pagar), vencimento }

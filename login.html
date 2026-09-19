@@ -182,10 +182,11 @@
                             role: "cliente",
                             empresaId: empresaId,
                             codigoAcesso: gerarCodigoAcesso(),
-                            // Básicas ligadas; pagas/funcionário desligadas
+                            // Novo cliente começa só com Fluxo de Caixa. As demais funções
+                            // são liberadas pela empresa depois de vincular o cliente pelo código.
                             funcionalidades: {
-                                produtos: true, vendas: true,
-                                fluxoCaixa: true, itensResolver: true, relatoriosHistorico: true,
+                                produtos: false, vendas: false,
+                                fluxoCaixa: true, itensResolver: false, relatoriosHistorico: false,
                                 calculoMargem: false, cvlCompleto: false, relatorios: false
                             }
                         });

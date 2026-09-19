@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Estado
+        let empresaId = null, meuUid = null, meuNome = "", isAdmin = false, isFuncionario = false;
+        let contatos = [], compromissos = [], financeiro = [];
+        let aba = "contatos";
+
+        const col = (nome) => collection(db, "empresas", empresaId, nome);
+        const docRef = (nome, id) => doc(db, "empresas", empresaId, nome, id);
+        const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const dataHora = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
+        const dataBR = (s) => { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const dados = meu.exists() ? meu.data() : {};
+            const role = dados.role;
+            meuNome = (dados.nome || user.email || "").trim();
+            isAdmin = role === "master" || role === "empresa_admin";
+            isFuncionario = (dados.funcionalidades && dados.funcionalidades.relatorios === true) || false;
+            empresaId = dados.empresaId || null;
+
+            if (!(isAdmin || isFuncionario)) {
+                alert("O CRM está disponível apenas para empresas e seus funcionários.");
+                window.location.href = "app.html"; return;
+            }
+            if (!empresaId) {
+                alert("Sua conta ainda não está vinculada a uma empresa. Peça ao administrador para vincular você.");
+                window.location.href = "app.html"; return;
+            }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregarTudo();
+        });
+
+        async function carregarTudo() {
+            // Compromissos: admin vê todos; funcionário vê só os seus
+            const qCompromissos = isAdmin ? getDocs(col("crm_compromissos"))
+                : getDocs(query(col("crm_compromissos"), where("funcionarioUid", "==", meuUid)));
+            const [sc, sco, sf] = await Promise.all([getDocs(col("crm_contatos")), qCompromissos, getDocs(col("crm_financeiro"))]);
+            contatos = sc.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+            compromissos = sco.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+            financeiro = sf.docs.map(d => ({ id: d.id, ...d.data() }));
+            render();
+        }
+
+        // ===== Navegação de abas =====
+        window.trocarAba = (a) => { aba = a; render(); };
+        const tabCls = (on) => "flex-1 py-2 rounded-lg text-xs font-bold transition " + (on ? "bg-blue-600 text-white" : "bg-white text-slate-500 border border-slate-200");
+
+        function render() {
+            document.getElementById('tab-contatos').className = tabCls(aba === "contatos");
+            document.getElementById('tab-agenda').className = tabCls(aba === "agenda");
+            document.getElementById('tab-financeiro').className = tabCls(aba === "financeiro");
+            document.getElementById('painel-contatos').style.display = aba === "contatos" ? "block" : "none";
+            document.getElementById('painel-agenda').style.display = aba === "agenda" ? "block" : "none";
+            document.getElementById('painel-financeiro').style.display = aba === "financeiro" ? "block" : "none";
+            renderContatos(); renderAgenda(); renderFinanceiro(); preencherSelectContatos();
+        }
+
+        // ===== CONTATOS =====
+        window.toggleForm = (id) => { const el = document.getElementById(id); el.style.display = el.style.display === "none" ? "block" : "none"; };
+
+        function renderContatos() {
+            const busca = (document.getElementById('busca-contato').value || "").toLowerCase();
+            const lista = contatos.filter(c => [c.nome, c.telefone, c.negocio, c.cidade, c.email].map(x => (x || "").toLowerCase()).join(" ").includes(busca));
+            document.getElementById('contador-contatos').innerText = contatos.length + " contato(s)";
+            const cont = document.getElementById('lista-contatos');
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum contato. Adicione ou importe.</p>'; return; }
+            cont.innerHTML = lista.map(c => `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-2 p-3">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm truncate">${esc(c.nome) || "(sem nome)"}</div>
+                            <div class="text-[11px] text-slate-500 truncate">${esc(c.negocio) || ""}${c.negocio && c.cidade ? " · " : ""}${esc(c.cidade) || ""}</div>
+                            ${c.telefone ? `<div class="text-[11px] text-blue-700">📞 ${esc(c.telefone)}</div>` : ""}
+                            ${c.email ? `<div class="text-[11px] text-slate-500 truncate">✉ ${esc(c.email)}</div>` : ""}
+                            ${c.usuarioUid ? `<span class="inline-block mt-1 text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">cliente do app</span>` : ""}
+                        </div>
+                        <button onclick="excluirContato('${c.id}')" class="ml-2 shrink-0 text-red-400 hover:text-red-600 text-sm">🗑</button>
+                    </div>
+                    <textarea onchange="salvarNota('${c.id}', this.value)" placeholder="Anotações sobre este contato..." class="w-full mt-2 p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" rows="2">${esc(c.notas) || ""}</textarea>
+                </div>`).join('');
+        }
+        window.buscarContato = () => renderContatos();
+
+        window.addContato = async () => {
+            const nome = document.getElementById('c-nome').value.trim();
+            if (!nome) { alert("Informe o nome do contato."); return; }
+            const novo = {
+                nome,
+                telefone: document.getElementById('c-telefone').value.trim(),
+                email: document.getElementById('c-email').value.trim(),
+                negocio: document.getElementById('c-negocio').value.trim(),
+                cidade: document.getElementById('c-cidade').value.trim(),
+                notas: "",
+                origem: "manual",
+                criadoPor: meuUid,
+                criadoEm: serverTimestamp()
+            };
+            try {
+                await addDoc(col("crm_contatos"), novo);
+                ['c-nome', 'c-telefone', 'c-email', 'c-negocio', 'c-cidade'].forEach(id => document.getElementById(id).value = "");
+                document.getElementById('form-contato').style.display = "none";
+                await carregarTudo();
+            } catch (e) { alert("Erro ao salvar contato: " + e.message); }
+        };
+
+        window.salvarNota = async (id, txt) => {
+            try { await updateDoc(docRef("crm_contatos", id), { notas: txt }); const c = contatos.find(x => x.id === id); if (c) c.notas = txt; }
+            catch (e) { alert("Erro ao salvar nota: " + e.message); }
+        };
+
+        window.excluirContato = async (id) => {
+            if (!confirm("Excluir este contato?")) return;
+            try { await deleteDoc(docRef("crm_contatos", id)); await carregarTudo(); }
+            catch (e) { alert("Erro ao excluir: " + e.message); }
+        };
+
+        // Importa os clientes já vinculados à empresa (usuários do app) como contatos do CRM
+        window.importarVinculados = async () => {
+            try {
+                const snap = await getDocs(query(collection(db, "usuarios"), where("empresaId", "==", empresaId)));
+                const jaImportados = new Set(contatos.map(c => c.usuarioUid).filter(Boolean));
+                let novos = 0;
+                for (const d of snap.docs) {
+                    const u = d.data();
+                    if (d.id === meuUid) continue;                 // não importa a si mesmo
+                    if (u.role === "empresa_admin" || u.role === "master") continue;
+                    if (jaImportados.has(d.id)) continue;          // já existe
+                    await addDoc(col("crm_contatos"), {
+                        nome: u.nome || u.email || "(sem nome)",
+                        telefone: u.telefone || "", email: u.email || "",
+                        negocio: u.segmento || "", cidade: u.cidade || "",
+                        notas: "", origem: "cadastro", usuarioUid: d.id,
+                        criadoPor: meuUid, criadoEm: serverTimestamp()
+                    });
+                    novos++;
+                }
+                alert(novos > 0 ? `${novos} cliente(s) vinculado(s) importado(s).` : "Nenhum cliente novo para importar.");
+                await carregarTudo();
+            } catch (e) { alert("Erro ao importar vinculados: " + e.message); }
+        };
+
+        // Importa contatos de um arquivo CSV (colunas: nome, telefone, email, negocio, cidade)
+        window.importarCSV = async (input) => {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            try {
+                const texto = await file.text();
+                const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                if (linhas.length === 0) { alert("Arquivo vazio."); input.value = ""; return; }
+                // Pula cabeçalho se a 1ª célula for "nome"
+                let inicio = 0;
+                const primeira = linhas[0].split(/[;,]/)[0].trim().toLowerCase();
+                if (primeira === "nome") inicio = 1;
+                let novos = 0;
+                for (let i = inicio; i < linhas.length; i++) {
+                    const cols = linhas[i].split(/[;,]/).map(s => s.trim());
+                    const nome = cols[0]; if (!nome) continue;
+                    await addDoc(col("crm_contatos"), {
+                        nome, telefone: cols[1] || "", email: cols[2] || "",
+                        negocio: cols[3] || "", cidade: cols[4] || "",
+                        notas: "", origem: "importado", criadoPor: meuUid, criadoEm: serverTimestamp()
+                    });
+                    novos++;
+                }
+                input.value = "";
+                alert(`${novos} contato(s) importado(s) do arquivo.`);
+                await carregarTudo();
+            } catch (e) { alert("Erro ao importar CSV: " + e.message); input.value = ""; }
+        };
+
+        function preencherSelectContatos() {
+            const ops = '<option value="">— Sem contato vinculado —</option>' +
+                contatos.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+            const s1 = document.getElementById('a-contato'), s2 = document.getElementById('f-contato');
+            if (s1) s1.innerHTML = ops;
+            if (s2) s2.innerHTML = ops;
+        }
+
+        // ===== AGENDA / COMPROMISSOS =====
+        function renderAgenda() {
+            const cont = document.getElementById('lista-agenda');
+            if (compromissos.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum compromisso.</p>'; return; }
+            const hoje = new Date().toISOString().slice(0, 10);
+            cont.innerHTML = compromissos.map(c => {
+                const concl = c.status === "concluido";
+                const atrasado = !concl && c.data && c.data.slice(0, 10) < hoje;
+                return `<div class="bg-white rounded-xl shadow-sm border ${concl ? 'border-slate-200 opacity-60' : atrasado ? 'border-red-300' : 'border-slate-200'} mb-2 p-3">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm ${concl ? 'line-through' : ''}">${esc(c.titulo)}</div>
+                            <div class="text-[11px] text-slate-500">🗓 ${dataHora(c.data)} · ${esc(c.tipo || "tarefa")}</div>
+                            ${c.contatoNome ? `<div class="text-[11px] text-blue-700">👤 ${esc(c.contatoNome)}</div>` : ""}
+                            ${c.descricao ? `<div class="text-[11px] text-slate-500 mt-0.5">${esc(c.descricao)}</div>` : ""}
+                            ${isAdmin ? `<div class="text-[10px] text-slate-400 mt-0.5">resp.: ${esc(c.funcionarioNome || "—")}</div>` : ""}
+                        </div>
+                        <div class="ml-2 shrink-0 flex flex-col gap-1">
+                            ${concl ? "" : `<button onclick="concluirCompromisso('${c.id}')" title="Concluir" class="text-emerald-500 hover:text-emerald-700 text-sm">✔</button>`}
+                            <button onclick="excluirCompromisso('${c.id}')" title="Excluir" class="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        window.addCompromisso = async () => {
+            const titulo = document.getElementById('a-titulo').value.trim();
+            const data = document.getElementById('a-data').value;
+            if (!titulo || !data) { alert("Preencha o título e a data/hora."); return; }
+            const contatoId = document.getElementById('a-contato').value;
+            const contato = contatos.find(c => c.id === contatoId);
+            try {
+                await addDoc(col("crm_compromissos"), {
+                    titulo, data, tipo: document.getElementById('a-tipo').value,
+                    descricao: document.getElementById('a-descricao').value.trim(),
+                    contatoId: contatoId || null, contatoNome: contato ? contato.nome : "",
+                    funcionarioUid: meuUid, funcionarioNome: meuNome,
+                    status: "pendente", criadoEm: serverTimestamp()
+                });
+                ['a-titulo', 'a-descricao'].forEach(id => document.getElementById(id).value = "");
+                document.getElementById('a-data').value = "";
+                document.getElementById('form-agenda').style.display = "none";
+                await carregarTudo();
+            } catch (e) { alert("Erro ao salvar compromisso: " + e.message); }
+        };
+        window.concluirCompromisso = async (id) => {
+            try { await updateDoc(docRef("crm_compromissos", id), { status: "concluido" }); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+        window.excluirCompromisso = async (id) => {
+            if (!confirm("Excluir este compromisso?")) return;
+            try { await deleteDoc(docRef("crm_compromissos", id)); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+
+        // ===== FINANCEIRO (a pagar / a receber) =====
+        let filtroFin = "todos";
+        window.filtrarFin = (f) => { filtroFin = f; renderFinanceiro(); };
+
+        function renderFinanceiro() {
+            // Totais pendentes
+            const aReceber = financeiro.filter(f => f.tipo === "receber" && f.status !== "quitado").reduce((s, f) => s + (Number(f.valor) || 0), 0);
+            const aPagar = financeiro.filter(f => f.tipo === "pagar" && f.status !== "quitado").reduce((s, f) => s + (Number(f.valor) || 0), 0);
+            document.getElementById('total-receber').innerText = brl(aReceber);
+            document.getElementById('total-pagar').innerText = brl(aPagar);
+
+            let lista = financeiro.slice();
+            if (filtroFin !== "todos") lista = lista.filter(f => f.tipo === filtroFin);
+            lista.sort((a, b) => (a.vencimento || "").localeCompare(b.vencimento || ""));
+
+            const cont = document.getElementById('lista-financeiro');
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum lançamento.</p>'; return; }
+            const hoje = new Date().toISOString().slice(0, 10);
+            cont.innerHTML = lista.map(f => {
+                const receber = f.tipo === "receber";
+                const quitado = f.status === "quitado";
+                const atrasado = !quitado && f.vencimento && f.vencimento < hoje;
+                return `<div class="bg-white rounded-xl shadow-sm border ${atrasado ? 'border-red-300' : 'border-slate-200'} ${quitado ? 'opacity-60' : ''} mb-2 p-3">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm ${quitado ? 'line-through' : ''}">${esc(f.descricao)}</div>
+                            <div class="text-[11px] text-slate-500">Venc.: ${dataBR(f.vencimento)}${f.contatoNome ? " · 👤 " + esc(f.contatoNome) : ""}</div>
+                            <span class="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded ${receber ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}">${receber ? "A receber" : "A pagar"}${quitado ? (receber ? " · recebido" : " · pago") : ""}</span>
+                        </div>
+                        <div class="ml-2 shrink-0 text-right">
+                            <div class="font-black text-sm ${receber ? 'text-emerald-600' : 'text-red-600'}">${brl(f.valor)}</div>
+                            <div class="flex gap-2 justify-end mt-1">
+                                ${quitado ? "" : `<button onclick="quitarFin('${f.id}','${receber ? "recebido" : "pago"}')" class="text-[10px] font-bold text-emerald-600 hover:underline">${receber ? "Recebido" : "Pago"}</button>`}
+                                <button onclick="excluirFin('${f.id}')" class="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        window.addFinanceiro = async () => {
+            const descricao = document.getElementById('f-descricao').value.trim();
+            const valor = parseFloat(String(document.getElementById('f-valor').value).replace(",", "."));
+            if (!descricao || !(valor > 0)) { alert("Informe a descrição e um valor válido."); return; }
+            const contatoId = document.getElementById('f-contato').value;
+            const contato = contatos.find(c => c.id === contatoId);
+            try {
+                await addDoc(col("crm_financeiro"), {
+                    tipo: document.getElementById('f-tipo').value,   // receber | pagar
+                    descricao, valor,
+                    vencimento: document.getElementById('f-vencimento').value || null,
+                    contatoId: contatoId || null, contatoNome: contato ? contato.nome : "",
+                    status: "pendente", criadoPor: meuUid, criadoEm: serverTimestamp()
+                });
+                ['f-descricao', 'f-valor', 'f-vencimento'].forEach(id => document.getElementById(id).value = "");
+                document.getElementById('form-financeiro').style.display = "none";
+                await carregarTudo();
+            } catch (e) { alert("Erro ao salvar lançamento: " + e.message); }
+        };
+        window.quitarFin = async (id) => {
+            try { await updateDoc(docRef("crm_financeiro", id), { status: "quitado", quitadoEm: new Date().toISOString() }); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+        window.excluirFin = async (id) => {
+            if (!confirm("Excluir este lançamento?")) return;
+            try { await deleteDoc(docRef("crm_financeiro", id)); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-4">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">CRM</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <!-- Abas -->
+            <div class="flex gap-1.5 mb-3">
+                <button id="tab-contatos" onclick="trocarAba('contatos')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">Contatos</button>
+                <button id="tab-agenda" onclick="trocarAba('agenda')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Agenda</button>
+                <button id="tab-financeiro" onclick="trocarAba('financeiro')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Financeiro</button>
+            </div>
+
+            <!-- ===== PAINEL CONTATOS ===== -->
+            <div id="painel-contatos">
+                <div class="flex gap-2 mb-2">
+                    <button onclick="toggleForm('form-contato')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg">+ Contato</button>
+                    <button onclick="importarVinculados()" class="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold py-2 rounded-lg border border-emerald-200">⬇ Clientes do app</button>
+                    <label class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold py-2 rounded-lg text-center cursor-pointer">📄 CSV
+                        <input type="file" accept=".csv,text/csv" onchange="importarCSV(this)" class="hidden">
+                    </label>
+                </div>
+
+                <div id="form-contato" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-2 space-y-2">
+                    <input id="c-nome" placeholder="Nome *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex gap-2">
+                        <input id="c-telefone" placeholder="Telefone" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <input id="c-cidade" placeholder="Cidade" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <input id="c-email" placeholder="E-mail" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <input id="c-negocio" placeholder="Negócio / segmento" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <button onclick="addContato()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar contato</button>
+                </div>
+
+                <input id="busca-contato" oninput="buscarContato()" placeholder="🔍 Buscar contato..." class="w-full p-2.5 border rounded-xl text-sm mb-2 outline-none focus:ring-2 focus:ring-blue-500">
+                <p id="contador-contatos" class="text-[11px] text-slate-500 mb-2">—</p>
+                <div id="lista-contatos"></div>
+                <p class="text-[10px] text-slate-400 mt-1">CSV: colunas na ordem nome, telefone, e-mail, negócio, cidade (com ou sem cabeçalho).</p>
+            </div>
+
+            <!-- ===== PAINEL AGENDA ===== -->
+            <div id="painel-agenda" style="display:none">
+                <button onclick="toggleForm('form-agenda')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ Compromisso / Visita</button>
+                <div id="form-agenda" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-2 space-y-2">
+                    <input id="a-titulo" placeholder="Título (ex: Visitar Padaria X) *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex gap-2">
+                        <input id="a-data" type="datetime-local" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <select id="a-tipo" class="w-28 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="visita">Visita</option>
+                            <option value="ligacao">Ligação</option>
+                            <option value="tarefa">Tarefa</option>
+                            <option value="reuniao">Reunião</option>
+                        </select>
+                    </div>
+                    <select id="a-contato" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    <textarea id="a-descricao" placeholder="Observações" rows="2" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                    <button onclick="addCompromisso()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar compromisso</button>
+                </div>
+                <div id="lista-agenda"></div>
+            </div>
+
+            <!-- ===== PAINEL FINANCEIRO ===== -->
+            <div id="painel-financeiro" style="display:none">
+                <div class="flex gap-2 mb-2">
+                    <div class="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-2 text-center">
+                        <div class="text-[10px] text-emerald-600 font-semibold">A receber</div>
+                        <div id="total-receber" class="font-black text-emerald-700 text-sm">R$ 0,00</div>
+                    </div>
+                    <div class="flex-1 bg-red-50 border border-red-200 rounded-xl p-2 text-center">
+                        <div class="text-[10px] text-red-500 font-semibold">A pagar</div>
+                        <div id="total-pagar" class="font-black text-red-600 text-sm">R$ 0,00</div>
+                    </div>
+                </div>
+                <button onclick="toggleForm('form-financeiro')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ Lançamento</button>
+                <div id="form-financeiro" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-2 space-y-2">
+                    <div class="flex gap-2">
+                        <select id="f-tipo" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="receber">A receber (cobrança)</option>
+                            <option value="pagar">A pagar (despesa)</option>
+                        </select>
+                        <input id="f-valor" type="number" step="0.01" placeholder="Valor" class="w-28 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <input id="f-descricao" placeholder="Descrição *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex gap-2 items-center">
+                        <label class="text-[11px] text-slate-400">Vencimento</label>
+                        <input id="f-vencimento" type="date" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <select id="f-contato" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    <button onclick="addFinanceiro()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar lançamento</button>
+                </div>
+                <div class="flex gap-1.5 mb-2">
+                    <button onclick="filtrarFin('todos')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Todos</button>
+                    <button onclick="filtrarFin('receber')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">A receber</button>
+                    <button onclick="filtrarFin('pagar')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">A pagar</button>
+                </div>
+                <div id="lista-financeiro"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
