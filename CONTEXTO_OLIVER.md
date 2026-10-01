@@ -30,6 +30,7 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
 - `relatorios.html` — hub "Escrever Relatórios" (só funcionário/master): 1ª Visita, Checklist, Vistoria.
 - `relatorio_primeira_visita.html`, `relatorio_vistoria.html`, `checklist.html` — os 3 tipos de relatório.
   - Persistência offline (initializeFirestore + persistentLocalCache). **Salvam antes de compartilhar o PDF**.
+  - **Pré-visualização (desktop ≥1024px)**: ao salvar, gera o PDF e abre `oliverPdfPreview` (modal com iframe + "Voltar e editar"/"Confirmar e salvar"); só grava/compartilha ao confirmar. No celular segue o fluxo direto. Helper em `oliver_pdf.js`.
   - **Rascunho automático** (localStorage) com banner Restaurar/Descartar.
   - Opção **"Cliente não cadastrado"** (nome atendente, empresa, WhatsApp) → e-mail de aviso de novo cliente.
 - `itens_resolver.html` — cliente vê pendências enviadas, marca concluído, envia foto.

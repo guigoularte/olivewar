@@ -251,15 +251,15 @@
                 clienteNome = select.options[select.selectedIndex].text;
             }
 
-            const btn = document.getElementById('btn-enviar');
-            btn.disabled = true; btn.innerText = "Enviando...";
-            try {
-                const relatorio = {
-                    tipo: "vistoria", funcionario: nomeFuncionario, clienteNome,
-                    novoCliente: novoCliente || null,
-                    itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
-                    data: new Date().toISOString()
-                };
+            const relatorio = {
+                tipo: "vistoria", funcionario: nomeFuncionario, clienteNome,
+                novoCliente: novoCliente || null,
+                itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
+                data: new Date().toISOString()
+            };
+            const pdf = gerarPDF(clienteNome, itens);
+
+            const persistir = async () => {
                 // 1) Histórico do funcionário — PRIORIDADE (grava antes de qualquer coisa)
                 const pHistorico = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId: clienteId || "" });
 
@@ -280,17 +280,25 @@
                     await Promise.allSettled(pCliente);  // painel do cliente (falha aqui não descarta o relatório)
                     await enviarEmailAdmin(clienteNome, itens, novoCliente);
                 }
-                // 3) Só agora gera e compartilha o PDF (leva pro WhatsApp)
-                const pdf = gerarPDF(clienteNome, itens);
+                // 3) Compartilha o PDF (leva pro WhatsApp)
                 await compartilharPDF(pdf, "relatorio-vistoria.pdf", `Relatório de vistoria - ${clienteNome}`);
 
                 alert(navigator.onLine
                     ? "Relatório enviado com sucesso!" + (novoCliente ? "\nO administrador foi avisado do novo cliente." : "")
                     : "Sem internet: o relatório foi salvo no seu aparelho e será enviado automaticamente quando a conexão voltar. Pode fechar o app tranquilo.");
                 limparForm();
-            } catch (err) {
-                alert("Erro ao enviar: " + err.message);
-            } finally { btn.disabled = false; btn.innerText = "Enviar relatório ao cliente"; }
+            };
+
+            // Desktop: pré-visualiza o PDF antes de enviar. Celular: fluxo direto.
+            if (window.innerWidth >= 1024) {
+                oliverPdfPreview(pdf, { onConfirmar: persistir });
+            } else {
+                const btn = document.getElementById('btn-enviar');
+                btn.disabled = true; btn.innerText = "Enviando...";
+                try { await persistir(); }
+                catch (err) { alert("Erro ao enviar: " + err.message); }
+                finally { btn.disabled = false; btn.innerText = "Enviar relatório ao cliente"; }
+            }
         };
     </script>
 </head>

@@ -78,6 +78,42 @@ window.oliverPdfHeader = function (pdf, titulo, subtitulo) {
     return bandH + 12;
 };
 
+// Mostra o PDF numa pré-visualização (modal) antes de salvar/compartilhar.
+// opts.onConfirmar: função async executada quando o usuário confirma.
+// Use só no desktop (no celular o PDF em iframe nem sempre renderiza).
+window.oliverPdfPreview = function (pdf, opts) {
+    opts = opts || {};
+    var url = pdf.output("bloburl");
+    var overlay = document.createElement("div");
+    overlay.id = "oliver-preview-overlay";
+    overlay.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.65);display:flex;padding:16px;";
+    overlay.innerHTML =
+        '<div style="margin:auto;background:#fff;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;max-width:920px;width:100%;height:92vh;box-shadow:0 20px 60px rgba(0,0,0,.4)">' +
+            '<div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center">' +
+                '<span style="font-weight:800;color:#1e293b">Pré-visualização do relatório</span>' +
+                '<span style="font-size:12px;color:#94a3b8">Confira antes de salvar — você pode voltar e editar</span>' +
+            '</div>' +
+            '<iframe src="' + url + '" style="flex:1;border:0;width:100%;background:#f1f5f9"></iframe>' +
+            '<div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:10px">' +
+                '<button id="oliver-prev-editar" style="flex:1;padding:12px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700;color:#475569;cursor:pointer">← Voltar e editar</button>' +
+                '<button id="oliver-prev-ok" style="flex:1;padding:12px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Confirmar e salvar</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    function fechar() { try { URL.revokeObjectURL(url); } catch (e) {} overlay.remove(); }
+    document.getElementById("oliver-prev-editar").onclick = fechar;
+    document.getElementById("oliver-prev-ok").onclick = async function () {
+        var btn = this; btn.disabled = true; btn.textContent = "Salvando...";
+        try {
+            if (opts.onConfirmar) await opts.onConfirmar();
+            fechar();
+        } catch (e) {
+            btn.disabled = false; btn.textContent = "Confirmar e salvar";
+            alert("Erro ao salvar: " + (e && e.message ? e.message : e));
+        }
+    };
+};
+
 // Carimba um rodapé em todas as páginas.
 window.oliverPdfFooter = function (pdf) {
     const w = pdf.internal.pageSize.getWidth();
