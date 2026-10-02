@@ -261,6 +261,23 @@
             document.getElementById('cliente').disabled = ehNovo;
         };
 
+        // Gera e baixa o PDF SEM salvar no sistema (recuperação / backup — não tem limite de tamanho)
+        window.baixarPDF = () => {
+            const dados = coletar();
+            if (dados.sim + dados.nao + dados.na === 0) { alert("Marque pelo menos um item antes de baixar."); return; }
+            const select = document.getElementById('cliente');
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
+            let clienteNome = "(sem cliente)";
+            if (ehNovo) {
+                const empresa = document.getElementById('nc-empresa').value.trim();
+                const atendente = document.getElementById('nc-atendente').value.trim();
+                clienteNome = empresa ? empresa + (atendente ? " (" + atendente + ")" : "") : "(novo cliente)";
+            } else if (select.value) {
+                clienteNome = select.options[select.selectedIndex].text;
+            }
+            gerarPDF(clienteNome, dados).save("checklist-boas-praticas.pdf");
+        };
+
         window.salvar = async () => {
             const select = document.getElementById('cliente');
             const ehNovo = document.getElementById('novo-cliente-check').checked;
@@ -289,6 +306,10 @@
             const pdf = gerarPDF(clienteNome, dados);
 
             const persistir = async () => {
+                const tamanho = new Blob([JSON.stringify(relatorio)]).size;
+                if (tamanho > 1000000) {
+                    throw new Error("Relatório muito grande para salvar no sistema (" + Math.round(tamanho / 1024) + " KB, limite ~1024 KB). Use '⬇ Baixar PDF' para guardar sem perder nada, ou reduza as fotos.");
+                }
                 const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
                 if (navigator.onLine) {
                     await gravacao;   // confirma o salvamento ANTES de sair pro WhatsApp
@@ -304,7 +325,7 @@
 
             // Desktop: pré-visualiza o PDF antes de salvar. Celular: fluxo direto.
             if (window.innerWidth >= 1024) {
-                oliverPdfPreview(pdf, { onConfirmar: persistir });
+                oliverPdfPreview(pdf, { onConfirmar: persistir, nomeArquivo: "checklist-boas-praticas.pdf" });
             } else {
                 const btn = document.getElementById('btn-salvar');
                 btn.disabled = true; btn.innerText = "Salvando...";
@@ -352,6 +373,7 @@
             <div id="secoes"></div>
 
             <button type="button" id="btn-salvar" onclick="salvar()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700 transition">Salvar e gerar PDF</button>
+            <button type="button" onclick="baixarPDF()" class="w-full mt-2 bg-white border border-slate-300 text-slate-700 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">⬇ Baixar PDF (sem enviar)</button>
             <p class="text-[11px] text-slate-400 mt-2 text-center mb-2">Fica salvo no histórico, gera PDF para WhatsApp e avisa o administrador por e-mail.</p>
         </div>
 

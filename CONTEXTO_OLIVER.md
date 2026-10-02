@@ -30,7 +30,10 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
 - `relatorios.html` — hub "Escrever Relatórios" (só funcionário/master): 1ª Visita, Checklist, Vistoria.
 - `relatorio_primeira_visita.html`, `relatorio_vistoria.html`, `checklist.html` — os 3 tipos de relatório.
   - Persistência offline (initializeFirestore + persistentLocalCache). **Salvam antes de compartilhar o PDF**.
-  - **Pré-visualização (desktop ≥1024px)**: ao salvar, gera o PDF e abre `oliverPdfPreview` (modal com iframe + "Voltar e editar"/"Confirmar e salvar"); só grava/compartilha ao confirmar. No celular segue o fluxo direto. Helper em `oliver_pdf.js`.
+  - **Pré-visualização (desktop ≥1024px)**: ao salvar, gera o PDF e abre `oliverPdfPreview` (modal com iframe + "Voltar e editar"/"⬇ Baixar PDF"/"Confirmar e salvar"); só grava/compartilha ao confirmar. No celular segue o fluxo direto. Helper em `oliver_pdf.js`.
+  - **⬇ Baixar PDF (sem enviar)** (`window.baixarPDF`, botão em cada relatório): gera e baixa o PDF localmente sem gravar no Firestore (recuperação/backup; PDF não tem o limite de 1 MB).
+  - **Guarda de tamanho**: antes de gravar, checa `JSON` do relatório; se > 1 MB (limite rígido do Firestore por documento), lança erro claro apontando para "Baixar PDF". Fotos ficam embutidas em base64 (comprimidas ~900px/0.6).
+  - **PENDENTE (fix real do limite)**: mover fotos para **Firebase Storage** (guardar só a URL no doc) — remove o teto de 1 MB. Requer habilitar Storage + regras + CORS + ajustar upload e leitura (img/pdf.addImage). Alternativa rápida: comprimir mais forte (perde qualidade).
   - **Rascunho automático** (localStorage) com banner Restaurar/Descartar.
   - Opção **"Cliente não cadastrado"** (nome atendente, empresa, WhatsApp) → e-mail de aviso de novo cliente.
 - `itens_resolver.html` — cliente vê pendências enviadas, marca concluído, envia foto.

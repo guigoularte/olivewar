@@ -232,6 +232,22 @@
             limparRascunho();
         }
 
+        // Gera e baixa o PDF SEM salvar no sistema (recuperação / backup — não tem limite de tamanho)
+        window.baixarPDF = () => {
+            if (itens.length === 0) { alert("Adicione pelo menos um item antes de baixar."); return; }
+            const select = document.getElementById('cliente');
+            const ehNovo = document.getElementById('novo-cliente-check').checked;
+            let clienteNome = "(sem cliente)";
+            if (ehNovo) {
+                const empresa = document.getElementById('nc-empresa').value.trim();
+                const atendente = document.getElementById('nc-atendente').value.trim();
+                clienteNome = empresa ? empresa + (atendente ? " (" + atendente + ")" : "") : "(novo cliente)";
+            } else if (select.value) {
+                clienteNome = select.options[select.selectedIndex].text;
+            }
+            gerarPDF(clienteNome, itens).save("relatorio-vistoria.pdf");
+        };
+
         window.enviarParaCliente = async () => {
             const select = document.getElementById('cliente');
             const ehNovo = document.getElementById('novo-cliente-check').checked;
@@ -260,6 +276,11 @@
             const pdf = gerarPDF(clienteNome, itens);
 
             const persistir = async () => {
+                // Guarda de tamanho: Firestore tem limite de ~1 MB por documento.
+                const tamanho = new Blob([JSON.stringify({ ...relatorio, clienteId })]).size;
+                if (tamanho > 1000000) {
+                    throw new Error("Relatório muito grande para salvar no sistema (" + Math.round(tamanho / 1024) + " KB, limite ~1024 KB). Use '⬇ Baixar PDF' aqui para guardar/enviar sem perder nada, ou remova/reduza algumas fotos.");
+                }
                 // 1) Histórico do funcionário — PRIORIDADE (grava antes de qualquer coisa)
                 const pHistorico = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId: clienteId || "" });
 
@@ -291,7 +312,7 @@
 
             // Desktop: pré-visualiza o PDF antes de enviar. Celular: fluxo direto.
             if (window.innerWidth >= 1024) {
-                oliverPdfPreview(pdf, { onConfirmar: persistir });
+                oliverPdfPreview(pdf, { onConfirmar: persistir, nomeArquivo: "relatorio-vistoria.pdf" });
             } else {
                 const btn = document.getElementById('btn-enviar');
                 btn.disabled = true; btn.innerText = "Enviando...";
@@ -346,6 +367,7 @@
             <div id="lista-itens" class="space-y-2 mb-4"></div>
 
             <button type="button" id="btn-enviar" onclick="enviarParaCliente()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl text-sm hover:bg-blue-700 transition">Enviar relatório ao cliente</button>
+            <button type="button" onclick="baixarPDF()" class="w-full mt-2 bg-white border border-slate-300 text-slate-700 font-bold py-2.5 rounded-xl text-sm hover:bg-slate-50 transition">⬇ Baixar PDF (sem enviar)</button>
             <p class="text-[11px] text-slate-400 mt-2 text-center">Ao enviar: vai ao cliente, gera PDF para WhatsApp e avisa o administrador por e-mail.</p>
         </div>
 

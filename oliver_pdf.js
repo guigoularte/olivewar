@@ -96,12 +96,17 @@ window.oliverPdfPreview = function (pdf, opts) {
             '<iframe src="' + url + '" style="flex:1;border:0;width:100%;background:#f1f5f9"></iframe>' +
             '<div style="padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:10px">' +
                 '<button id="oliver-prev-editar" style="flex:1;padding:12px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700;color:#475569;cursor:pointer">← Voltar e editar</button>' +
+                '<button id="oliver-prev-baixar" style="flex:1;padding:12px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700;color:#475569;cursor:pointer">⬇ Baixar PDF</button>' +
                 '<button id="oliver-prev-ok" style="flex:1;padding:12px;border-radius:10px;border:0;background:#2563eb;color:#fff;font-weight:700;cursor:pointer">Confirmar e salvar</button>' +
             '</div>' +
         '</div>';
     document.body.appendChild(overlay);
     function fechar() { try { URL.revokeObjectURL(url); } catch (e) {} overlay.remove(); }
     document.getElementById("oliver-prev-editar").onclick = fechar;
+    // Baixa o PDF direto, sem salvar no sistema (útil quando o salvamento falha por tamanho).
+    document.getElementById("oliver-prev-baixar").onclick = function () {
+        try { pdf.save(opts.nomeArquivo || "relatorio.pdf"); } catch (e) { alert("Não foi possível baixar: " + (e && e.message ? e.message : e)); }
+    };
     document.getElementById("oliver-prev-ok").onclick = async function () {
         var btn = this; btn.disabled = true; btn.textContent = "Salvando...";
         try {
