@@ -22,6 +22,18 @@
         let orgs = [];               // organizações visíveis
         let todosUsuarios = [];      // (master) cache p/ busca ao adicionar membros
 
+        // Funcionalidades que a organização pode liberar (aplicadas a todos os membros)
+        const FUNCS_ORG = [
+            { chave: "produtos", label: "Produtos/Serviços" },
+            { chave: "vendas", label: "Vendas" },
+            { chave: "fluxoCaixa", label: "Fluxo de Caixa" },
+            { chave: "itensResolver", label: "Itens para Resolver" },
+            { chave: "relatoriosHistorico", label: "Relatórios (histórico)" },
+            { chave: "calculoMargem", label: "Cálculo de Margem" },
+            { chave: "cvlCompleto", label: "Margem Completo (CVL)" },
+            { chave: "fechamentoCaixa", label: "Fechamento de Caixa (noite)" }
+        ];
+
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         function gerarCodigo() {
             const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -98,7 +110,9 @@
                         ${isConsultoria ? `<button onclick="novoCodigo('${o.id}')" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg">🔄</button>` : ""}
                     </div>
                     <button onclick="gerenciarMembros('${o.id}')" class="w-full mt-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-lg">👥 Gerenciar membros e acessos</button>
-                    <div id="membros-${o.id}" class="hidden mt-2 border-t border-slate-100 pt-2"></div>` : ""}
+                    <div id="membros-${o.id}" class="hidden mt-2 border-t border-slate-100 pt-2"></div>
+                    ${isMaster ? `<button onclick="verFuncsOrg('${o.id}')" class="w-full mt-2 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-700 py-1.5 rounded-lg">⚙️ Funcionalidades da empresa</button>
+                    <div id="funcs-${o.id}" class="hidden mt-2 border-t border-slate-100 pt-2"></div>` : ""}` : ""}
                 </div>`;
             }).join('');
         }
@@ -210,13 +224,46 @@
             const nome = u ? (u.nome || u.email || "") : "";
             if (u && u.orgId && u.orgId !== orgId && !confirm('"' + nome + '" já está em outra organização. Mover para esta?')) return;
             try {
-                await updateDoc(doc(db, "usuarios", uid), { orgId });
+                // Aplica as funcionalidades da organização ao novo membro
+                const org = orgs.find(o => o.id === orgId) || {};
+                const of = org.funcionalidades || {};
+                const patch = { orgId };
+                FUNCS_ORG.forEach(f => { if (f.chave in of) patch["funcionalidades." + f.chave] = of[f.chave]; });
+                await updateDoc(doc(db, "usuarios", uid), patch);
                 await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + uid]: { nome, verRelatorios: true, verItens: true } });
                 const org = orgs.find(o => o.id === orgId); if (org) { org.membros = org.membros || {}; org.membros[uid] = { nome, verRelatorios: true, verItens: true }; }
                 if (u) u.orgId = orgId;
                 alert('"' + nome + '" foi adicionado(a) à organização com acesso liberado.');
                 await listarMembros(orgId);
             } catch (e) { alert("Erro ao adicionar: " + e.message); }
+        };
+
+        // ---- Funcionalidades da organização (aplicadas a todos os membros) ----
+        window.verFuncsOrg = (orgId) => {
+            const box = document.getElementById('funcs-' + orgId);
+            if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            const org = orgs.find(o => o.id === orgId) || {};
+            const f = org.funcionalidades || {};
+            box.innerHTML = '<p class="text-[10px] text-slate-400 mb-1">O que esta empresa pode usar. Vale para TODOS os membros.</p>' +
+                FUNCS_ORG.map(x => `
+                    <label class="flex items-center justify-between text-[11px] text-slate-600 py-1">${x.label}
+                        <input type="checkbox" ${f[x.chave] ? "checked" : ""} onchange="setFuncOrg('${orgId}','${x.chave}',this)" class="w-9 h-5 accent-amber-500 cursor-pointer"></label>`).join('');
+        };
+
+        window.setFuncOrg = async (orgId, chave, el) => {
+            const valor = el.checked;
+            el.disabled = true;
+            try {
+                await updateDoc(doc(db, "organizacoes", orgId), { ["funcionalidades." + chave]: valor });
+                const org = orgs.find(o => o.id === orgId); if (org) { org.funcionalidades = org.funcionalidades || {}; org.funcionalidades[chave] = valor; }
+                // Propaga para todos os membros da organização
+                const snap = await getDocs(query(collection(db, "usuarios"), where("orgId", "==", orgId)));
+                for (const u of snap.docs) { await updateDoc(doc(db, "usuarios", u.id), { ["funcionalidades." + chave]: valor }); }
+            } catch (e) {
+                alert("Erro ao salvar funcionalidade: " + e.message);
+                el.checked = !valor;
+            } finally { el.disabled = false; }
         };
 
         window.removerMembro = async (orgId, uid) => {
