@@ -10,199 +10,25 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, getDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { renderDashboard } from "./oliver_dashboard.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let empresaId = null, isMaster = false;
-        const TIPO_LABEL = { vistoria: "Vistoria", primeira_visita: "1ª Visita", checklist: "Checklist" };
-        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        const diaMes = (iso) => { const d = new Date(iso); return isNaN(d) ? "—" : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }); };
-        const diasDesde = (iso) => { const d = new Date(iso); if (isNaN(d)) return null; return Math.floor((Date.now() - d.getTime()) / 86400000); };
-        // Segunda-feira (chave) da semana de uma data
-        function segunda(d) { const x = new Date(d); const dia = (x.getDay() + 6) % 7; x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - dia); return x; }
-
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             const meu = await getDoc(doc(db, "usuarios", user.uid));
             const d = meu.exists() ? meu.data() : {};
-            isMaster = d.role === "master";
+            const isMaster = d.role === "master";
             const souConsultoria = isMaster || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
-            empresaId = d.empresaId || null;
             if (!souConsultoria) { alert("O Dashboard é para empresas/consultorias."); window.location.href = "app.html"; return; }
-            if (!empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
-            if (isMaster) document.getElementById('btn-sync').classList.remove('hidden');
+            if (!d.empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
             document.getElementById('conteudo').classList.remove('hidden');
-            await carregar();
+            await renderDashboard({ db, empresaId: d.empresaId, isMaster, mount: document.getElementById('mount') });
         });
-
-        async function carregar() {
-            let logs = [], pend = [], fin = [];
-            try {
-                const [sl, sp, sf] = await Promise.all([
-                    getDocs(collection(db, "empresas", empresaId, "relatorios_log")),
-                    getDocs(collection(db, "empresas", empresaId, "crm_pendencias")),
-                    getDocs(collection(db, "empresas", empresaId, "crm_financeiro"))
-                ]);
-                logs = sl.docs.map(d => d.data()).filter(l => l.data);
-                pend = sp.docs.map(d => d.data());
-                fin = sf.docs.map(d => d.data());
-            } catch (e) {
-                console.error(e);
-                alert("Erro ao carregar o dashboard: " + e.message + "\n(As regras do Firestore foram republicadas?)");
-                return;
-            }
-            renderKPIs(logs, pend, fin);
-            renderGraficoSemanas(logs);
-            renderGraficoTipos(logs);
-            renderMaisVisitadas(logs);
-            renderRevisitar(logs);
-            renderPorFuncionario(logs);
-            if (logs.length === 0) document.getElementById('aviso-vazio').classList.remove('hidden');
-        }
-
-        const ymd = (d) => new Date(d).toISOString().slice(0, 10);
-
-        function renderKPIs(logs, pend, fin) {
-            const hoje = new Date();
-            const mesAtual = hoje.toISOString().slice(0, 7);
-            const h7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-            const relMes = logs.filter(l => (l.data || "").slice(0, 7) === mesAtual).length;
-            const rel7 = logs.filter(l => (l.data || "").slice(0, 10) >= h7).length;
-            const vistMes = logs.filter(l => l.tipo === "vistoria" && (l.data || "").slice(0, 7) === mesAtual).length;
-            const hojeStr = hoje.toISOString().slice(0, 10);
-            const vencidas = pend.filter(p => p.status !== "feito" && p.prazo && p.prazo < hojeStr).length;
-            const aReceber = fin.filter(f => f.tipo === "receber" && f.status !== "quitado").reduce((s, f) => s + (Number(f.valor) || 0), 0);
-            document.getElementById('kpi-mes').innerText = relMes;
-            document.getElementById('kpi-7').innerText = rel7;
-            document.getElementById('kpi-vist').innerText = vistMes;
-            document.getElementById('kpi-pend').innerText = vencidas;
-            document.getElementById('kpi-receber').innerText = aReceber.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-        }
-
-        let chartSem = null, chartTipo = null;
-        function renderGraficoSemanas(logs) {
-            // Últimas 8 semanas
-            const base = segunda(new Date());
-            const semanas = [];
-            for (let i = 7; i >= 0; i--) { const d = new Date(base); d.setDate(d.getDate() - i * 7); semanas.push(d); }
-            const rotulos = semanas.map(d => diaMes(d));
-            const contagem = semanas.map(() => 0);
-            logs.forEach(l => {
-                const s = segunda(new Date(l.data));
-                const idx = semanas.findIndex(w => w.getTime() === s.getTime());
-                if (idx >= 0) contagem[idx]++;
-            });
-            const ctx = document.getElementById('grafico-semanas');
-            if (!window.Chart) return;
-            if (chartSem) chartSem.destroy();
-            chartSem = new Chart(ctx, {
-                type: 'bar',
-                data: { labels: rotulos, datasets: [{ label: 'Relatórios', data: contagem, backgroundColor: '#6366f1', borderRadius: 6 }] },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
-            });
-        }
-
-        function renderGraficoTipos(logs) {
-            const tipos = { vistoria: 0, primeira_visita: 0, checklist: 0 };
-            logs.forEach(l => { if (l.tipo in tipos) tipos[l.tipo]++; });
-            const ctx = document.getElementById('grafico-tipos');
-            if (!window.Chart) return;
-            if (chartTipo) chartTipo.destroy();
-            chartTipo = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Vistoria', '1ª Visita', 'Checklist'],
-                    datasets: [{ data: [tipos.vistoria, tipos.primeira_visita, tipos.checklist], backgroundColor: ['#f97316', '#3b82f6', '#10b981'] }]
-                },
-                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
-            });
-        }
-
-        // Agrupa por cliente: { nome: { total, ultima } }
-        function porCliente(logs) {
-            const m = {};
-            logs.forEach(l => {
-                const nome = l.clienteNome || "(sem nome)";
-                if (!m[nome]) m[nome] = { total: 0, ultima: "" };
-                m[nome].total++;
-                if ((l.data || "") > m[nome].ultima) m[nome].ultima = l.data;
-            });
-            return m;
-        }
-
-        function renderMaisVisitadas(logs) {
-            const m = porCliente(logs);
-            const arr = Object.entries(m).map(([nome, v]) => ({ nome, ...v })).sort((a, b) => b.total - a.total).slice(0, 8);
-            const cont = document.getElementById('mais-visitadas');
-            if (arr.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 py-3">Sem dados ainda.</p>'; return; }
-            cont.innerHTML = arr.map(c => `
-                <div class="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                    <span class="text-xs text-slate-700 truncate pr-2">${esc(c.nome)}</span>
-                    <span class="text-xs font-bold text-indigo-600 shrink-0">${c.total} <span class="text-[10px] text-slate-400 font-normal">· últ. ${diaMes(c.ultima)}</span></span>
-                </div>`).join('');
-        }
-
-        function renderRevisitar(logs) {
-            const m = porCliente(logs);
-            const arr = Object.entries(m).map(([nome, v]) => ({ nome, dias: diasDesde(v.ultima), total: v.total }))
-                .filter(c => c.dias != null).sort((a, b) => b.dias - a.dias).slice(0, 8);
-            const cont = document.getElementById('revisitar');
-            if (arr.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 py-3">Sem dados ainda.</p>'; return; }
-            cont.innerHTML = arr.map(c => `
-                <div class="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                    <span class="text-xs text-slate-700 truncate pr-2">${esc(c.nome)}</span>
-                    <span class="text-xs font-bold ${c.dias > 30 ? 'text-red-600' : 'text-slate-600'} shrink-0">${c.dias} dias</span>
-                </div>`).join('');
-        }
-
-        function renderPorFuncionario(logs) {
-            const m = {};
-            logs.forEach(l => { const n = l.funcionarioNome || "(sem nome)"; m[n] = (m[n] || 0) + 1; });
-            const arr = Object.entries(m).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
-            const cont = document.getElementById('por-funcionario');
-            if (arr.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 py-3">Sem dados ainda.</p>'; return; }
-            const max = arr[0].total || 1;
-            cont.innerHTML = arr.map(f => `
-                <div class="py-1.5">
-                    <div class="flex items-center justify-between text-xs">
-                        <span class="text-slate-700 truncate pr-2">${esc(f.nome)}</span>
-                        <span class="font-bold text-slate-600 shrink-0">${f.total}</span>
-                    </div>
-                    <div class="h-1.5 bg-slate-100 rounded mt-1"><div class="h-1.5 bg-indigo-500 rounded" style="width:${Math.round(f.total / max * 100)}%"></div></div>
-                </div>`).join('');
-        }
-
-        // Importa o histórico de relatórios já enviados para o log (master, roda 1x)
-        window.sincronizarHistorico = async () => {
-            if (!confirm("Importar o histórico de relatórios já enviados para o dashboard? Pode levar alguns segundos.")) return;
-            const btn = document.getElementById('btn-sync');
-            btn.disabled = true; btn.innerText = "Sincronizando...";
-            try {
-                const usnap = await getDocs(query(collection(db, "usuarios"), where("empresaId", "==", empresaId)));
-                let n = 0;
-                for (const u of usnap.docs) {
-                    const ud = u.data();
-                    const ehFunc = ud.role === "master" || (ud.funcionalidades && ud.funcionalidades.relatorios);
-                    if (!ehFunc) continue;
-                    const rs = await getDocs(collection(db, "usuarios", u.id, "relatorios_enviados"));
-                    for (const r of rs.docs) {
-                        const rd = r.data();
-                        await setDoc(doc(db, "empresas", empresaId, "relatorios_log", "hist_" + r.id), {
-                            tipo: rd.tipo || "", clienteNome: rd.clienteNome || "", clienteId: rd.clienteId || "", orgId: rd.orgId || "",
-                            funcionarioNome: rd.funcionario || ud.nome || "", funcionarioUid: u.id, data: rd.data || ""
-                        });
-                        n++;
-                    }
-                }
-                alert(n + " relatório(s) importado(s) para o dashboard.");
-                await carregar();
-            } catch (e) { alert("Erro ao sincronizar: " + e.message); }
-            finally { btn.disabled = false; btn.innerText = "🔄 Sincronizar histórico"; }
-        };
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
@@ -211,49 +37,9 @@
             <div class="flex items-center justify-between mb-4">
                 <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
                 <h1 class="text-lg font-black text-blue-950">Dashboard</h1>
-                <button id="btn-sync" onclick="sincronizarHistorico()" class="hidden text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-lg">🔄 Sincronizar histórico</button>
+                <div class="w-8"></div>
             </div>
-
-            <div id="aviso-vazio" class="hidden mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-800">
-                Ainda não há relatórios registrados no dashboard. Eles aparecem conforme novos relatórios forem enviados — ou clique em <b>🔄 Sincronizar histórico</b> (acima) para trazer os já enviados.
-            </div>
-
-            <!-- KPIs -->
-            <div class="grid grid-cols-2 lg:grid-cols-5 gap-2 mb-4">
-                <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Relatórios no mês</div><div id="kpi-mes" class="text-2xl font-black text-indigo-600">0</div></div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Últimos 7 dias</div><div id="kpi-7" class="text-2xl font-black text-indigo-600">0</div></div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Vistorias no mês</div><div id="kpi-vist" class="text-2xl font-black text-orange-600">0</div></div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Pendências vencidas</div><div id="kpi-pend" class="text-2xl font-black text-red-600">0</div></div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">A receber</div><div id="kpi-receber" class="text-sm font-black text-emerald-600 mt-2">R$ 0,00</div></div>
-            </div>
-
-            <!-- Gráficos -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
-                <div class="bg-white rounded-xl border border-slate-200 p-3 lg:col-span-2">
-                    <p class="text-xs font-bold text-slate-700 mb-2">Relatórios por semana (últimas 8)</p>
-                    <div style="height:200px"><canvas id="grafico-semanas"></canvas></div>
-                </div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3">
-                    <p class="text-xs font-bold text-slate-700 mb-2">Por tipo</p>
-                    <div style="height:200px"><canvas id="grafico-tipos"></canvas></div>
-                </div>
-            </div>
-
-            <!-- Rankings -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-                <div class="bg-white rounded-xl border border-slate-200 p-3">
-                    <p class="text-xs font-bold text-slate-700 mb-1">🏆 Empresas mais visitadas</p>
-                    <div id="mais-visitadas"></div>
-                </div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3">
-                    <p class="text-xs font-bold text-slate-700 mb-1">⏱ A revisitar (há mais tempo)</p>
-                    <div id="revisitar"></div>
-                </div>
-                <div class="bg-white rounded-xl border border-slate-200 p-3">
-                    <p class="text-xs font-bold text-slate-700 mb-1">👷 Relatórios por funcionário</p>
-                    <div id="por-funcionario"></div>
-                </div>
-            </div>
+            <div id="mount"></div>
         </div>
     </div>
 </body>
