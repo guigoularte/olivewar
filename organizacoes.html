@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Organizações</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let meuUid = null, minhaEmpresa = null, meuOrgId = null;
+        let isConsultoria = false;   // master / empresa_admin / funcionário
+        let orgs = [];               // organizações visíveis
+
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        function gerarCodigo() {
+            const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            let s = ""; for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)];
+            return s;
+        }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const d = meu.exists() ? meu.data() : {};
+            const role = d.role;
+            minhaEmpresa = d.empresaId || null;
+            meuOrgId = d.orgId || null;
+            isConsultoria = role === "master" || role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
+
+            // Consultoria vê/gerencia as orgs da sua empresa. Cliente vê a sua org (se for gerente/membro).
+            if (!isConsultoria && !meuOrgId) {
+                alert("Você ainda não faz parte de uma organização. Entre com o código em Configurações.");
+                window.location.href = "app.html"; return;
+            }
+            document.getElementById('bloco-criar').style.display = isConsultoria ? "block" : "none";
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            orgs = [];
+            try {
+                if (isConsultoria && minhaEmpresa) {
+                    const snap = await getDocs(query(collection(db, "organizacoes"), where("empresaId", "==", minhaEmpresa)));
+                    orgs = snap.docs.map(x => ({ id: x.id, ...x.data() }));
+                } else if (meuOrgId) {
+                    const s = await getDoc(doc(db, "organizacoes", meuOrgId));
+                    if (s.exists()) orgs = [{ id: s.id, ...s.data() }];
+                }
+                orgs.sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+            } catch (e) { alert("Erro ao carregar organizações: " + e.message); }
+            render();
+        }
+
+        const souGerente = (o) => o.gerenteUid === meuUid;
+        const podeGerenciar = (o) => isConsultoria || souGerente(o);
+
+        function render() {
+            const cont = document.getElementById('lista-orgs');
+            if (orgs.length === 0) {
+                cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhuma organização ainda.</p>';
+                return;
+            }
+            cont.innerHTML = orgs.map(o => {
+                const gerir = podeGerenciar(o);
+                return `<div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-3 p-3">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm truncate">${esc(o.nome) || "(sem nome)"}</div>
+                            <div class="text-[11px] text-slate-500">${Object.keys(o.membros || {}).length} membro(s) com acesso</div>
+                        </div>
+                        ${isConsultoria ? `<button onclick="excluirOrg('${o.id}')" class="ml-2 shrink-0 text-red-400 hover:text-red-600 text-sm">🗑</button>` : ""}
+                    </div>
+                    ${gerir ? `<div class="mt-2 flex items-center gap-2">
+                        <div class="flex-1 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                            <div class="text-[10px] text-indigo-500 font-semibold">Código da organização</div>
+                            <div class="font-mono font-black text-indigo-700 tracking-widest text-lg">${o.codigoOrg || "—"}</div>
+                        </div>
+                        ${isConsultoria ? `<button onclick="novoCodigo('${o.id}')" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg">🔄</button>` : ""}
+                    </div>
+                    <button onclick="gerenciarMembros('${o.id}')" class="w-full mt-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-lg">👥 Gerenciar membros e acessos</button>
+                    <div id="membros-${o.id}" class="hidden mt-2 border-t border-slate-100 pt-2"></div>` : ""}
+                </div>`;
+            }).join('');
+        }
+
+        // ---- Criar organização (consultoria) ----
+        window.criarOrg = async () => {
+            const nome = document.getElementById('org-nome').value.trim();
+            const codGerente = document.getElementById('org-gerente').value.trim().toUpperCase();
+            if (!nome) { alert("Informe o nome da organização."); return; }
+            if (!minhaEmpresa) { alert("Sua conta não está vinculada a uma empresa."); return; }
+            const btn = document.getElementById('btn-criar-org');
+            btn.disabled = true; btn.innerText = "Criando...";
+            try {
+                let gerenteUid = "", membros = {};
+                if (codGerente) {
+                    const qs = await getDocs(query(collection(db, "usuarios"), where("codigoAcesso", "==", codGerente)));
+                    if (qs.empty) { alert("Nenhum usuário com o código " + codGerente + " (gerente). Crie a org e defina depois, ou confira o código."); btn.disabled = false; btn.innerText = "Criar organização"; return; }
+                    const g = qs.docs[0];
+                    gerenteUid = g.id;
+                    membros[g.id] = { nome: g.data().nome || g.data().email || "", verRelatorios: true, verItens: true };
+                }
+                await addDoc(collection(db, "organizacoes"), {
+                    nome, empresaId: minhaEmpresa, criadoPorUid: meuUid,
+                    gerenteUid, codigoOrg: gerarCodigo(), membros, criadoEm: serverTimestamp()
+                });
+                document.getElementById('org-nome').value = "";
+                document.getElementById('org-gerente').value = "";
+                await carregar();
+                alert("Organização criada! Compartilhe o código da organização com o gerente e os membros para que entrem (em Configurações).");
+            } catch (e) { alert("Erro ao criar organização: " + e.message); }
+            finally { btn.disabled = false; btn.innerText = "Criar organização"; }
+        };
+
+        window.novoCodigo = async (orgId) => {
+            if (!confirm("Gerar um novo código? O anterior deixa de funcionar.")) return;
+            try { await updateDoc(doc(db, "organizacoes", orgId), { codigoOrg: gerarCodigo() }); await carregar(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+        window.excluirOrg = async (orgId) => {
+            if (!confirm("Excluir esta organização? Os membros perdem o vínculo.")) return;
+            try { await deleteDoc(doc(db, "organizacoes", orgId)); await carregar(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+
+        // ---- Gerenciar membros (gerente ou consultoria) ----
+        window.gerenciarMembros = async (orgId) => {
+            const box = document.getElementById('membros-' + orgId);
+            if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            box.innerHTML = '<p class="text-[11px] text-slate-400">Carregando membros...</p>';
+            try {
+                // Membros = usuários que entraram na org (orgId == esta). Acesso vem de org.membros.
+                const org = orgs.find(o => o.id === orgId) || {};
+                const membros = org.membros || {};
+                const snap = await getDocs(query(collection(db, "usuarios"), where("orgId", "==", orgId)));
+                const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                if (users.length === 0) {
+                    box.innerHTML = '<p class="text-[11px] text-slate-400">Ninguém entrou ainda. Compartilhe o código da organização.</p>';
+                    return;
+                }
+                box.innerHTML = users.map(u => {
+                    const ac = membros[u.id] || { verRelatorios: false, verItens: false };
+                    const ehGer = org.gerenteUid === u.id;
+                    return `<div class="py-2 border-b border-slate-100 last:border-0">
+                        <div class="font-semibold text-xs text-slate-700">${esc(u.nome) || esc(u.email) || u.id}${ehGer ? ' <span class="text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded">gerente</span>' : ''}</div>
+                        <label class="flex items-center justify-between text-[11px] text-slate-600 mt-1">Ver relatórios
+                            <input type="checkbox" ${ac.verRelatorios ? "checked" : ""} onchange="setAcesso('${orgId}','${u.id}','verRelatorios',this.checked)" class="w-9 h-5 accent-indigo-600 cursor-pointer"></label>
+                        <label class="flex items-center justify-between text-[11px] text-slate-600 mt-0.5">Ver itens para resolver
+                            <input type="checkbox" ${ac.verItens ? "checked" : ""} onchange="setAcesso('${orgId}','${u.id}','verItens',this.checked)" class="w-9 h-5 accent-indigo-600 cursor-pointer"></label>
+                    </div>`;
+                }).join('');
+            } catch (e) { box.innerHTML = '<p class="text-[11px] text-red-500">Erro ao carregar membros: ' + esc(e.message) + '</p>'; }
+        };
+
+        window.setAcesso = async (orgId, uid, chave, valor) => {
+            try {
+                const org = orgs.find(o => o.id === orgId) || {};
+                const atual = (org.membros && org.membros[uid]) ? { ...org.membros[uid] } : { verRelatorios: false, verItens: false };
+                // guarda o nome do membro junto do acesso (para exibição em outras telas)
+                if (!atual.nome) {
+                    const us = await getDoc(doc(db, "usuarios", uid));
+                    atual.nome = us.exists() ? (us.data().nome || us.data().email || "") : "";
+                }
+                atual[chave] = valor;
+                await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + uid]: atual });
+                org.membros = org.membros || {}; org.membros[uid] = atual;   // atualiza estado local
+            } catch (e) { alert("Erro ao salvar acesso: " + e.message); }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-4">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Organizações</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <p class="text-[11px] text-slate-500 mb-4">Uma organização reúne vários usuários (ex.: franquia com vários donos). Quem tem o código entra pela tela de Configurações; o gerente libera o que cada um pode ver.</p>
+
+            <!-- Criar (só consultoria) -->
+            <div id="bloco-criar" class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-4" style="display:none">
+                <label class="text-[10px] font-semibold text-slate-400">Nova organização</label>
+                <input id="org-nome" placeholder="Nome (ex: Mestre do Frango - Filial Centro)" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <label class="text-[10px] font-semibold text-slate-400">Código de acesso do gerente (opcional)</label>
+                <input id="org-gerente" placeholder="Código pessoal do gerente" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm font-mono tracking-widest uppercase outline-none focus:ring-2 focus:ring-blue-500">
+                <button id="btn-criar-org" onclick="criarOrg()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">Criar organização</button>
+                <p class="text-[10px] text-slate-400 mt-1">O gerente é um dos membros que você coloca no comando. Peça o código pessoal dele (ele vê na tela inicial).</p>
+            </div>
+
+            <div id="lista-orgs"></div>
+        </div>
+    </div>
+</body>
+</html>

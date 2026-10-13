@@ -66,7 +66,7 @@
                 const func = dados.funcionalidades || {};
 
                 // Guarda permissões e nome para a barra lateral (desktop) de todas as telas
-                localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func }));
+                localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func, org: !!dados.orgId }));
                 localStorage.setItem('oliverNome', (dados.nome || "Usuário").trim().split(" ")[0]);
 
                 // Carrega a "marca" da empresa (nome/e-mail/telefone/cor) para os PDFs.
@@ -114,8 +114,13 @@
                 if (elAdmin) elAdmin.style.display = ehMaster ? 'flex' : 'none';
 
                 // CRM: só empresa (admin), funcionários e master
+                const souConsultoria = ehMaster || dados.role === 'empresa_admin' || func.relatorios === true;
                 const elCrm = document.getElementById('menu-crm');
-                if (elCrm) elCrm.style.display = (ehMaster || dados.role === 'empresa_admin' || func.relatorios === true) ? 'flex' : 'none';
+                if (elCrm) elCrm.style.display = souConsultoria ? 'flex' : 'none';
+
+                // Organizações: consultoria (cria/gerencia) ou quem já faz parte de uma org
+                const elOrg = document.getElementById('menu-org');
+                if (elOrg) elOrg.style.display = (souConsultoria || dados.orgId) ? 'flex' : 'none';
 
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
                 if (!ehMaster && !dados.empresaId) {
@@ -244,6 +249,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.7"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">CRM</span>
+                </a>
+
+                <!-- Organizações (consultoria e membros de organização) -->
+                <a id="menu-org" href="organizacoes.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-indigo-300/80 hover:border-indigo-500 transition group">
+                    <div class="p-3 bg-indigo-50 text-indigo-700 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Organizações</span>
                 </a>
 
                 <!-- Painel Master (apenas administrador) -->

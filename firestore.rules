@@ -60,10 +60,28 @@ service cloud.firestore {
       }
     }
 
+    // Organizações de cliente (ex.: franquia com vários donos).
+    // Criadas pela consultoria; o gerente controla os membros/acessos.
+    match /organizacoes/{orgId} {
+      allow read: if request.auth != null;
+      // Consultoria (admin/funcionário da empresa) ou master cria a organização
+      allow create: if ehMaster() || membroDaEmpresa(request.resource.data.empresaId);
+      // Master, a consultoria dona, ou o gerente editam/excluem
+      allow update, delete: if ehMaster()
+                    || membroDaEmpresa(resource.data.empresaId)
+                    || (request.auth != null && resource.data.gerenteUid == request.auth.uid);
+
+      // Documentos enviados à organização (Fase 2): escreve a consultoria;
+      // lê quem for membro com acesso liberado. (definido na Fase 2/3)
+    }
+
     match /usuarios/{userId} {
-      // Dono lê o seu; master e funcionário podem ler para localizar clientes
+      // Dono lê o seu; master e funcionário leem p/ localizar clientes;
+      // membros da MESMA organização leem uns aos outros (gestão de membros).
       allow read: if request.auth != null
-                  && (request.auth.uid == userId || ehMaster() || ehFuncionario());
+                  && (request.auth.uid == userId || ehMaster() || ehFuncionario()
+                      || (dadosUsuario().get('orgId', '') != ''
+                          && dadosUsuario().get('orgId', '') == resource.data.get('orgId', '')));
 
       allow create: if request.auth != null
                     && request.auth.uid == userId

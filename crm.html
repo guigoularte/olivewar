@@ -52,14 +52,24 @@
         });
 
         async function carregarTudo() {
-            // Compromissos: admin vê todos; funcionário vê só os seus
-            const qCompromissos = isAdmin ? getDocs(col("crm_compromissos"))
-                : getDocs(query(col("crm_compromissos"), where("funcionarioUid", "==", meuUid)));
-            const [sc, sco, sf] = await Promise.all([getDocs(col("crm_contatos")), qCompromissos, getDocs(col("crm_financeiro"))]);
-            contatos = sc.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
-            compromissos = sco.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || "").localeCompare(b.data || ""));
-            financeiro = sf.docs.map(d => ({ id: d.id, ...d.data() }));
-            render();
+            try {
+                // Compromissos: admin vê todos; funcionário vê só os seus
+                const qCompromissos = isAdmin ? getDocs(col("crm_compromissos"))
+                    : getDocs(query(col("crm_compromissos"), where("funcionarioUid", "==", meuUid)));
+                const [sc, sco, sf] = await Promise.all([getDocs(col("crm_contatos")), qCompromissos, getDocs(col("crm_financeiro"))]);
+                contatos = sc.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+                compromissos = sco.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+                financeiro = sf.docs.map(d => ({ id: d.id, ...d.data() }));
+                render();
+            } catch (e) {
+                console.error("Erro ao carregar CRM:", e);
+                if (e.code === "permission-denied" || /insufficient permissions/i.test(e.message || "")) {
+                    alert("Sem permissão para acessar o CRM. Provável causa: as regras do Firestore ainda não foram republicadas no Firebase Console.");
+                } else {
+                    alert("Erro ao carregar o CRM: " + (e.message || e));
+                }
+                render();
+            }
         }
 
         // ===== Navegação de abas =====

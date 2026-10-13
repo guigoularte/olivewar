@@ -20,6 +20,7 @@
     var LINKS = [
         { href: "app.html", label: "Início", icon: "🏠", always: true },
         { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
+        { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
         { href: "itens_resolver.html", label: "Itens para Resolver", icon: "✅", key: "itensResolver", padrao: true },
         { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },
@@ -40,6 +41,7 @@
     function podeVer(l, p) {
         if (l.always) return true;
         if (l.master) return !!p.master;
+        if (l.orgLink) return !!(p.master || (p.func && p.func.relatorios) || p.org);
         if (l.key) return p.master || ((l.key in (p.func || {})) ? p.func[l.key] : l.padrao);
         return true;
     }
