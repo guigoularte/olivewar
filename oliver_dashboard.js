@@ -15,8 +15,8 @@ const TEMPLATE = `
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Relatórios no mês</div><div data-el="kpi-mes" class="text-2xl font-black text-indigo-600">0</div></div>
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Últimos 7 dias</div><div data-el="kpi-7" class="text-2xl font-black text-indigo-600">0</div></div>
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Vistorias no mês</div><div data-el="kpi-vist" class="text-2xl font-black text-orange-600">0</div></div>
-    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Pendências vencidas</div><div data-el="kpi-pend" class="text-2xl font-black text-red-600">0</div></div>
-    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">A receber</div><div data-el="kpi-receber" class="text-sm font-black text-emerald-600 mt-2">R$ 0,00</div></div>
+    <div data-el="card-pend" class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Pendências vencidas</div><div data-el="kpi-pend" class="text-2xl font-black text-red-600">0</div></div>
+    <div data-el="card-receber" class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">A receber</div><div data-el="kpi-receber" class="text-sm font-black text-emerald-600 mt-2">R$ 0,00</div></div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">
     <div class="bg-white rounded-xl border border-slate-200 p-3 lg:col-span-2">
@@ -31,7 +31,7 @@ const TEMPLATE = `
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
     <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-1">🏆 Empresas mais visitadas</p><div data-el="mais"></div></div>
     <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-1">⏱ A revisitar (há mais tempo)</p><div data-el="revisitar"></div></div>
-    <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-1">👷 Relatórios por funcionário</p><div data-el="func"></div></div>
+    <div data-el="card-func" class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-1">👷 Relatórios por funcionário</p><div data-el="func"></div></div>
   </div>
 </div>`;
 
@@ -52,13 +52,18 @@ function porCliente(logs) {
     return m;
 }
 
-// renderDashboard({ db, empresaId, isMaster, mount })
+// renderDashboard({ db, empresaId, isMaster, mount, restrito, meuUid })
+// restrito=true (funcionário): mostra só os relatórios do próprio funcionário e esconde
+// os números da empresa (A receber, Pendências e o ranking por funcionário).
 export async function renderDashboard(opts) {
-    const { db, empresaId, isMaster, mount } = opts;
+    const { db, empresaId, isMaster, mount, restrito, meuUid } = opts;
     mount.innerHTML = TEMPLATE;
     const $ = (n) => mount.querySelector(`[data-el="${n}"]`);
     let chartSem = null, chartTipo = null;
 
+    if (restrito) {
+        ["card-receber", "card-pend", "card-func"].forEach(n => { const el = $(n); if (el) el.classList.add("hidden"); });
+    }
     if (isMaster) {
         const btn = $("sync");
         btn.classList.remove("hidden");
@@ -74,6 +79,7 @@ export async function renderDashboard(opts) {
                 getDocs(collection(db, "empresas", empresaId, "crm_financeiro"))
             ]);
             logs = sl.docs.map(d => d.data()).filter(l => l.data);
+            if (restrito && meuUid) logs = logs.filter(l => l.funcionarioUid === meuUid);
             pend = sp.docs.map(d => d.data());
             fin = sf.docs.map(d => d.data());
         } catch (e) {

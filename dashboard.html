@@ -23,11 +23,12 @@
             const meu = await getDoc(doc(db, "usuarios", user.uid));
             const d = meu.exists() ? meu.data() : {};
             const isMaster = d.role === "master";
-            const souConsultoria = isMaster || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
+            const ehAdmin = isMaster || d.role === "empresa_admin";
+            const souConsultoria = ehAdmin || (d.funcionalidades && d.funcionalidades.relatorios === true);
             if (!souConsultoria) { alert("O Dashboard é para empresas/consultorias."); window.location.href = "app.html"; return; }
             if (!d.empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
             document.getElementById('conteudo').classList.remove('hidden');
-            await renderDashboard({ db, empresaId: d.empresaId, isMaster, mount: document.getElementById('mount') });
+            await renderDashboard({ db, empresaId: d.empresaId, isMaster, restrito: !ehAdmin, meuUid: user.uid, mount: document.getElementById('mount') });
         });
     </script>
 </head>
