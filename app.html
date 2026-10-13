@@ -116,7 +116,8 @@
                     { id: 'menu-produtos', key: 'produtos', padrao: true },
                     { id: 'menu-vendas', key: 'vendas', padrao: true },
                     { id: 'menu-margem', key: 'calculoMargem', padrao: false },
-                    { id: 'menu-cvl', key: 'cvlCompleto', padrao: false }
+                    { id: 'menu-cvl', key: 'cvlCompleto', padrao: false },
+                    { id: 'menu-fechamento', key: 'fechamentoCaixa', padrao: false }
                 ];
                 FEATS.forEach((f) => {
                     const el = document.getElementById(f.id);
@@ -272,6 +273,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-6h2v6H9zm4 0V7h2v10h-2zM5 17v-2h2v2H5zM3 21h18M4 3h16a1 1 0 011 1v13a1 1 0 01-1 1H4a1 1 0 01-1-1V4a1 1 0 011-1z"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Relatórios</span>
+                </a>
+
+                <!-- Fechamento de Caixa (só quem tem a funcionalidade liberada) -->
+                <a id="menu-fechamento" href="fechamento.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-emerald-300/80 hover:border-emerald-500 transition group">
+                    <div class="p-3 bg-emerald-50 text-emerald-700 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-2m-6-4h8a1 1 0 011 1v4a1 1 0 01-1 1h-8a1 1 0 01-1-1v-4a1 1 0 011-1zm2 3h.01"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Fechamento de Caixa</span>
                 </a>
 
                 <!-- Meus Indicadores (clientes) -->

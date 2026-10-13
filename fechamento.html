@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Fechamento de Caixa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const params = new URLSearchParams(location.search);
+        const uidParam = params.get("uid");
+        let targetUid = null, souMaster = false;
+        let fechamentos = [], despesas = [];
+
+        const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+        const col = (nome) => collection(db, "usuarios", targetUid, nome);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const d = meu.exists() ? meu.data() : {};
+            souMaster = d.role === "master";
+            if (uidParam) {
+                if (!souMaster) { alert("Acesso restrito."); window.location.href = "app.html"; return; }
+                targetUid = uidParam;
+                try { const alvo = await getDoc(doc(db, "usuarios", uidParam)); if (alvo.exists()) document.getElementById('subtitulo').innerText = alvo.data().nome || alvo.data().email || ""; } catch (e) {}
+            } else {
+                targetUid = user.uid;
+                const fx = d.funcionalidades || {};
+                if (!souMaster && !fx.fechamentoCaixa) { alert("Esta funcionalidade não está disponível para a sua conta."); window.location.href = "app.html"; return; }
+            }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            try {
+                const [sf, sd] = await Promise.all([getDocs(col("fechamentos")), getDocs(col("fechamento_despesas"))]);
+                fechamentos = sf.docs.map(x => ({ id: x.id, ...x.data() }));
+                despesas = sd.docs.map(x => ({ id: x.id, ...x.data() }));
+            } catch (e) { alert("Erro ao carregar: " + e.message); }
+            renderHistorico();
+        }
+
+        // ---- abas ----
+        window.abrirAba = (nome) => {
+            ['fechamento', 'despesa', 'historico'].forEach(a => {
+                document.getElementById('aba-' + a).className = "flex-1 py-2 rounded-lg text-xs font-bold transition " + (a === nome ? "bg-emerald-600 text-white" : "bg-white text-slate-500 border border-slate-200");
+                document.getElementById('painel-' + a).style.display = a === nome ? "block" : "none";
+            });
+            if (nome === 'despesa') preencherDataHora();
+        };
+
+        const num = (id) => parseFloat(document.getElementById(id).value) || 0;
+
+        window.atualizarResumo = () => {
+            const total = num('dinheiro') + num('credito') + num('debito') + num('pix') + num('ifood');
+            const qtd = parseInt(document.getElementById('quantidadePedidos').value) || 0;
+            const ticket = qtd > 0 ? total / qtd : 0;
+            document.getElementById('totalNoite').innerText = brl(total);
+            document.getElementById('resumoTotal').innerText = brl(total);
+            document.getElementById('ticketMedio').innerText = brl(ticket);
+        };
+
+        // Fecha o caixa: se for antes de 01:00, a data é do dia anterior (noite que acabou de madrugada)
+        window.salvarCaixa = async () => {
+            const dinheiro = num('dinheiro'), credito = num('credito'), debito = num('debito'), pix = num('pix'), ifood = num('ifood');
+            const qtd = parseInt(document.getElementById('quantidadePedidos').value) || 0;
+            const total = dinheiro + credito + debito + pix + ifood;
+            if (total <= 0) { msg("Informe pelo menos um valor recebido.", false); return; }
+            const agora = new Date();
+            const horario = agora.toTimeString().slice(0, 8);
+            const dataRef = new Date(agora);
+            if (agora.getHours() < 1) dataRef.setDate(dataRef.getDate() - 1);
+            const dataStr = dataRef.toISOString().slice(0, 10);
+            const btn = document.getElementById('btn-caixa'); btn.disabled = true; btn.innerText = "Salvando...";
+            try {
+                await addDoc(col("fechamentos"), {
+                    data: dataStr, horario, diaSemana: DIAS[dataRef.getDay()],
+                    dinheiro, credito, debito, pix, ifood,
+                    faturamentoTotal: total, quantidadePedidos: qtd,
+                    ticketMedio: qtd > 0 ? total / qtd : 0, saldoLiquido: 0,
+                    criadoEm: new Date().toISOString()
+                });
+                msg("✅ Caixa fechado com sucesso!", true);
+                limparFechamento();
+                await carregar();
+            } catch (e) { msg("Erro ao salvar: " + e.message, false); }
+            finally { btn.disabled = false; btn.innerText = "Fechar Caixa"; }
+        };
+
+        window.limparFechamento = () => {
+            ['dinheiro', 'credito', 'debito', 'pix', 'ifood', 'quantidadePedidos'].forEach(id => document.getElementById(id).value = "");
+            atualizarResumo();
+        };
+
+        function preencherDataHora() {
+            const agora = new Date();
+            if (!document.getElementById('despesaData').value) document.getElementById('despesaData').value = agora.toISOString().slice(0, 10);
+            if (!document.getElementById('despesaHorario').value) document.getElementById('despesaHorario').value = agora.toTimeString().slice(0, 5);
+        }
+
+        window.salvarDespesa = async () => {
+            const data = document.getElementById('despesaData').value;
+            const horario = document.getElementById('despesaHorario').value;
+            const descricao = document.getElementById('despesaDescricao').value.trim();
+            const valor = num('despesaValor');
+            const quemRetirou = document.getElementById('despesaQuem').value.trim();
+            if (!quemRetirou) { msg("Informe quem retirou.", false); return; }
+            if (!(valor > 0)) { msg("Valor deve ser maior que zero.", false); return; }
+            const dataObj = data ? new Date(data + "T00:00:00") : new Date();
+            const btn = document.getElementById('btn-despesa'); btn.disabled = true; btn.innerText = "Salvando...";
+            try {
+                await addDoc(col("fechamento_despesas"), {
+                    data: data || new Date().toISOString().slice(0, 10), horario,
+                    diaSemana: DIAS[dataObj.getDay()], descricao, valor, quemRetirou,
+                    criadoEm: new Date().toISOString()
+                });
+                msg("✅ Despesa registrada!", true);
+                ['despesaDescricao', 'despesaValor', 'despesaQuem'].forEach(id => document.getElementById(id).value = "");
+                await carregar();
+            } catch (e) { msg("Erro ao salvar: " + e.message, false); }
+            finally { btn.disabled = false; btn.innerText = "Registrar"; }
+        };
+
+        function msg(texto, ok) {
+            const m = document.getElementById('mensagem');
+            m.innerText = texto;
+            m.className = "mb-3 p-3 rounded-lg text-center text-xs font-bold " + (ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200");
+            m.style.display = "block";
+            setTimeout(() => { m.style.display = "none"; }, 4000);
+        }
+
+        const dataBR = (s) => { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
+        function renderHistorico() {
+            const cont = document.getElementById('lista-historico');
+            const fs = fechamentos.slice().sort((a, b) => (b.data + (b.horario || "")).localeCompare(a.data + (a.horario || ""))).slice(0, 30);
+            const ds = despesas.slice().sort((a, b) => (b.data + (b.horario || "")).localeCompare(a.data + (a.horario || ""))).slice(0, 30);
+            let html = '<p class="text-xs font-bold text-slate-700 mb-1">Fechamentos recentes</p>';
+            html += fs.length ? fs.map(f => `
+                <div class="bg-white rounded-xl border border-slate-200 mb-2 p-3">
+                    <div class="flex justify-between items-start">
+                        <div><div class="font-bold text-slate-800 text-sm">${dataBR(f.data)} <span class="text-[10px] text-slate-400">${esc(f.diaSemana || "")}</span></div>
+                        <div class="text-[11px] text-slate-500">${f.quantidadePedidos || 0} pedidos · ticket ${brl(f.ticketMedio)}</div></div>
+                        <div class="text-right"><div class="font-black text-emerald-600 text-sm">${brl(f.faturamentoTotal)}</div></div>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-1">💵 ${brl(f.dinheiro)} · Cred ${brl(f.credito)} · Deb ${brl(f.debito)} · Pix ${brl(f.pix)} · iFood ${brl(f.ifood)}</div>
+                </div>`).join('') : '<p class="text-xs text-slate-400 py-2">Nenhum fechamento ainda.</p>';
+            html += '<p class="text-xs font-bold text-slate-700 mb-1 mt-3">Despesas recentes</p>';
+            html += ds.length ? ds.map(d => `
+                <div class="bg-white rounded-xl border border-slate-200 mb-2 p-3 flex justify-between items-start">
+                    <div><div class="font-bold text-slate-800 text-sm">${esc(d.descricao) || "(sem descrição)"}</div>
+                    <div class="text-[11px] text-slate-500">${dataBR(d.data)} · ${esc(d.quemRetirou || "")}</div></div>
+                    <div class="font-black text-red-600 text-sm">${brl(d.valor)}</div>
+                </div>`).join('') : '<p class="text-xs text-slate-400 py-2">Nenhuma despesa ainda.</p>';
+            cont.innerHTML = html;
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-emerald-700 via-emerald-600 to-emerald-500 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-emerald-900 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-1">
+                <a href="app.html" class="text-emerald-800 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-emerald-900">Fechamento de Caixa</h1>
+                <div class="w-8"></div>
+            </div>
+            <p id="subtitulo" class="text-[11px] text-slate-400 mb-3 text-center"></p>
+
+            <div id="mensagem" style="display:none"></div>
+
+            <div class="flex gap-1.5 mb-3">
+                <button id="aba-fechamento" onclick="abrirAba('fechamento')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-emerald-600 text-white">Fechamento</button>
+                <button id="aba-despesa" onclick="abrirAba('despesa')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Despesa</button>
+                <button id="aba-historico" onclick="abrirAba('historico')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Histórico</button>
+            </div>
+
+            <!-- FECHAMENTO -->
+            <div id="painel-fechamento">
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Dinheiro</label><input id="dinheiro" type="number" step="0.01" min="0" placeholder="0,00" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Crédito</label><input id="credito" type="number" step="0.01" min="0" placeholder="0,00" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Débito</label><input id="debito" type="number" step="0.01" min="0" placeholder="0,00" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">PIX</label><input id="pix" type="number" step="0.01" min="0" placeholder="0,00" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">iFood</label><input id="ifood" type="number" step="0.01" min="0" placeholder="0,00" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Qtd. Pedidos</label><input id="quantidadePedidos" type="number" step="1" min="0" placeholder="0" oninput="atualizarResumo()" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-xl p-3 mb-3 text-xs">
+                    <div class="flex justify-between py-1 border-b border-slate-100"><span class="text-slate-500 font-semibold">Faturamento Total</span><span id="resumoTotal" class="font-bold text-emerald-700">R$ 0,00</span></div>
+                    <div class="flex justify-between py-1"><span class="text-slate-500 font-semibold">Ticket Médio</span><span id="ticketMedio" class="font-bold text-emerald-700">R$ 0,00</span></div>
+                </div>
+                <div class="bg-gradient-to-br from-emerald-700 to-emerald-500 text-white rounded-xl p-5 text-center mb-3">
+                    <div class="text-[11px] font-bold uppercase tracking-wide opacity-90">Total da Noite</div>
+                    <div id="totalNoite" class="text-3xl font-black mt-1">R$ 0,00</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="limparFechamento()" class="flex-1 bg-slate-200 text-slate-700 font-bold py-3 rounded-xl text-sm">Limpar</button>
+                    <button id="btn-caixa" onclick="salvarCaixa()" class="flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm">Fechar Caixa</button>
+                </div>
+            </div>
+
+            <!-- DESPESA -->
+            <div id="painel-despesa" style="display:none">
+                <div class="space-y-2 mb-3">
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Data</label><input id="despesaData" type="date" class="w-full text-sm font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Horário</label><input id="despesaHorario" type="time" class="w-full text-sm font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Descrição</label><input id="despesaDescricao" type="text" placeholder="Ex: Compra de gás, troco…" class="w-full text-sm font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Valor *</label><input id="despesaValor" type="number" step="0.01" min="0" placeholder="0,00" class="w-full text-lg font-bold text-emerald-800 outline-none bg-transparent"></div>
+                        <div class="bg-white border border-slate-200 rounded-xl p-2"><label class="text-[10px] font-bold text-slate-500 uppercase">Quem Retirou *</label><input id="despesaQuem" type="text" placeholder="Nome" class="w-full text-sm font-bold text-emerald-800 outline-none bg-transparent"></div>
+                    </div>
+                </div>
+                <button id="btn-despesa" onclick="salvarDespesa()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm">Registrar</button>
+            </div>
+
+            <!-- HISTÓRICO -->
+            <div id="painel-historico" style="display:none">
+                <div id="lista-historico"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

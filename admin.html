@@ -25,6 +25,7 @@
             { chave: "relatoriosHistorico", label: "Relatórios (histórico)", padrao: true },
             { chave: "calculoMargem", label: "Cálculo de Margem", padrao: false },
             { chave: "cvlCompleto", label: "Cálculo de Margem Completo (CVL)", padrao: false },
+            { chave: "fechamentoCaixa", label: "Fechamento de Caixa (noite)", padrao: false },
             { chave: "relatorios", label: "Escrever Relatórios (funcionário)", padrao: false }
         ];
         // Valor efetivo: usa o que está salvo; se ausente, usa o padrão
@@ -155,6 +156,7 @@
                         <a href="fluxo_caixa.html?uid=${u.id}" class="flex-1 text-center bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Fluxo de Caixa</a>
                         <a href="indicadores.html?uid=${u.id}" class="flex-1 text-center bg-indigo-50 text-indigo-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-indigo-100">📊 Indicadores</a>
                     </div>
+                    <a href="fechamento.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">💰 Ver Fechamento de Caixa</a>
                 </div>
             </div>`;
         }

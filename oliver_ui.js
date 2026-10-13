@@ -27,6 +27,7 @@
         { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },
         { href: "indicadores.html", label: "Meus Indicadores", icon: "📈", clienteOnly: true },
         { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "💵", key: "fluxoCaixa", padrao: true },
+        { href: "fechamento.html", label: "Fechamento de Caixa", icon: "💰", key: "fechamentoCaixa", padrao: false },
         { href: "produtos.html", label: "Produtos/Serviços", icon: "📦", key: "produtos", padrao: true },
         { href: "vendas.html", label: "Vendas", icon: "📈", key: "vendas", padrao: true },
         { href: "calculo_margem.html", label: "Cálculo de Margem", icon: "🧮", key: "calculoMargem", padrao: false },
