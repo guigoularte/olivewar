@@ -17,14 +17,25 @@
         const db = getFirestore(app);
 
         let usuarioAtual = null;
+        let itensCol = null;   // coleção de itens (do próprio usuário OU da organização)
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             usuarioAtual = user;
             const snap = await getDoc(doc(db, "usuarios", user.uid));
             const dd = snap.exists() ? snap.data() : {}; const fx = dd.funcionalidades || {};
-            const ok = dd.role === "master" || (('itensResolver' in fx) ? fx.itensResolver : true);
-            if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
+
+            // Membro de organização: usa os itens da org (se o gerente liberou)
+            if (dd.orgId) {
+                let acesso = false;
+                try { const o = await getDoc(doc(db, "organizacoes", dd.orgId)); if (o.exists()) acesso = !!((o.data().membros || {})[user.uid] || {}).verItens; } catch (e) { console.error(e); }
+                if (!acesso) { document.getElementById('lista').innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">O gerente da organização ainda não liberou os itens para você.</p>'; return; }
+                itensCol = collection(db, "organizacoes", dd.orgId, "itens_resolver");
+            } else {
+                const ok = dd.role === "master" || (('itensResolver' in fx) ? fx.itensResolver : true);
+                if (!ok) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
+                itensCol = collection(db, "usuarios", user.uid, "itens_resolver");
+            }
             carregarItens();
         });
 
@@ -51,7 +62,7 @@
         }
 
         async function carregarItens() {
-            const snap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, "itens_resolver"));
+            const snap = await getDocs(itensCol);
             const lista = document.getElementById('lista');
             lista.innerHTML = '';
             if (snap.empty) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum item pendente. 🎉</p>'; return; }
@@ -86,7 +97,7 @@
             if (!arquivo) return;
             try {
                 const foto = await comprimirImagem(arquivo);
-                await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "itens_resolver", id), { fotoDepois: foto });
+                await updateDoc(doc(itensCol, id), { fotoDepois: foto });
                 carregarItens();
             } catch (e) {
                 alert("Erro ao enviar foto: " + e.message);
@@ -94,7 +105,7 @@
         };
 
         window.marcarConcluido = async (id) => {
-            await updateDoc(doc(db, "usuarios", usuarioAtual.uid, "itens_resolver", id), { status: "concluido" });
+            await updateDoc(doc(itensCol, id), { status: "concluido" });
             carregarItens();
         };
     </script>

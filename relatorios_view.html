@@ -28,20 +28,40 @@
             const snap = await getDoc(doc(db, "usuarios", user.uid));
             const dados = snap.exists() ? snap.data() : {};
             const fx = dados.funcionalidades || {};
+            const ehFuncionario = dados.role === "master" || (fx.relatorios === true);
+
+            // Funcionário/consultoria: histórico do que enviou
+            if (ehFuncionario) {
+                document.getElementById('subtitulo').innerText = "Histórico de relatórios que você enviou";
+                carregar(collection(db, "usuarios", user.uid, "relatorios_enviados"), true);
+                return;
+            }
+
+            // Cliente que faz parte de uma organização: lê os relatórios da org (se liberado)
+            if (dados.orgId) {
+                let acesso = false, nomeOrg = "";
+                try {
+                    const o = await getDoc(doc(db, "organizacoes", dados.orgId));
+                    if (o.exists()) { nomeOrg = o.data().nome || ""; acesso = !!((o.data().membros || {})[user.uid] || {}).verRelatorios; }
+                } catch (e) { console.error(e); }
+                if (acesso) {
+                    document.getElementById('subtitulo').innerText = "Relatórios da organização" + (nomeOrg ? " (" + nomeOrg + ")" : "") + " — somente leitura";
+                    carregar(collection(db, "organizacoes", dados.orgId, "relatorios"), false);
+                    return;
+                }
+                document.getElementById('lista').innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">O gerente da organização ainda não liberou os relatórios para você.</p>';
+                return;
+            }
+
+            // Cliente individual
             const acessoOk = dados.role === "master" || (('relatoriosHistorico' in fx) ? fx.relatoriosHistorico : true);
             if (!acessoOk) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
-            const ehFuncionario = dados.role === "master" || (dados.funcionalidades && dados.funcionalidades.relatorios);
-
-            // Funcionário vê o que enviou; cliente vê o que recebeu
-            const sub = ehFuncionario ? "relatorios_enviados" : "relatorios";
-            document.getElementById('subtitulo').innerText = ehFuncionario
-                ? "Histórico de relatórios que você enviou"
-                : "Relatórios recebidos (somente leitura)";
-            carregar(sub, ehFuncionario);
+            document.getElementById('subtitulo').innerText = "Relatórios recebidos (somente leitura)";
+            carregar(collection(db, "usuarios", user.uid, "relatorios"), false);
         });
 
-        async function carregar(sub, ehFuncionario) {
-            const rsnap = await getDocs(collection(db, "usuarios", usuarioAtual.uid, sub));
+        async function carregar(ref, ehFuncionario) {
+            const rsnap = await getDocs(ref);
             const lista = document.getElementById('lista');
             lista.innerHTML = '';
             relatorios = {};

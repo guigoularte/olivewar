@@ -65,6 +65,19 @@
                 const ehMaster = dados.role === "master";
                 const func = dados.funcionalidades || {};
 
+                // Se é membro de uma organização, o acesso a Relatórios/Itens vem da org
+                // (o gerente libera), independente das funcionalidades individuais.
+                if (dados.orgId) {
+                    try {
+                        const oSnap = await getDoc(doc(db, "organizacoes", dados.orgId));
+                        if (oSnap.exists()) {
+                            const ac = (oSnap.data().membros || {})[user.uid] || {};
+                            if (ac.verRelatorios) func.relatoriosHistorico = true;
+                            if (ac.verItens) func.itensResolver = true;
+                        }
+                    } catch (e) { console.error("Falha ao carregar acesso da organização:", e); }
+                }
+
                 // Guarda permissões e nome para a barra lateral (desktop) de todas as telas
                 localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func, org: !!dados.orgId }));
                 localStorage.setItem('oliverNome', (dados.nome || "Usuário").trim().split(" ")[0]);

@@ -35,6 +35,19 @@ service cloud.firestore {
         && (ehEmpresaAdmin() || ehFuncionario())
         && minhaEmpresaId() == empresaId;
     }
+    // ----- Organizações de cliente -----
+    function orgData(orgId) {
+      return get(/databases/$(database)/documents/organizacoes/$(orgId)).data;
+    }
+    // Consultoria dona da organização (ou master)
+    function consultoriaDaOrg(orgId) {
+      return ehMaster() || membroDaEmpresa(orgData(orgId).empresaId);
+    }
+    // Membro da org com um acesso específico liberado (verRelatorios / verItens)
+    function acessoOrg(orgId, chave) {
+      return request.auth != null
+        && orgData(orgId).get('membros', {}).get(request.auth.uid, {}).get(chave, false) == true;
+    }
 
     // Empresas (multiempresa): qualquer usuário autenticado pode ler
     // (necessário para resolver o código de convite no cadastro e listar).
@@ -71,8 +84,17 @@ service cloud.firestore {
                     || membroDaEmpresa(resource.data.empresaId)
                     || (request.auth != null && resource.data.gerenteUid == request.auth.uid);
 
-      // Documentos enviados à organização (Fase 2): escreve a consultoria;
-      // lê quem for membro com acesso liberado. (definido na Fase 2/3)
+      // Documentos enviados à organização: a consultoria escreve;
+      // membros com acesso liberado leem (e resolvem os itens).
+      match /relatorios/{rel} {
+        allow read: if consultoriaDaOrg(orgId) || acessoOrg(orgId, 'verRelatorios');
+        allow create, update, delete: if consultoriaDaOrg(orgId);
+      }
+      match /itens_resolver/{item} {
+        allow read: if consultoriaDaOrg(orgId) || acessoOrg(orgId, 'verItens');
+        allow create, delete: if consultoriaDaOrg(orgId);
+        allow update: if consultoriaDaOrg(orgId) || acessoOrg(orgId, 'verItens');
+      }
     }
 
     match /usuarios/{userId} {
