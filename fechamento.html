@@ -18,28 +18,36 @@
 
         const params = new URLSearchParams(location.search);
         const uidParam = params.get("uid");
-        let targetUid = null, souMaster = false;
+        let basePath = null, souMaster = false;   // basePath = ["organizacoes", id] OU ["usuarios", id]
         let fechamentos = [], despesas = [];
 
         const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
-        const col = (nome) => collection(db, "usuarios", targetUid, nome);
+        const col = (nome) => collection(db, basePath[0], basePath[1], nome);
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             const meu = await getDoc(doc(db, "usuarios", user.uid));
             const d = meu.exists() ? meu.data() : {};
             souMaster = d.role === "master";
+            let alvoUid = user.uid, alvoDados = d;
             if (uidParam) {
                 if (!souMaster) { alert("Acesso restrito."); window.location.href = "app.html"; return; }
-                targetUid = uidParam;
-                try { const alvo = await getDoc(doc(db, "usuarios", uidParam)); if (alvo.exists()) document.getElementById('subtitulo').innerText = alvo.data().nome || alvo.data().email || ""; } catch (e) {}
+                alvoUid = uidParam;
+                try { const a = await getDoc(doc(db, "usuarios", uidParam)); alvoDados = a.exists() ? a.data() : {}; } catch (e) { alvoDados = {}; }
             } else {
-                targetUid = user.uid;
                 const fx = d.funcionalidades || {};
                 if (!souMaster && !fx.fechamentoCaixa) { alert("Esta funcionalidade não está disponível para a sua conta."); window.location.href = "app.html"; return; }
+            }
+            // Fechamento por ORGANIZAÇÃO (se o usuário pertence a uma) ou por usuário (individual)
+            if (alvoDados.orgId) {
+                basePath = ["organizacoes", alvoDados.orgId];
+                try { const o = await getDoc(doc(db, "organizacoes", alvoDados.orgId)); if (o.exists()) document.getElementById('subtitulo').innerText = o.data().nome || ""; } catch (e) {}
+            } else {
+                basePath = ["usuarios", alvoUid];
+                if (uidParam) document.getElementById('subtitulo').innerText = alvoDados.nome || alvoDados.email || "";
             }
             document.getElementById('conteudo').classList.remove('hidden');
             await carregar();

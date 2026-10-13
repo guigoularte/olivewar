@@ -48,6 +48,10 @@ service cloud.firestore {
       return request.auth != null
         && orgData(orgId).get('membros', {}).get(request.auth.uid, {}).get(chave, false) == true;
     }
+    // Usuário pertence a esta organização (orgId do próprio doc == org)
+    function souMembroDaOrg(orgId) {
+      return request.auth != null && dadosUsuario().get('orgId', '') == orgId;
+    }
 
     // Empresas (multiempresa): qualquer usuário autenticado pode ler
     // (necessário para resolver o código de convite no cadastro e listar).
@@ -101,6 +105,13 @@ service cloud.firestore {
         allow read: if consultoriaDaOrg(orgId) || acessoOrg(orgId, 'verItens');
         allow create, delete: if consultoriaDaOrg(orgId);
         allow update: if consultoriaDaOrg(orgId) || acessoOrg(orgId, 'verItens');
+      }
+      // Fechamento de caixa da loja: qualquer membro da org (ou a consultoria) lê e lança
+      match /fechamentos/{doc} {
+        allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
+      }
+      match /fechamento_despesas/{doc} {
+        allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
       }
     }
 
