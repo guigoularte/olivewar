@@ -18,6 +18,7 @@
 
         let meuUid = null, minhaEmpresa = null, meuOrgId = null;
         let isConsultoria = false;   // master / empresa_admin / funcionário
+        let isMaster = false;
         let orgs = [];               // organizações visíveis
 
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -35,6 +36,7 @@
             const role = d.role;
             minhaEmpresa = d.empresaId || null;
             meuOrgId = d.orgId || null;
+            isMaster = role === "master";
             isConsultoria = role === "master" || role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
 
             // Consultoria vê/gerencia as orgs da sua empresa. Cliente vê a sua org (se for gerente/membro).
@@ -139,6 +141,11 @@
             const box = document.getElementById('membros-' + orgId);
             if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
             box.classList.remove('hidden');
+            await listarMembros(orgId);
+        };
+
+        async function listarMembros(orgId) {
+            const box = document.getElementById('membros-' + orgId);
             box.innerHTML = '<p class="text-[11px] text-slate-400">Carregando membros...</p>';
             try {
                 // Membros = usuários que entraram na org (orgId == esta). Acesso vem de org.membros.
@@ -146,11 +153,17 @@
                 const membros = org.membros || {};
                 const snap = await getDocs(query(collection(db, "usuarios"), where("orgId", "==", orgId)));
                 const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                // Admin (master) pode adicionar QUALQUER usuário direto pelo código de acesso
+                const addBox = isMaster ? `
+                    <div class="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100">
+                        <input id="addmemb-${orgId}" placeholder="Código de acesso do usuário" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="flex-1 p-2 border rounded-lg text-xs font-mono tracking-widest uppercase outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="adicionarMembro('${orgId}')" class="shrink-0 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg">+ Adicionar</button>
+                    </div>` : "";
                 if (users.length === 0) {
-                    box.innerHTML = '<p class="text-[11px] text-slate-400">Ninguém entrou ainda. Compartilhe o código da organização.</p>';
+                    box.innerHTML = addBox + '<p class="text-[11px] text-slate-400">Ninguém entrou ainda. Adicione pelo código acima ou compartilhe o código da organização.</p>';
                     return;
                 }
-                box.innerHTML = users.map(u => {
+                box.innerHTML = addBox + users.map(u => {
                     const ac = membros[u.id] || { verRelatorios: false, verItens: false };
                     const ehGer = org.gerenteUid === u.id;
                     return `<div class="py-2 border-b border-slate-100 last:border-0">
@@ -159,9 +172,40 @@
                             <input type="checkbox" ${ac.verRelatorios ? "checked" : ""} onchange="setAcesso('${orgId}','${u.id}','verRelatorios',this.checked)" class="w-9 h-5 accent-indigo-600 cursor-pointer"></label>
                         <label class="flex items-center justify-between text-[11px] text-slate-600 mt-0.5">Ver itens para resolver
                             <input type="checkbox" ${ac.verItens ? "checked" : ""} onchange="setAcesso('${orgId}','${u.id}','verItens',this.checked)" class="w-9 h-5 accent-indigo-600 cursor-pointer"></label>
+                        ${isMaster && !ehGer ? `<button onclick="removerMembro('${orgId}','${u.id}')" class="text-[10px] text-red-500 hover:underline mt-1">remover da organização</button>` : ""}
                     </div>`;
                 }).join('');
             } catch (e) { box.innerHTML = '<p class="text-[11px] text-red-500">Erro ao carregar membros: ' + esc(e.message) + '</p>'; }
+        }
+
+        // Admin adiciona um usuário à organização pelo código de acesso (define orgId + libera acesso)
+        window.adicionarMembro = async (orgId) => {
+            const input = document.getElementById('addmemb-' + orgId);
+            const cod = (input.value || "").trim().toUpperCase();
+            if (!cod) { alert("Digite o código de acesso do usuário."); return; }
+            try {
+                const qs = await getDocs(query(collection(db, "usuarios"), where("codigoAcesso", "==", cod)));
+                if (qs.empty) { alert("Nenhum usuário com o código " + cod + "."); return; }
+                const u = qs.docs[0];
+                const nome = u.data().nome || u.data().email || "";
+                await updateDoc(doc(db, "usuarios", u.id), { orgId });
+                await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + u.id]: { nome, verRelatorios: true, verItens: true } });
+                const org = orgs.find(o => o.id === orgId); if (org) { org.membros = org.membros || {}; org.membros[u.id] = { nome, verRelatorios: true, verItens: true }; }
+                input.value = "";
+                alert('"' + nome + '" foi adicionado(a) à organização com acesso liberado.');
+                await listarMembros(orgId);
+            } catch (e) { alert("Erro ao adicionar: " + e.message); }
+        };
+
+        window.removerMembro = async (orgId, uid) => {
+            if (!confirm("Remover este usuário da organização?")) return;
+            try {
+                const { deleteField } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                await updateDoc(doc(db, "usuarios", uid), { orgId: "" });
+                await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + uid]: deleteField() });
+                const org = orgs.find(o => o.id === orgId); if (org && org.membros) delete org.membros[uid];
+                await listarMembros(orgId);
+            } catch (e) { alert("Erro ao remover: " + e.message); }
         };
 
         window.setAcesso = async (orgId, uid, chave, valor) => {
