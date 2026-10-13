@@ -39,14 +39,14 @@
 
             // Cliente que faz parte de uma organização: lê os relatórios da org (se liberado)
             if (dados.orgId) {
-                let acesso = false, nomeOrg = "";
+                let acesso = false, nomeOrg = "", meuNivel = "";
                 try {
                     const o = await getDoc(doc(db, "organizacoes", dados.orgId));
-                    if (o.exists()) { nomeOrg = o.data().nome || ""; acesso = !!((o.data().membros || {})[user.uid] || {}).verRelatorios; }
+                    if (o.exists()) { nomeOrg = o.data().nome || ""; const m = (o.data().membros || {})[user.uid] || {}; acesso = !!m.verRelatorios; meuNivel = m.nivel || ""; }
                 } catch (e) { console.error(e); }
                 if (acesso) {
                     document.getElementById('subtitulo').innerText = "Relatórios da organização" + (nomeOrg ? " (" + nomeOrg + ")" : "") + " — somente leitura";
-                    carregar(collection(db, "organizacoes", dados.orgId, "relatorios"), false);
+                    carregar(collection(db, "organizacoes", dados.orgId, "relatorios"), false, meuNivel);
                     return;
                 }
                 document.getElementById('lista').innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">O gerente da organização ainda não liberou os relatórios para você.</p>';
@@ -60,14 +60,19 @@
             carregar(collection(db, "usuarios", user.uid, "relatorios"), false);
         });
 
-        async function carregar(ref, ehFuncionario) {
+        async function carregar(ref, ehFuncionario, meuNivel) {
             const rsnap = await getDocs(ref);
             const lista = document.getElementById('lista');
             lista.innerHTML = '';
             relatorios = {};
-            if (rsnap.empty) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum relatório ainda.</p>'; return; }
 
-            const docs = rsnap.docs.slice().sort((a, b) => (b.data().data || "").localeCompare(a.data().data || ""));
+            let docs = rsnap.docs.slice();
+            // Membro de organização só vê relatórios do nível dele (ou "todos")
+            if (typeof meuNivel === "string") {
+                docs = docs.filter(d => { const nd = d.data().nivelDestino; return !nd || nd === "todos" || nd === meuNivel; });
+            }
+            if (docs.length === 0) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum relatório ainda.</p>'; return; }
+            docs = docs.sort((a, b) => (b.data().data || "").localeCompare(a.data().data || ""));
             docs.forEach((d) => {
                 const r = d.data();
                 relatorios[d.id] = r;

@@ -17,7 +17,8 @@
         const db = getFirestore(app);
 
         let usuarioAtual = null;
-        let itensCol = null;   // coleção de itens (do próprio usuário OU da organização)
+        let itensCol = null;        // coleção de itens (do próprio usuário OU da organização)
+        let meuNivelOrg = null;     // nível do membro na org (null = não é via org)
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -28,7 +29,7 @@
             // Membro de organização: usa os itens da org (se o gerente liberou)
             if (dd.orgId) {
                 let acesso = false;
-                try { const o = await getDoc(doc(db, "organizacoes", dd.orgId)); if (o.exists()) acesso = !!((o.data().membros || {})[user.uid] || {}).verItens; } catch (e) { console.error(e); }
+                try { const o = await getDoc(doc(db, "organizacoes", dd.orgId)); if (o.exists()) { const m = (o.data().membros || {})[user.uid] || {}; acesso = !!m.verItens; meuNivelOrg = m.nivel || ""; } } catch (e) { console.error(e); }
                 if (!acesso) { document.getElementById('lista').innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">O gerente da organização ainda não liberou os itens para você.</p>'; return; }
                 itensCol = collection(db, "organizacoes", dd.orgId, "itens_resolver");
             } else {
@@ -65,10 +66,16 @@
             const snap = await getDocs(itensCol);
             const lista = document.getElementById('lista');
             lista.innerHTML = '';
-            if (snap.empty) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum item pendente. 🎉</p>'; return; }
+
+            let base = snap.docs.slice();
+            // Membro de organização só vê itens do nível dele (ou "todos")
+            if (meuNivelOrg !== null) {
+                base = base.filter(d => { const nd = d.data().nivelDestino; return !nd || nd === "todos" || nd === meuNivelOrg; });
+            }
+            if (base.length === 0) { lista.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhum item pendente. 🎉</p>'; return; }
 
             // Pendentes primeiro
-            const docs = snap.docs.slice().sort((a, b) => (a.data().status === "concluido") - (b.data().status === "concluido"));
+            const docs = base.sort((a, b) => (a.data().status === "concluido") - (b.data().status === "concluido"));
             docs.forEach((d) => {
                 const it = d.data();
                 const concluido = it.status === "concluido";
