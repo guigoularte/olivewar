@@ -20,6 +20,7 @@
         let isConsultoria = false;   // master / empresa_admin / funcionário
         let isMaster = false;
         let orgs = [];               // organizações visíveis
+        let todosUsuarios = [];      // (master) cache p/ busca ao adicionar membros
 
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         function gerarCodigo() {
@@ -60,6 +61,12 @@
                     if (s.exists()) orgs = [{ id: s.id, ...s.data() }];
                 }
                 orgs.sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+                // Master: carrega usuários (clientes) para a busca ao adicionar membros
+                if (isMaster) {
+                    const us = await getDocs(collection(db, "usuarios"));
+                    todosUsuarios = us.docs.map(d => ({ id: d.id, ...d.data() }))
+                        .filter(u => u.role !== "master" && u.role !== "empresa_admin" && !(u.funcionalidades && u.funcionalidades.relatorios === true));
+                }
             } catch (e) { alert("Erro ao carregar organizações: " + e.message); }
             render();
         }
@@ -155,9 +162,9 @@
                 const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 // Admin (master) pode adicionar QUALQUER usuário direto pelo código de acesso
                 const addBox = isMaster ? `
-                    <div class="flex items-center gap-2 mb-2 pb-2 border-b border-slate-100">
-                        <input id="addmemb-${orgId}" placeholder="Código de acesso do usuário" maxlength="6" oninput="this.value=this.value.toUpperCase()" class="flex-1 p-2 border rounded-lg text-xs font-mono tracking-widest uppercase outline-none focus:ring-2 focus:ring-indigo-500">
-                        <button onclick="adicionarMembro('${orgId}')" class="shrink-0 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg">+ Adicionar</button>
+                    <div class="mb-2 pb-2 border-b border-slate-100">
+                        <input id="addbusca-${orgId}" oninput="buscarUsuariosAdd('${orgId}')" placeholder="🔍 Adicionar usuário (busque por nome ou e-mail)" class="w-full p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                        <div id="addres-${orgId}" class="mt-1"></div>
                     </div>` : "";
                 if (users.length === 0) {
                     box.innerHTML = addBox + '<p class="text-[11px] text-slate-400">Ninguém entrou ainda. Adicione pelo código acima ou compartilhe o código da organização.</p>';
@@ -178,20 +185,34 @@
             } catch (e) { box.innerHTML = '<p class="text-[11px] text-red-500">Erro ao carregar membros: ' + esc(e.message) + '</p>'; }
         }
 
-        // Admin adiciona um usuário à organização pelo código de acesso (define orgId + libera acesso)
-        window.adicionarMembro = async (orgId) => {
-            const input = document.getElementById('addmemb-' + orgId);
-            const cod = (input.value || "").trim().toUpperCase();
-            if (!cod) { alert("Digite o código de acesso do usuário."); return; }
+        // Busca usuários (cache do master) para adicionar à organização
+        window.buscarUsuariosAdd = (orgId) => {
+            const termo = (document.getElementById('addbusca-' + orgId).value || "").trim().toLowerCase();
+            const res = document.getElementById('addres-' + orgId);
+            if (termo.length < 2) { res.innerHTML = '<p class="text-[10px] text-slate-400">Digite ao menos 2 letras para buscar.</p>'; return; }
+            const jaNaOrg = new Set(Object.keys((orgs.find(o => o.id === orgId) || {}).membros || {}));
+            const lista = todosUsuarios
+                .filter(u => !jaNaOrg.has(u.id))
+                .filter(u => ((u.nome || "") + " " + (u.email || "")).toLowerCase().includes(termo))
+                .slice(0, 8);
+            if (lista.length === 0) { res.innerHTML = '<p class="text-[10px] text-slate-400">Nenhum usuário encontrado.</p>'; return; }
+            res.innerHTML = lista.map(u => `
+                <div class="flex items-center justify-between py-1">
+                    <span class="text-[11px] text-slate-700 truncate pr-2">${esc(u.nome) || "(sem nome)"} <span class="text-slate-400">${esc(u.email) || ""}</span>${u.orgId && u.orgId !== orgId ? ' <span class="text-[9px] text-amber-600">(já em outra org)</span>' : ''}</span>
+                    <button onclick="adicionarMembroUid('${orgId}','${u.id}')" class="shrink-0 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded">+ Adicionar</button>
+                </div>`).join('');
+        };
+
+        // Adiciona o usuário escolhido à organização (define orgId + libera acesso)
+        window.adicionarMembroUid = async (orgId, uid) => {
+            const u = todosUsuarios.find(x => x.id === uid);
+            const nome = u ? (u.nome || u.email || "") : "";
+            if (u && u.orgId && u.orgId !== orgId && !confirm('"' + nome + '" já está em outra organização. Mover para esta?')) return;
             try {
-                const qs = await getDocs(query(collection(db, "usuarios"), where("codigoAcesso", "==", cod)));
-                if (qs.empty) { alert("Nenhum usuário com o código " + cod + "."); return; }
-                const u = qs.docs[0];
-                const nome = u.data().nome || u.data().email || "";
-                await updateDoc(doc(db, "usuarios", u.id), { orgId });
-                await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + u.id]: { nome, verRelatorios: true, verItens: true } });
-                const org = orgs.find(o => o.id === orgId); if (org) { org.membros = org.membros || {}; org.membros[u.id] = { nome, verRelatorios: true, verItens: true }; }
-                input.value = "";
+                await updateDoc(doc(db, "usuarios", uid), { orgId });
+                await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + uid]: { nome, verRelatorios: true, verItens: true } });
+                const org = orgs.find(o => o.id === orgId); if (org) { org.membros = org.membros || {}; org.membros[uid] = { nome, verRelatorios: true, verItens: true }; }
+                if (u) u.orgId = orgId;
                 alert('"' + nome + '" foi adicionado(a) à organização com acesso liberado.');
                 await listarMembros(orgId);
             } catch (e) { alert("Erro ao adicionar: " + e.message); }
