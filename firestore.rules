@@ -71,6 +71,9 @@ service cloud.firestore {
       match /crm_financeiro/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
+      match /crm_pendencias/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
     }
 
     // Organizações de cliente (ex.: franquia com vários donos).

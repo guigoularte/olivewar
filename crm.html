@@ -18,7 +18,7 @@
 
         // Estado
         let empresaId = null, meuUid = null, meuNome = "", isAdmin = false, isFuncionario = false;
-        let contatos = [], compromissos = [], financeiro = [];
+        let contatos = [], compromissos = [], financeiro = [], pendencias = [];
         let aba = "contatos";
 
         const col = (nome) => collection(db, "empresas", empresaId, nome);
@@ -56,10 +56,11 @@
                 // Compromissos: admin vê todos; funcionário vê só os seus
                 const qCompromissos = isAdmin ? getDocs(col("crm_compromissos"))
                     : getDocs(query(col("crm_compromissos"), where("funcionarioUid", "==", meuUid)));
-                const [sc, sco, sf] = await Promise.all([getDocs(col("crm_contatos")), qCompromissos, getDocs(col("crm_financeiro"))]);
+                const [sc, sco, sf, sp] = await Promise.all([getDocs(col("crm_contatos")), qCompromissos, getDocs(col("crm_financeiro")), getDocs(col("crm_pendencias"))]);
                 contatos = sc.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
                 compromissos = sco.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (a.data || "").localeCompare(b.data || ""));
                 financeiro = sf.docs.map(d => ({ id: d.id, ...d.data() }));
+                pendencias = sp.docs.map(d => ({ id: d.id, ...d.data() }));
                 render();
             } catch (e) {
                 console.error("Erro ao carregar CRM:", e);
@@ -79,11 +80,13 @@
         function render() {
             document.getElementById('tab-contatos').className = tabCls(aba === "contatos");
             document.getElementById('tab-agenda').className = tabCls(aba === "agenda");
+            document.getElementById('tab-pendencias').className = tabCls(aba === "pendencias");
             document.getElementById('tab-financeiro').className = tabCls(aba === "financeiro");
             document.getElementById('painel-contatos').style.display = aba === "contatos" ? "block" : "none";
             document.getElementById('painel-agenda').style.display = aba === "agenda" ? "block" : "none";
+            document.getElementById('painel-pendencias').style.display = aba === "pendencias" ? "block" : "none";
             document.getElementById('painel-financeiro').style.display = aba === "financeiro" ? "block" : "none";
-            renderContatos(); renderAgenda(); renderFinanceiro(); preencherSelectContatos();
+            renderContatos(); renderAgenda(); renderFinanceiro(); renderPendencias(); preencherSelectContatos();
         }
 
         // ===== CONTATOS =====
@@ -202,9 +205,10 @@
         function preencherSelectContatos() {
             const ops = '<option value="">— Sem contato vinculado —</option>' +
                 contatos.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('');
-            const s1 = document.getElementById('a-contato'), s2 = document.getElementById('f-contato');
+            const s1 = document.getElementById('a-contato'), s2 = document.getElementById('f-contato'), s3 = document.getElementById('p-contato');
             if (s1) s1.innerHTML = ops;
             if (s2) s2.innerHTML = ops;
+            if (s3) s3.innerHTML = ops;
         }
 
         // ===== AGENDA / COMPROMISSOS =====
@@ -332,6 +336,81 @@
             try { await deleteDoc(docRef("crm_financeiro", id)); await carregarTudo(); }
             catch (e) { alert("Erro: " + e.message); }
         };
+
+        // ===== PENDÊNCIAS (o que cobrar / o que o cliente deve enviar) =====
+        let filtroPend = "abertas";
+        window.filtrarPend = (f) => { filtroPend = f; renderPendencias(); };
+
+        function renderPendencias() {
+            const hoje = new Date().toISOString().slice(0, 10);
+            const abertas = pendencias.filter(p => p.status !== "feito");
+            const vencidas = abertas.filter(p => p.prazo && p.prazo < hoje).length;
+            const aVencer = abertas.filter(p => !p.prazo || p.prazo >= hoje).length;
+            document.getElementById('pend-vencidas').innerText = vencidas;
+            document.getElementById('pend-avencer').innerText = aVencer;
+
+            let lista = pendencias.slice();
+            if (filtroPend === "abertas") lista = lista.filter(p => p.status !== "feito");
+            else if (filtroPend === "vencidas") lista = lista.filter(p => p.status !== "feito" && p.prazo && p.prazo < hoje);
+            else if (filtroPend === "cliente") lista = lista.filter(p => p.responsavel === "cliente" && p.status !== "feito");
+            else if (filtroPend === "eu") lista = lista.filter(p => p.responsavel === "eu" && p.status !== "feito");
+            // Abertas primeiro, ordenadas por prazo (sem prazo por último)
+            lista.sort((a, b) => {
+                const fa = a.status === "feito" ? 1 : 0, fb = b.status === "feito" ? 1 : 0;
+                if (fa !== fb) return fa - fb;
+                return (a.prazo || "9999").localeCompare(b.prazo || "9999");
+            });
+
+            const cont = document.getElementById('lista-pendencias');
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhuma pendência. 🎉</p>'; return; }
+            cont.innerHTML = lista.map(p => {
+                const feito = p.status === "feito";
+                const atrasada = !feito && p.prazo && p.prazo < hoje;
+                const doCliente = p.responsavel === "cliente";
+                return `<div class="bg-white rounded-xl shadow-sm border ${atrasada ? 'border-red-300' : 'border-slate-200'} ${feito ? 'opacity-60' : ''} mb-2 p-3">
+                    <div class="flex items-start justify-between">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm ${feito ? 'line-through' : ''}">${esc(p.descricao)}</div>
+                            <div class="text-[11px] ${atrasada ? 'text-red-600 font-semibold' : 'text-slate-500'}">${atrasada ? "⚠ Vencida · " : ""}Prazo: ${dataBR(p.prazo)}${p.contatoNome ? " · 👤 " + esc(p.contatoNome) : ""}</div>
+                            <span class="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded ${doCliente ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-700'}">${doCliente ? "Cliente deve enviar" : "Eu devo cobrar/fazer"}</span>
+                        </div>
+                        <div class="ml-2 shrink-0 flex flex-col items-end gap-1">
+                            ${feito ? '<span class="text-[9px] text-emerald-600 font-bold">FEITO</span>' : `<button onclick="concluirPend('${p.id}')" title="Marcar como feito" class="text-emerald-500 hover:text-emerald-700 text-sm">✔</button>`}
+                            <button onclick="excluirPend('${p.id}')" class="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        window.addPendencia = async () => {
+            const descricao = document.getElementById('p-descricao').value.trim();
+            if (!descricao) { alert("Descreva a pendência."); return; }
+            const contatoId = document.getElementById('p-contato').value;
+            const contato = contatos.find(c => c.id === contatoId);
+            try {
+                await addDoc(col("crm_pendencias"), {
+                    descricao,
+                    responsavel: document.getElementById('p-responsavel').value,  // cliente | eu
+                    prazo: document.getElementById('p-prazo').value || null,
+                    contatoId: contatoId || null, contatoNome: contato ? contato.nome : "",
+                    status: "pendente", criadoPor: meuUid, criadoEm: serverTimestamp()
+                });
+                document.getElementById('p-descricao').value = "";
+                document.getElementById('p-prazo').value = "";
+                document.getElementById('form-pendencia').style.display = "none";
+                await carregarTudo();
+            } catch (e) { alert("Erro ao salvar pendência: " + e.message); }
+        };
+        window.concluirPend = async (id) => {
+            try { await updateDoc(docRef("crm_pendencias", id), { status: "feito", feitoEm: new Date().toISOString() }); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+        window.excluirPend = async (id) => {
+            if (!confirm("Excluir esta pendência?")) return;
+            try { await deleteDoc(docRef("crm_pendencias", id)); await carregarTudo(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
@@ -347,6 +426,7 @@
             <div class="flex gap-1.5 mb-3">
                 <button id="tab-contatos" onclick="trocarAba('contatos')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">Contatos</button>
                 <button id="tab-agenda" onclick="trocarAba('agenda')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Agenda</button>
+                <button id="tab-pendencias" onclick="trocarAba('pendencias')" class="flex-1 py-2 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Pendências</button>
                 <button id="tab-financeiro" onclick="trocarAba('financeiro')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Financeiro</button>
             </div>
 
@@ -396,6 +476,41 @@
                     <button onclick="addCompromisso()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar compromisso</button>
                 </div>
                 <div id="lista-agenda"></div>
+            </div>
+
+            <!-- ===== PAINEL PENDÊNCIAS ===== -->
+            <div id="painel-pendencias" style="display:none">
+                <div class="flex gap-2 mb-2">
+                    <div class="flex-1 bg-red-50 border border-red-200 rounded-xl p-2 text-center">
+                        <div class="text-[10px] text-red-500 font-semibold">Vencidas</div>
+                        <div id="pend-vencidas" class="font-black text-red-600 text-base">0</div>
+                    </div>
+                    <div class="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-2 text-center">
+                        <div class="text-[10px] text-amber-600 font-semibold">A vencer</div>
+                        <div id="pend-avencer" class="font-black text-amber-700 text-base">0</div>
+                    </div>
+                </div>
+                <button onclick="toggleForm('form-pendencia')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ Pendência (o que cobrar / receber)</button>
+                <div id="form-pendencia" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-2 space-y-2">
+                    <input id="p-descricao" placeholder="O que precisa ser feito (ex: pegar alvará com o cliente) *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="p-responsavel" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="cliente">Cliente deve me enviar / fazer</option>
+                        <option value="eu">Eu devo cobrar / fazer</option>
+                    </select>
+                    <div class="flex gap-2 items-center">
+                        <label class="text-[11px] text-slate-400">Prazo</label>
+                        <input id="p-prazo" type="date" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    <select id="p-contato" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></select>
+                    <button onclick="addPendencia()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar pendência</button>
+                </div>
+                <div class="flex gap-1.5 mb-2 flex-wrap">
+                    <button onclick="filtrarPend('abertas')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Abertas</button>
+                    <button onclick="filtrarPend('vencidas')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Vencidas</button>
+                    <button onclick="filtrarPend('cliente')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Do cliente</button>
+                    <button onclick="filtrarPend('eu')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Minhas</button>
+                </div>
+                <div id="lista-pendencias"></div>
             </div>
 
             <!-- ===== PAINEL FINANCEIRO ===== -->

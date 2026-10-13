@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // Código de acesso pessoal (6 caracteres, sem 0/O/1/I).
         function gerarCodigoAcesso() {
@@ -135,6 +135,23 @@
                 const elOrg = document.getElementById('menu-org');
                 if (elOrg) elOrg.style.display = (souConsultoria || dados.orgId) ? 'flex' : 'none';
 
+                // Lembrete de pendências (CRM) na tela inicial — só consultoria
+                if (souConsultoria && dados.empresaId) {
+                    try {
+                        const ps = await getDocs(collection(db, "empresas", dados.empresaId, "crm_pendencias"));
+                        const hoje = new Date().toISOString().slice(0, 10);
+                        let venc = 0, prox = 0;
+                        ps.forEach(d => { const p = d.data(); if (p.status === "feito") return; if (p.prazo && p.prazo < hoje) venc++; else prox++; });
+                        if (venc + prox > 0) {
+                            document.getElementById('pend-resumo').innerHTML =
+                                (venc > 0 ? `<b class="text-red-600">${venc} vencida(s)</b>` : "") +
+                                (venc > 0 && prox > 0 ? " · " : "") +
+                                (prox > 0 ? `${prox} a vencer` : "");
+                            document.getElementById('banner-pendencias').classList.remove('hidden');
+                        }
+                    } catch (e) { console.error("Falha ao carregar pendências:", e); }
+                }
+
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
                 if (!ehMaster && !dados.empresaId) {
                     let codigo = dados.codigoAcesso;
@@ -188,6 +205,15 @@
                     <button onclick="copiarCodigoAcesso()" class="shrink-0 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-3 rounded-xl">Copiar</button>
                 </div>
             </div>
+
+            <!-- Lembrete de pendências (consultoria) -->
+            <a id="banner-pendencias" href="crm.html" class="hidden mx-6 mt-5 flex items-center justify-between bg-amber-50 border border-amber-300 rounded-2xl p-4 hover:border-amber-400">
+                <div>
+                    <p class="text-xs font-bold text-amber-800">🔔 Você tem pendências</p>
+                    <p id="pend-resumo" class="text-[11px] text-amber-800/80">—</p>
+                </div>
+                <span class="text-xs font-bold text-amber-700">Ver no CRM →</span>
+            </a>
 
             <!-- Botões / Cards de Navegação -->
             <div class="px-6 mt-6 space-y-4">
