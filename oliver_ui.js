@@ -19,6 +19,7 @@
 
     var LINKS = [
         { href: "app.html", label: "Início", icon: "🏠", always: true },
+        { href: "dashboard.html", label: "Dashboard", icon: "📊", key: "relatorios", padrao: false },
         { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
         { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },

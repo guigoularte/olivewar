@@ -303,6 +303,8 @@
                 }
                 // 1) Histórico do funcionário — PRIORIDADE (grava antes de qualquer coisa)
                 const pHistorico = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), { ...relatorio, clienteId: clienteId || "", orgId: orgId || "" });
+                // Log por empresa (alimenta o Dashboard) — best-effort
+                if (minhaEmpresa) addDoc(collection(db, "empresas", minhaEmpresa, "relatorios_log"), { tipo: "vistoria", clienteNome, clienteId: clienteId || "", orgId: orgId || "", funcionarioNome: nomeFuncionario, funcionarioUid: usuarioAtual.uid, data: relatorio.data }).catch(e => console.error("log", e));
 
                 // 2) Destino (best-effort, não pode derrubar o registro): cliente individual OU organização
                 const pCliente = [];

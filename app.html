@@ -126,10 +126,12 @@
                 const elAdmin = document.getElementById('menu-admin');
                 if (elAdmin) elAdmin.style.display = ehMaster ? 'flex' : 'none';
 
-                // CRM: só empresa (admin), funcionários e master
+                // CRM / Dashboard: só empresa (admin), funcionários e master
                 const souConsultoria = ehMaster || dados.role === 'empresa_admin' || func.relatorios === true;
                 const elCrm = document.getElementById('menu-crm');
                 if (elCrm) elCrm.style.display = souConsultoria ? 'flex' : 'none';
+                const elDash = document.getElementById('menu-dashboard');
+                if (elDash) elDash.style.display = souConsultoria ? 'flex' : 'none';
 
                 // Organizações: consultoria (cria/gerencia) ou quem já faz parte de uma org
                 const elOrg = document.getElementById('menu-org');
@@ -280,6 +282,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Cálculo de Margem Completo</span>
+                </a>
+
+                <!-- Dashboard (consultoria) -->
+                <a id="menu-dashboard" href="dashboard.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-indigo-300/80 hover:border-indigo-500 transition group">
+                    <div class="p-3 bg-indigo-50 text-indigo-700 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18h18M7 15l3-3 3 3 5-6"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Dashboard</span>
                 </a>
 
                 <!-- CRM (empresas, funcionários e master) -->

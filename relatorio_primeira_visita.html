@@ -24,7 +24,7 @@
         const EMAIL_SERVICE = "service_yuf3qik";
         const EMAIL_TEMPLATE = "template_r7hf9fm";
 
-        let usuarioAtual = null, nomeFuncionario = "", itens = [], clientesPermitidos = [];
+        let usuarioAtual = null, nomeFuncionario = "", itens = [], clientesPermitidos = [], minhaEmpresa = null;
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -35,6 +35,7 @@
             if (!permitido) { alert("Esta funcionalidade não está disponível no seu plano."); window.location.href = "app.html"; return; }
             nomeFuncionario = dados.nome || user.email;
             clientesPermitidos = (dados.role === "master") ? [] : (dados.clientesPermitidos || []);
+            minhaEmpresa = dados.empresaId || null;
             document.getElementById('conteudo').classList.remove('hidden');
             carregarClientes();
             ativarRascunho();
@@ -289,6 +290,8 @@
                     throw new Error("Relatório muito grande para salvar no sistema (" + Math.round(tamanho / 1024) + " KB, limite ~1024 KB). Use '⬇ Baixar PDF' para guardar sem perder nada, ou reduza as fotos.");
                 }
                 const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
+                // Log por empresa (alimenta o Dashboard) — best-effort
+                if (minhaEmpresa) addDoc(collection(db, "empresas", minhaEmpresa, "relatorios_log"), { tipo: "primeira_visita", clienteNome, clienteId: clienteId || "", funcionarioNome: nomeFuncionario, funcionarioUid: usuarioAtual.uid, data: relatorio.data }).catch(e => console.error("log", e));
                 if (navigator.onLine) {
                     await gravacao;   // confirma o salvamento ANTES de sair pro WhatsApp
                     await enviarEmailAdmin(clienteNome, campos, itens, novoCliente);

@@ -74,6 +74,10 @@ service cloud.firestore {
       match /crm_pendencias/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
+      // Log de relatórios gerados (alimenta o Dashboard)
+      match /relatorios_log/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
     }
 
     // Organizações de cliente (ex.: franquia com vários donos).
