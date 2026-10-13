@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Indicadores</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const params = new URLSearchParams(location.search);
+        const uidParam = params.get("uid");
+        let targetUid = null;    // de quem são os indicadores
+        let gerir = false;       // true = consultoria definindo (master com ?uid)
+        let defs = [], valores = [];
+        const charts = {};
+
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        function segunda(d) { const x = new Date(d); const dia = (x.getDay() + 6) % 7; x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - dia); return x; }
+        function periodoAtual(p) { return p === "mensal" ? new Date().toISOString().slice(0, 7) : segunda(new Date()).toISOString().slice(0, 10); }
+        function labelPeriodo(per, p) {
+            if (!per) return "—";
+            if (p === "mensal") { const [y, mo] = per.split("-"); return mo + "/" + (y || "").slice(2); }
+            const d = new Date(per + "T00:00:00"); return isNaN(d) ? per : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        }
+        function fmtValor(v, unidade) {
+            if ((unidade || "").trim() === "R$") return brl(v);
+            return (Number(v) || 0).toLocaleString("pt-BR") + (unidade ? " " + unidade : "");
+        }
+
+        const col = (nome) => collection(db, "usuarios", targetUid, nome);
+        const dref = (nome, id) => doc(db, "usuarios", targetUid, nome, id);
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const d = meu.exists() ? meu.data() : {};
+            if (uidParam) {
+                // Modo consultoria: definir indicadores de um cliente (por ora, só master)
+                if (d.role !== "master") { alert("No momento, apenas o administrador define indicadores."); window.location.href = "app.html"; return; }
+                gerir = true; targetUid = uidParam;
+                try { const alvo = await getDoc(doc(db, "usuarios", uidParam)); if (alvo.exists()) document.getElementById('subtitulo').innerText = "Cliente: " + (alvo.data().nome || alvo.data().email || uidParam); } catch (e) {}
+                document.getElementById('bloco-definir').classList.remove('hidden');
+            } else {
+                // Modo cliente: preenche e vê os próprios indicadores
+                gerir = false; targetUid = user.uid;
+            }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            try {
+                const [sd, sv] = await Promise.all([getDocs(col("indicadores_def")), getDocs(col("indicadores_valores"))]);
+                defs = sd.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+                valores = sv.docs.map(x => ({ id: x.id, ...x.data() }));
+            } catch (e) { alert("Erro ao carregar indicadores: " + e.message); return; }
+            render();
+        }
+
+        // ---- Definir indicadores (consultoria) ----
+        window.addDef = async () => {
+            const nome = document.getElementById('d-nome').value.trim();
+            if (!nome) { alert("Dê um nome ao indicador (ex: Valor comercializado)."); return; }
+            try {
+                await addDoc(col("indicadores_def"), {
+                    nome,
+                    unidade: document.getElementById('d-unidade').value.trim(),
+                    periodicidade: document.getElementById('d-periodicidade').value,
+                    criadoEm: new Date().toISOString()
+                });
+                document.getElementById('d-nome').value = ""; document.getElementById('d-unidade').value = "";
+                await carregar();
+            } catch (e) { alert("Erro ao criar indicador: " + e.message); }
+        };
+        window.removerDef = async (id) => {
+            if (!confirm("Remover este indicador? (os valores lançados ficam órfãos)")) return;
+            try { await deleteDoc(dref("indicadores_def", id)); await carregar(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+
+        // ---- Lançar valor do período atual ----
+        window.salvarValor = async (defId, periodicidade) => {
+            const input = document.getElementById('v-' + defId);
+            const raw = String(input.value).replace(/\./g, "").replace(",", ".");
+            const valor = parseFloat(raw);
+            if (isNaN(valor)) { alert("Digite um valor válido."); return; }
+            const periodo = periodoAtual(periodicidade);
+            try {
+                // id determinístico: um valor por indicador por período (regrava se já existe)
+                await setDoc(dref("indicadores_valores", defId + "_" + periodo), { defId, periodo, valor, criadoEm: new Date().toISOString() });
+                await carregar();
+            } catch (e) { alert("Erro ao salvar valor: " + e.message); }
+        };
+
+        function serie(defId) {
+            return valores.filter(v => v.defId === defId).sort((a, b) => (a.periodo || "").localeCompare(b.periodo || ""));
+        }
+
+        function render() {
+            const cont = document.getElementById('lista-indicadores');
+            Object.values(charts).forEach(c => { try { c.destroy(); } catch (e) {} });
+            if (defs.length === 0) {
+                cont.innerHTML = gerir
+                    ? '<p class="text-xs text-slate-400 text-center py-6">Nenhum indicador ainda. Crie o primeiro acima (ex: "Valor comercializado", unidade R$, semanal).</p>'
+                    : '<p class="text-xs text-slate-400 text-center py-6">Seu consultor ainda não configurou indicadores para você.</p>';
+                return;
+            }
+            cont.innerHTML = defs.map(def => {
+                const s = serie(def.id);
+                const ultimo = s.length ? s[s.length - 1] : null;
+                const perAtual = periodoAtual(def.periodicidade);
+                const valAtual = s.find(v => v.periodo === perAtual);
+                return `<div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-3 p-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <div class="font-bold text-slate-800 text-sm">${esc(def.nome)}</div>
+                            <div class="text-[10px] text-slate-400">${def.periodicidade === "mensal" ? "Mensal" : "Semanal"}${def.unidade ? " · " + esc(def.unidade) : ""}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[10px] text-slate-400">Último</div>
+                            <div class="font-black text-indigo-600 text-sm">${ultimo ? fmtValor(ultimo.valor, def.unidade) : "—"}</div>
+                        </div>
+                    </div>
+                    <div style="height:140px" class="mt-2"><canvas id="c-${def.id}"></canvas></div>
+                    <div class="flex items-center gap-2 mt-2 border-t border-slate-100 pt-2">
+                        <span class="text-[11px] text-slate-500 shrink-0">Lançar (${labelPeriodo(perAtual, def.periodicidade)}):</span>
+                        <input id="v-${def.id}" inputmode="decimal" placeholder="valor" value="${valAtual != null ? valAtual.valor : ""}" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button onclick="salvarValor('${def.id}','${def.periodicidade}')" class="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-2 rounded-lg">Salvar</button>
+                        ${gerir ? `<button onclick="removerDef('${def.id}')" class="shrink-0 text-red-400 hover:text-red-600 text-sm">🗑</button>` : ""}
+                    </div>
+                </div>`;
+            }).join('');
+
+            // desenha os gráficos
+            if (!window.Chart) return;
+            defs.forEach(def => {
+                const s = serie(def.id);
+                const ctx = document.getElementById('c-' + def.id);
+                if (!ctx) return;
+                charts[def.id] = new window.Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: s.map(v => labelPeriodo(v.periodo, def.periodicidade)),
+                        datasets: [{ label: def.nome, data: s.map(v => v.valor), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,.12)', fill: true, tension: .25, pointRadius: 3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            });
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-1">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-lg font-black text-blue-950">Indicadores</h1>
+                <div class="w-8"></div>
+            </div>
+            <p id="subtitulo" class="text-[11px] text-slate-400 mb-4 text-center"></p>
+
+            <!-- Definir indicadores (consultoria) -->
+            <div id="bloco-definir" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 p-3 mb-4">
+                <label class="text-[10px] font-semibold text-slate-400">Novo indicador</label>
+                <input id="d-nome" placeholder="Nome (ex: Valor comercializado)" class="w-full mt-1 mb-2 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex gap-2 mb-2">
+                    <input id="d-unidade" placeholder="Unidade (ex: R$, un, %)" class="flex-1 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="d-periodicidade" class="w-32 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="semanal">Semanal</option>
+                        <option value="mensal">Mensal</option>
+                    </select>
+                </div>
+                <button onclick="addDef()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg text-sm transition">Adicionar indicador</button>
+            </div>
+
+            <div id="lista-indicadores"></div>
+        </div>
+    </div>
+</body>
+</html>

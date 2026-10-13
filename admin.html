@@ -151,7 +151,10 @@
                     <p class="text-[10px] font-semibold text-slate-400 mb-1 border-t border-slate-100 pt-2">Funcionalidades liberadas</p>
                     ${toggles}
                     ${blocoClientes}
-                    <a href="fluxo_caixa.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Ver Fluxo de Caixa</a>
+                    <div class="flex gap-2 mt-2">
+                        <a href="fluxo_caixa.html?uid=${u.id}" class="flex-1 text-center bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">👁 Fluxo de Caixa</a>
+                        <a href="indicadores.html?uid=${u.id}" class="flex-1 text-center bg-indigo-50 text-indigo-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-indigo-100">📊 Indicadores</a>
+                    </div>
                 </div>
             </div>`;
         }

@@ -25,6 +25,7 @@
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
         { href: "itens_resolver.html", label: "Itens para Resolver", icon: "✅", key: "itensResolver", padrao: true },
         { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },
+        { href: "indicadores.html", label: "Meus Indicadores", icon: "📈", clienteOnly: true },
         { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "💵", key: "fluxoCaixa", padrao: true },
         { href: "produtos.html", label: "Produtos/Serviços", icon: "📦", key: "produtos", padrao: true },
         { href: "vendas.html", label: "Vendas", icon: "📈", key: "vendas", padrao: true },
@@ -43,6 +44,7 @@
         if (l.always) return true;
         if (l.master) return !!p.master;
         if (l.orgLink) return !!(p.master || (p.func && p.func.relatorios) || p.org);
+        if (l.clienteOnly) return !(p.master || (p.func && p.func.relatorios));
         if (l.key) return p.master || ((l.key in (p.func || {})) ? p.func[l.key] : l.padrao);
         return true;
     }
