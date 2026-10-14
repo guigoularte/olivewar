@@ -231,7 +231,7 @@
                 FUNCS_ORG.forEach(f => { if (f.chave in of) patch["funcionalidades." + f.chave] = of[f.chave]; });
                 await updateDoc(doc(db, "usuarios", uid), patch);
                 await updateDoc(doc(db, "organizacoes", orgId), { ["membros." + uid]: { nome, verRelatorios: true, verItens: true } });
-                const org = orgs.find(o => o.id === orgId); if (org) { org.membros = org.membros || {}; org.membros[uid] = { nome, verRelatorios: true, verItens: true }; }
+                org.membros = org.membros || {}; org.membros[uid] = { nome, verRelatorios: true, verItens: true };
                 if (u) u.orgId = orgId;
                 alert('"' + nome + '" foi adicionado(a) à organização com acesso liberado.');
                 await listarMembros(orgId);
