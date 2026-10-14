@@ -104,7 +104,7 @@
             if (!arquivo) return;
             try {
                 const foto = await comprimirImagem(arquivo);
-                await updateDoc(doc(itensCol, id), { fotoDepois: foto });
+                await updateDoc(doc(itensCol, id), { fotoDepois: foto, resolvidoEm: new Date().toISOString() });
                 carregarItens();
             } catch (e) {
                 alert("Erro ao enviar foto: " + e.message);
@@ -112,7 +112,7 @@
         };
 
         window.marcarConcluido = async (id) => {
-            await updateDoc(doc(itensCol, id), { status: "concluido" });
+            await updateDoc(doc(itensCol, id), { status: "concluido", resolvidoEm: new Date().toISOString() });
             carregarItens();
         };
     </script>

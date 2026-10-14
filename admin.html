@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -157,6 +157,7 @@
                         <a href="indicadores.html?uid=${u.id}" class="flex-1 text-center bg-indigo-50 text-indigo-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-indigo-100">📊 Indicadores</a>
                     </div>
                     <a href="fechamento.html?uid=${u.id}" class="block text-center mt-2 bg-emerald-50 text-emerald-700 text-xs font-semibold py-1.5 rounded-lg hover:bg-emerald-100">💰 Ver Fechamento de Caixa</a>
+                    <button onclick="excluirConta('${u.id}','${(u.nome || u.email || '').replace(/'/g, '')}')" class="w-full text-center mt-2 bg-red-50 text-red-600 text-xs font-semibold py-1.5 rounded-lg hover:bg-red-100 border border-red-200">🗑 Excluir conta (apagar do banco)</button>
                 </div>
             </div>`;
         }
@@ -208,6 +209,28 @@
             } finally {
                 input.disabled = false;
             }
+        };
+
+        // Apaga todos os documentos de uma subcoleção do usuário
+        async function apagarSub(uid, nome) {
+            try {
+                const s = await getDocs(collection(db, "usuarios", uid, nome));
+                for (const d of s.docs) await deleteDoc(doc(db, "usuarios", uid, nome, d.id));
+            } catch (e) { console.error("Erro ao apagar " + nome + ":", e); }
+        }
+
+        // Exclui a conta do usuário e TODOS os seus dados do Firestore
+        window.excluirConta = async (uid, nome) => {
+            if (!confirm('Excluir a conta de "' + nome + '" e TODOS os dados dela do banco?\n\nEsta ação NÃO pode ser desfeita.')) return;
+            if (!confirm('Tem certeza mesmo? Isso remove definitivamente os dados de "' + nome + '".')) return;
+            try {
+                const subs = ["fluxo_caixa", "produtos", "vendas", "margens", "cvl", "itens_resolver", "relatorios", "relatorios_enviados", "indicadores_def", "indicadores_valores", "fechamentos", "fechamento_despesas"];
+                for (const s of subs) await apagarSub(uid, s);
+                await deleteDoc(doc(db, "usuarios", uid));
+                usuarios = usuarios.filter(x => x.id !== uid);
+                render();
+                alert('Conta de "' + nome + '" removida do banco de dados.\n\n⚠️ O LOGIN (Authentication) precisa ser apagado à parte, no Firebase Console → Authentication → selecionar o usuário → Excluir. Senão a pessoa ainda consegue entrar (e o app recria um perfil em branco).');
+            } catch (e) { alert("Erro ao excluir conta: " + e.message); }
         };
     </script>
 </head>

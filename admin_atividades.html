@@ -20,11 +20,16 @@
         const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
         const TIPOS = {
-            caixa: { icone: "💵", cor: "text-emerald-700 bg-emerald-50" },
-            produto: { icone: "📦", cor: "text-blue-700 bg-blue-50" },
-            margem: { icone: "🧮", cor: "text-orange-700 bg-orange-50" },
-            cvl: { icone: "📊", cor: "text-orange-700 bg-orange-50" },
-            relatorio: { icone: "📄", cor: "text-amber-700 bg-amber-50" }
+            caixa: { icone: "💵", cor: "text-emerald-700 bg-emerald-50", nome: "Fluxo de Caixa" },
+            produto: { icone: "📦", cor: "text-blue-700 bg-blue-50", nome: "Produto" },
+            margem: { icone: "🧮", cor: "text-orange-700 bg-orange-50", nome: "Cálculo de Margem" },
+            cvl: { icone: "📊", cor: "text-orange-700 bg-orange-50", nome: "Margem Completo (CVL)" },
+            relatorio: { icone: "📄", cor: "text-amber-700 bg-amber-50", nome: "Relatório" },
+            fechamento: { icone: "💰", cor: "text-emerald-700 bg-emerald-50", nome: "Fechamento de Caixa" },
+            despesa: { icone: "💸", cor: "text-red-700 bg-red-50", nome: "Despesa (caixa)" },
+            indicador: { icone: "📈", cor: "text-indigo-700 bg-indigo-50", nome: "Indicador" },
+            venda: { icone: "🛒", cor: "text-rose-700 bg-rose-50", nome: "Venda" },
+            item: { icone: "✅", cor: "text-green-700 bg-green-50", nome: "Item resolvido" }
         };
 
         onAuthStateChanged(auth, async (user) => {
@@ -43,43 +48,46 @@
             try { const s = await getDocs(collection(db, "usuarios", uid, nome)); return s.docs.map(d => d.data()); }
             catch (e) { return []; }
         }
+        async function subcolOrg(orgId, nome) {
+            try { const s = await getDocs(collection(db, "organizacoes", orgId, nome)); return s.docs.map(d => d.data()); }
+            catch (e) { return []; }
+        }
 
         async function carregar() {
             atividades = [];
+            const A = (o) => atividades.push(o);
             const usuarios = await getDocs(collection(db, "usuarios"));
             for (const u of usuarios.docs) {
                 const dados = u.data();
                 const quem = dados.nome || dados.email || "usuário";
-
-                // Dados pessoais (caixa/produtos/cálculos) só de clientes/funcionários
                 if (dados.role !== "master") {
-                    (await subcol(u.id, "fluxo_caixa")).forEach(m => atividades.push({
-                        quando: m.criadoEm || m.data, quem, tipo: "caixa", raw: m,
-                        texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "")
-                    }));
-                    (await subcol(u.id, "produtos")).forEach(p => atividades.push({
-                        quando: p.data, quem, tipo: "produto", raw: p, texto: "Cadastrou produto: " + (p.nome || "")
-                    }));
-                    (await subcol(u.id, "margens")).forEach(p => atividades.push({
-                        quando: p.data, quem, tipo: "margem", raw: p, texto: "Salvou cálculo de margem: " + (p.nomeProduto || "")
-                    }));
-                    (await subcol(u.id, "cvl")).forEach(c => atividades.push({
-                        quando: c.data, quem, tipo: "cvl", raw: c, texto: "Salvou análise CVL: " + (c.nome || "")
-                    }));
+                    (await subcol(u.id, "fluxo_caixa")).forEach(m => A({ quando: m.criadoEm || m.data, quem, tipo: "caixa", raw: m, texto: (m.tipo === "entrada" ? "Entrada" : "Saída") + " de " + brl(m.valor) + (m.descricao ? " — " + m.descricao : "") }));
+                    (await subcol(u.id, "produtos")).forEach(p => A({ quando: p.data, quem, tipo: "produto", raw: p, texto: "Cadastrou produto: " + (p.nome || "") }));
+                    (await subcol(u.id, "margens")).forEach(p => A({ quando: p.data, quem, tipo: "margem", raw: p, texto: "Salvou cálculo de margem: " + (p.nomeProduto || "") }));
+                    (await subcol(u.id, "cvl")).forEach(c => A({ quando: c.data, quem, tipo: "cvl", raw: c, texto: "Salvou análise CVL: " + (c.nome || "") }));
+                    (await subcol(u.id, "vendas")).forEach(v => A({ quando: v.criadoEm || "", quem, tipo: "venda", raw: v, texto: "Registrou venda: " + (v.item || "") + " — R$ " + (v.valor || "") }));
+                    (await subcol(u.id, "indicadores_valores")).forEach(iv => A({ quando: iv.criadoEm, quem, tipo: "indicador", raw: iv, texto: "Preencheu indicador do período " + (iv.periodo || "") }));
+                    (await subcol(u.id, "fechamentos")).forEach(f => A({ quando: f.criadoEm, quem, tipo: "fechamento", raw: f, texto: "Fechou o caixa: " + brl(f.faturamentoTotal) }));
+                    (await subcol(u.id, "fechamento_despesas")).forEach(d => A({ quando: d.criadoEm, quem, tipo: "despesa", raw: d, texto: "Despesa: " + (d.descricao || "") + " — " + brl(d.valor) }));
+                    (await subcol(u.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem, tipo: "item", raw: it, texto: "Resolveu item: " + (it.descricao || "") }));
                 }
-                // Relatórios: inclui os gerados por qualquer um (funcionário ou master)
-                (await subcol(u.id, "relatorios_enviados")).forEach(r => atividades.push({
-                    quando: r.data, quem, tipo: "relatorio", raw: r,
-                    texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "")
-                }));
+                (await subcol(u.id, "relatorios_enviados")).forEach(r => A({ quando: r.data, quem, tipo: "relatorio", raw: r, texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "") }));
             }
-            atividades.sort((a, b) => (b.quando || "").localeCompare(a.quando || ""));
+            // Organizações: caixa da loja + itens resolvidos pelos membros
+            try {
+                const orgs = await getDocs(collection(db, "organizacoes"));
+                for (const o of orgs.docs) {
+                    const nomeOrg = o.data().nome || "organização";
+                    (await subcolOrg(o.id, "fechamentos")).forEach(f => A({ quando: f.criadoEm, quem: nomeOrg, tipo: "fechamento", raw: f, texto: "Fechou o caixa da noite: " + brl(f.faturamentoTotal) }));
+                    (await subcolOrg(o.id, "fechamento_despesas")).forEach(d => A({ quando: d.criadoEm, quem: nomeOrg, tipo: "despesa", raw: d, texto: "Despesa: " + (d.descricao || "") + " — " + brl(d.valor) }));
+                    (await subcolOrg(o.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem: nomeOrg, tipo: "item", raw: it, texto: "Resolveu item: " + (it.descricao || "") }));
+                }
+            } catch (e) { console.error("Falha ao ler organizações:", e); }
 
-            // filtros de usuário
+            atividades.sort((a, b) => (b.quando || "").localeCompare(a.quando || ""));
             const quens = [...new Set(atividades.map(a => a.quem))].sort();
             const sel = document.getElementById('filtro-quem');
             quens.forEach(q => { const o = document.createElement('option'); o.value = q; o.textContent = q; sel.appendChild(o); });
-
             render();
         }
 
@@ -143,6 +151,22 @@
                 if (r.observacoes) corpo += `<p class="text-xs font-bold text-slate-600 mt-2">Observações</p><p class="text-sm text-slate-700">${r.observacoes}</p>`;
                 const its = r.itens || [];
                 if (its.length) corpo += `<p class="text-xs font-bold text-slate-600 mt-2 mb-1">Itens</p>` + its.map((i, idx) => `<div class="text-sm text-slate-700 mb-1">${idx + 1}. ${i.descricao || ""}${i.fotoAntes ? `<img src="${i.fotoAntes}" class="mt-1 rounded-lg w-full max-h-44 object-cover">` : ""}</div>`).join("");
+            } else if (a.tipo === "fechamento") {
+                corpo = linha("Data", r.data ? r.data.split("-").reverse().join("/") : "") + linha("Dia", r.diaSemana)
+                    + linha("Dinheiro", brl(r.dinheiro)) + linha("Crédito", brl(r.credito)) + linha("Débito", brl(r.debito))
+                    + linha("PIX", brl(r.pix)) + linha("iFood", brl(r.ifood))
+                    + linha("Faturamento Total", brl(r.faturamentoTotal)) + linha("Pedidos", r.quantidadePedidos) + linha("Ticket Médio", brl(r.ticketMedio));
+            } else if (a.tipo === "despesa") {
+                corpo = linha("Descrição", r.descricao) + linha("Valor", brl(r.valor)) + linha("Quem retirou", r.quemRetirou)
+                    + linha("Data", r.data ? r.data.split("-").reverse().join("/") : "");
+            } else if (a.tipo === "indicador") {
+                corpo = linha("Período", r.periodo) + linha("Valor", r.valor);
+            } else if (a.tipo === "venda") {
+                corpo = linha("Item", r.item) + linha("Valor", "R$ " + (r.valor || ""));
+            } else if (a.tipo === "item") {
+                corpo = linha("Descrição", r.descricao) + linha("Status", r.status === "concluido" ? "Concluído" : "Pendente") + linha("Funcionário", r.funcionario);
+                if (r.fotoAntes) corpo += `<p class="text-xs font-bold text-slate-600 mt-2">Foto do funcionário</p><img src="${r.fotoAntes}" class="mt-1 rounded-lg w-full max-h-44 object-cover">`;
+                if (r.fotoDepois) corpo += `<p class="text-xs font-bold text-green-600 mt-2">Foto do cliente (resolvido)</p><img src="${r.fotoDepois}" class="mt-1 rounded-lg w-full max-h-44 object-cover">`;
             }
             return `<div class="mb-1">${linha("Quem", a.quem)}${linha("Quando", data)}</div>${corpo}`;
         }
@@ -150,9 +174,8 @@
         window.abrirDetalhe = (i) => {
             const a = listaAtual[i];
             if (!a) return;
-            const t = TIPOS[a.tipo] || { icone: "•" };
-            const nomes = { caixa: "Fluxo de Caixa", produto: "Produto", margem: "Cálculo de Margem", cvl: "Margem Completo (CVL)", relatorio: "Relatório" };
-            document.getElementById('modal-titulo').innerText = t.icone + " " + (nomes[a.tipo] || "Detalhe");
+            const t = TIPOS[a.tipo] || { icone: "•", nome: "Detalhe" };
+            document.getElementById('modal-titulo').innerText = t.icone + " " + (t.nome || "Detalhe");
             document.getElementById('modal-corpo').innerHTML = detalheHTML(a);
             document.getElementById('modal').classList.remove('hidden');
         };
@@ -190,6 +213,11 @@
                     <option value="margem">Cálculo de margem</option>
                     <option value="cvl">Margem completo</option>
                     <option value="relatorio">Relatórios</option>
+                    <option value="fechamento">Fechamento de caixa</option>
+                    <option value="despesa">Despesas (caixa)</option>
+                    <option value="indicador">Indicadores</option>
+                    <option value="venda">Vendas</option>
+                    <option value="item">Itens resolvidos</option>
                 </select>
             </div>
             <p id="contador" class="text-[11px] text-slate-500 mb-2">Carregando...</p>

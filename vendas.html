@@ -34,7 +34,7 @@
             const valor = document.getElementById('valor-venda').value;
 
             try {
-                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "vendas"), { item, valor });
+                await addDoc(collection(db, "usuarios", usuarioAtual.uid, "vendas"), { item, valor, data: new Date().toISOString().slice(0, 10), criadoEm: new Date().toISOString() });
                 document.getElementById('form-venda').reset();
                 carregarVendas();
                 alert("Venda registrada!");

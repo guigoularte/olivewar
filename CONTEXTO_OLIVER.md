@@ -21,7 +21,8 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
 - `perfil.html`, `configuracoes.html` — perfil (editável) e config (logout).
 - `admin.html` — Painel Master: abas Novos/Clientes/Funcionários, busca, ⚙️ por usuário (categoria + funcionalidades + clientes atendidos).
 - `admin_relatorios.html` — master vê todos os relatórios dos funcionários.
-- `admin_atividades.html` — master vê todas as atividades dos clientes (clicável, com modal de detalhes).
+- `admin_atividades.html` — master vê todas as atividades dos clientes (clicável, modal de detalhes). Agrega por usuário (fluxo_caixa, produtos, margens, cvl, vendas, indicadores_valores, fechamentos, fechamento_despesas, itens resolvidos, relatorios_enviados) **E por organização** (fechamentos, despesas, itens resolvidos da loja). Itens aparecem quando o cliente resolve (usa `resolvidoEm`). Vendas e itens agora gravam data/`criadoEm`/`resolvidoEm`.
+- `admin.html` — ... + botão **🗑 Excluir conta** por usuário (apaga o doc + subcoleções do Firestore). ⚠️ NÃO apaga o login do Authentication (client SDK não deleta outro usuário) — isso é manual no Firebase Console; senão o app recria perfil em branco no próximo login.
 - `fluxo_caixa.html` — entradas/saídas + saldo, filtro por mês, CSV/PDF, venda rápida por produto, **contas a pagar** (status a_pagar + vencimento + marcar pago), modo master (?uid=).
 - `produtos.html` — produtos com preço (decimal) + ingredientes; editar/excluir; importável no cálculo de margem/CVL.
 - `calculo_margem.html` — margem simples (ingredientes: valor pago/peso comprado/peso usado). Importa produto.
