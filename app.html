@@ -174,6 +174,31 @@
                     } catch (e) { console.error("Falha ao carregar pendências:", e); }
                 }
 
+                // Badge do menu "Itens para Resolver": quantos itens (do relatório) estão pendentes para o usuário
+                try {
+                    let itensCol = null, meuNivel = null;
+                    if (dados.orgId) {
+                        const oSnap2 = await getDoc(doc(db, "organizacoes", dados.orgId));
+                        const ac = oSnap2.exists() ? ((oSnap2.data().membros || {})[user.uid] || {}) : {};
+                        if (ac.verItens) { itensCol = collection(db, "organizacoes", dados.orgId, "itens_resolver"); meuNivel = ac.nivel || ""; }
+                    } else if (!souConsultoria) {
+                        itensCol = collection(db, "usuarios", user.uid, "itens_resolver");
+                    }
+                    let pend = 0;
+                    if (itensCol) {
+                        const s = await getDocs(itensCol);
+                        pend = s.docs.filter(d => {
+                            const it = d.data();
+                            if (it.status === "concluido") return false;
+                            if (meuNivel !== null) { const nd = it.nivelDestino; if (!(!nd || nd === "todos" || nd === meuNivel)) return false; }
+                            return true;
+                        }).length;
+                    }
+                    const badge = document.getElementById('badge-itens');
+                    if (badge) { if (pend > 0) { badge.innerText = pend; badge.classList.remove('hidden'); } else badge.classList.add('hidden'); }
+                    try { localStorage.setItem('oliverItensPendentes', String(pend)); } catch (e) {}
+                } catch (e) { console.error("Falha no badge de itens:", e); }
+
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
                 if (!ehMaster && !dados.empresaId) {
                     let codigo = dados.codigoAcesso;
@@ -265,6 +290,7 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Itens para Resolver</span>
+                    <span id="badge-itens" class="hidden ml-auto bg-red-500 text-white text-xs font-black rounded-full min-w-[24px] h-6 px-1.5 flex items-center justify-center">0</span>
                 </a>
 
                 <!-- Relatórios (registro/histórico, somente leitura) -->

@@ -13,7 +13,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, getDocs, getDoc, doc, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -24,7 +24,7 @@
         const EMAIL_SERVICE = "service_yuf3qik";
         const EMAIL_TEMPLATE = "template_r7hf9fm";
 
-        let usuarioAtual = null, nomeFuncionario = "", itens = [], clientesPermitidos = [], minhaEmpresa = null;
+        let usuarioAtual = null, nomeFuncionario = "", itens = [], clientesPermitidos = [], minhaEmpresa = null, orgsInfo = {};
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -44,6 +44,19 @@
         async function carregarClientes() {
             const select = document.getElementById('cliente');
             try {
+                // Organizações da empresa (destino em grupo) — aparecem primeiro, com 🏢
+                if (minhaEmpresa) {
+                    try {
+                        const osnap = await getDocs(query(collection(db, "organizacoes"), where("empresaId", "==", minhaEmpresa)));
+                        osnap.forEach((o) => {
+                            orgsInfo[o.id] = o.data();
+                            const opt = document.createElement('option');
+                            opt.value = "org:" + o.id;
+                            opt.textContent = "🏢 " + (o.data().nome || "(organização)");
+                            select.appendChild(opt);
+                        });
+                    } catch (e) { console.error("Falha ao carregar organizações:", e); }
+                }
                 const snap = await getDocs(collection(db, "usuarios"));
                 let qtd = 0;
                 snap.forEach((d) => {
@@ -258,7 +271,7 @@
         window.salvar = async () => {
             const select = document.getElementById('cliente');
             const ehNovo = document.getElementById('novo-cliente-check').checked;
-            let clienteId = null, clienteNome = "(sem cliente)", novoCliente = null;
+            let clienteId = null, orgId = null, clienteNome = "(sem cliente)", novoCliente = null;
             if (ehNovo) {
                 const atendente = document.getElementById('nc-atendente').value.trim();
                 const empresa = document.getElementById('nc-empresa').value.trim();
@@ -267,8 +280,14 @@
                 novoCliente = { atendente, empresa, whatsapp };
                 clienteNome = empresa + (atendente ? " (" + atendente + ")" : "");
             } else {
-                clienteId = select.value;
-                clienteNome = clienteId ? select.options[select.selectedIndex].text : "(sem cliente)";
+                const val = select.value;
+                if (val && val.startsWith("org:")) {
+                    orgId = val.slice(4);
+                    clienteNome = select.options[select.selectedIndex].text.replace(/^🏢\s*/, "");
+                } else {
+                    clienteId = val;
+                    clienteNome = clienteId ? select.options[select.selectedIndex].text : "(sem cliente)";
+                }
             }
             const campos = coletarCampos();
             if (!campos.responsavel) { alert("Informe o responsável atendente."); return; }
@@ -276,7 +295,8 @@
 
             const relatorio = {
                 tipo: "primeira_visita", funcionario: nomeFuncionario,
-                clienteId: clienteId || "", clienteNome, novoCliente: novoCliente || null,
+                clienteId: clienteId || "", clienteNome, orgId: orgId || "", novoCliente: novoCliente || null,
+                nivelDestino: "todos",
                 responsavel: campos.responsavel, objetivo: campos.objetivo, observacoes: campos.observacoes,
                 itens: itens.map(it => ({ descricao: it.descricao, fotoAntes: it.foto || "" })),
                 data: new Date().toISOString()
@@ -291,9 +311,24 @@
                 }
                 const gravacao = addDoc(collection(db, "usuarios", usuarioAtual.uid, "relatorios_enviados"), relatorio);
                 // Log por empresa (alimenta o Dashboard) — best-effort
-                if (minhaEmpresa) addDoc(collection(db, "empresas", minhaEmpresa, "relatorios_log"), { tipo: "primeira_visita", clienteNome, clienteId: clienteId || "", funcionarioNome: nomeFuncionario, funcionarioUid: usuarioAtual.uid, data: relatorio.data }).catch(e => console.error("log", e));
+                if (minhaEmpresa) addDoc(collection(db, "empresas", minhaEmpresa, "relatorios_log"), { tipo: "primeira_visita", clienteNome, clienteId: clienteId || "", orgId: orgId || "", funcionarioNome: nomeFuncionario, funcionarioUid: usuarioAtual.uid, data: relatorio.data }).catch(e => console.error("log", e));
+
+                // Envia os itens observados como "Itens para Resolver" (tarefas) ao cliente/organização
+                const alvoItens = orgId ? collection(db, "organizacoes", orgId, "itens_resolver")
+                    : clienteId ? collection(db, "usuarios", clienteId, "itens_resolver") : null;
+                const alvoRel = orgId ? collection(db, "organizacoes", orgId, "relatorios")
+                    : clienteId ? collection(db, "usuarios", clienteId, "relatorios") : null;
+                const pDestino = [];
+                if (alvoItens) {
+                    for (const it of itens) {
+                        pDestino.push(addDoc(alvoItens, { descricao: it.descricao, fotoAntes: it.foto || "", status: "pendente", fotoDepois: "", funcionario: nomeFuncionario, nivelDestino: "todos", data: new Date().toISOString() }));
+                    }
+                    pDestino.push(addDoc(alvoRel, relatorio));
+                }
+
                 if (navigator.onLine) {
                     await gravacao;   // confirma o salvamento ANTES de sair pro WhatsApp
+                    await Promise.allSettled(pDestino);   // itens no painel do cliente (falha aqui não descarta o relatório)
                     await enviarEmailAdmin(clienteNome, campos, itens, novoCliente);
                 }
                 await compartilharPDF(pdf, "relatorio-primeira-visita.pdf", `Relatório de 1ª visita - ${clienteNome}`);

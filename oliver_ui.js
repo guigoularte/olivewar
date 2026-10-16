@@ -61,14 +61,18 @@
             "width:256px;flex-shrink:0;position:sticky;top:0;height:100vh;color:#fff;flex-direction:column;" +
             "background:linear-gradient(to bottom,#f97316,#f59e0b);";
 
+        var pendItens = parseInt(localStorage.getItem("oliverItensPendentes") || "0", 10) || 0;
         var links = LINKS.filter(function (l) { return podeVer(l, p); }).map(function (l) {
             var ativo = (l.href === atual);
+            var badge = (l.href === "itens_resolver.html" && pendItens > 0)
+                ? '<span style="margin-left:auto;background:#ef4444;color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">' + pendItens + '</span>'
+                : '';
             return '<a href="' + l.href + '" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;' +
                 'font-size:14px;font-weight:600;text-decoration:none;color:#fff;margin-bottom:2px;' +
                 (ativo ? "background:rgba(255,255,255,.22);" : "") + '" ' +
                 'onmouseover="this.style.background=\'rgba(255,255,255,.12)\'" ' +
                 'onmouseout="this.style.background=\'' + (ativo ? "rgba(255,255,255,.22)" : "transparent") + '\'">' +
-                '<span>' + l.icon + '</span>' + l.label + '</a>';
+                '<span>' + l.icon + '</span>' + l.label + badge + '</a>';
         }).join("");
 
         aside.innerHTML =
