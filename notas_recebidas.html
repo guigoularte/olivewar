@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Notas Fiscais Recebidas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let empresaId = null, podeExcluir = false, notas = [];
+        const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const dataBR = (s) => { if (!s) return ""; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const d = snap.exists() ? snap.data() : {};
+            const souConsultoria = d.role === "master" || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
+            podeExcluir = souConsultoria;
+            empresaId = d.empresaId || null;
+            if (!souConsultoria) { alert("Área exclusiva da consultoria."); window.location.href = "app.html"; return; }
+            if (!empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            try {
+                const s = await getDocs(collection(db, "empresas", empresaId, "notas_fiscais"));
+                notas = s.docs.map(x => ({ id: x.id, ...x.data() })).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+            } catch (e) { alert("Erro ao carregar notas: " + e.message); return; }
+            const quens = [...new Set(notas.map(n => n.clienteNome || "—"))].sort();
+            const sel = document.getElementById('filtro');
+            quens.forEach(q => { const o = document.createElement('option'); o.value = q; o.textContent = q; sel.appendChild(o); });
+            render();
+        }
+
+        window.render = () => {
+            const fq = document.getElementById('filtro').value;
+            const lista = notas.filter(n => !fq || (n.clienteNome || "—") === fq);
+            document.getElementById('contador').innerText = lista.length + " nota(s)";
+            const c = document.getElementById('lista');
+            if (lista.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhuma nota recebida.</p>'; return; }
+            c.innerHTML = lista.map(n => `
+                <div class="bg-white rounded-xl border border-slate-200 mb-2 p-2">
+                    <div class="flex gap-2">
+                        <img src="${n.foto}" onclick="ampliar('${n.id}')" class="w-20 h-20 rounded-lg object-cover shrink-0 cursor-pointer">
+                        <div class="min-w-0 flex-1 text-xs">
+                            <div class="font-bold text-slate-800 truncate">${esc(n.clienteNome) || "cliente"}</div>
+                            <div class="text-slate-500 truncate">${esc(n.fornecedor) || "Nota fiscal"}</div>
+                            <div class="text-slate-500">${dataBR(n.data)}${n.valor ? " · " + brl(n.valor) : ""}</div>
+                            ${n.obs ? `<div class="text-[11px] text-slate-400 truncate">${esc(n.obs)}</div>` : ""}
+                        </div>
+                        ${podeExcluir ? `<button onclick="excluir('${n.id}')" class="text-red-400 hover:text-red-600 text-sm self-start">🗑</button>` : ""}
+                    </div>
+                </div>`).join('');
+        };
+
+        window.ampliar = (id) => {
+            const n = notas.find(x => x.id === id); if (!n) return;
+            document.getElementById('modal-img').src = n.foto;
+            document.getElementById('modal').classList.remove('hidden');
+        };
+        window.fecharModal = () => document.getElementById('modal').classList.add('hidden');
+
+        window.excluir = async (id) => {
+            if (!confirm("Excluir esta nota?")) return;
+            try { await deleteDoc(doc(db, "empresas", empresaId, "notas_fiscais", id)); notas = notas.filter(x => x.id !== id); render(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div id="modal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onclick="if(event.target===this)fecharModal()">
+        <div class="max-w-full max-h-[90vh] flex flex-col items-center">
+            <img id="modal-img" class="max-w-full max-h-[85vh] rounded-lg object-contain">
+            <button onclick="fecharModal()" class="mt-3 bg-white text-slate-800 font-bold px-4 py-2 rounded-lg text-sm">Fechar</button>
+        </div>
+    </div>
+
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-3">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-blue-950">Notas Recebidas</h1>
+                <div class="w-8"></div>
+            </div>
+            <select id="filtro" onchange="render()" class="w-full p-2 border rounded-lg text-xs mb-2 outline-none focus:ring-2 focus:ring-orange-400">
+                <option value="">Todos os clientes</option>
+            </select>
+            <p id="contador" class="text-[11px] text-slate-500 mb-2">Carregando...</p>
+            <div id="lista"></div>
+        </div>
+    </div>
+</body>
+</html>

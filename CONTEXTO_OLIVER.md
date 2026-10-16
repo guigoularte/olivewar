@@ -48,6 +48,7 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
   - **PENDENTE (fix real do limite)**: mover fotos para **Firebase Storage** (guardar só a URL no doc) — remove o teto de 1 MB. Requer habilitar Storage + regras + CORS + ajustar upload e leitura (img/pdf.addImage). Alternativa rápida: comprimir mais forte (perde qualidade).
   - **Rascunho automático** (localStorage) com banner Restaurar/Descartar.
   - Opção **"Cliente não cadastrado"** (nome atendente, empresa, WhatsApp) → e-mail de aviso de novo cliente.
+- `notas.html` (cliente envia foto da nota fiscal) + `notas_recebidas.html` (consultoria recebe/vê todas). Gated pela funcionalidade **`notasFiscais`** (liga por cliente no admin ou por organização). Guardado em `empresas/{empresaId}/notas_fiscais` (caixa de entrada compartilhada); cliente de org resolve a empresa via org.empresaId. Regra: consultores leem tudo; cliente cria (da sua empresa/org) e lê as suas.
 - `verificar.html` — **Verificar relatório anterior (consultor)**: escolhe cliente/organização, vê os itens (antes/depois lado a lado) e registra o que foi feito com **foto depois** (atualiza `itens_resolver`: fotoDepois, status, verificadoPor, resolvidoEm). Atalho no hub `relatorios.html`. Regra: funcionário pode atualizar `itens_resolver` do cliente (clientePermitido) — antes só dono/master. Arquivo central de relatórios para a Conteal já é o `admin_relatorios.html` (master vê todos).
 - `itens_resolver.html` — cliente vê pendências enviadas, marca concluído, envia foto.
 - `relatorios_view.html` — "Relatórios" (histórico read-only): funcionário vê enviados, cliente vê recebidos.
@@ -78,6 +79,7 @@ Subcoleções de `empresas/{empresaId}` (CRM — isoladas por empresa via regras
 - `crm_financeiro` — { tipo(receber/pagar), descricao, valor, vencimento, contatoId?, contatoNome, status(pendente/quitado), criadoPor }
 - `crm_pendencias` — { descricao, responsavel(cliente/eu), prazo, contatoId?, contatoNome, status(pendente/feito), criadoPor } (lembretes do que cobrar/receber)
 - `relatorios_log` — { tipo, clienteNome, clienteId?, orgId?, funcionarioNome, funcionarioUid, data } (gravado em cada envio de relatório; alimenta o Dashboard)
+- `notas_fiscais` — { foto, fornecedor, valor, obs, clienteNome, clienteId, orgId?, enviadoPorUid, enviadoPorNome, data, criadoEm } (cliente envia foto da nota; consultoria recebe). Caixa de entrada por empresa.
 
 Subcoleções de `usuarios/{uid}` (Fechamento de Caixa — replica o sistema CONTEAL/Sheets, no Oliver):
 - `fechamentos` — { data, horario, diaSemana, dinheiro, credito, debito, pix, ifood, faturamentoTotal, quantidadePedidos, ticketMedio, saldoLiquido, criadoEm } (se fechar antes de 01:00, a data é do dia anterior)

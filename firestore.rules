@@ -82,6 +82,17 @@ service cloud.firestore {
       match /relatorios_log/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
+      // Notas fiscais enviadas pelos clientes (caixa de entrada da consultoria).
+      // Consultores leem tudo; o cliente cria (da sua empresa, direto ou via sua organização) e lê as suas.
+      match /notas_fiscais/{doc} {
+        allow read: if ehMaster() || membroDaEmpresa(empresaId)
+                    || (request.auth != null && resource.data.enviadoPorUid == request.auth.uid);
+        allow create: if request.auth != null
+                      && request.resource.data.enviadoPorUid == request.auth.uid
+                      && (minhaEmpresaId() == empresaId
+                          || (dadosUsuario().get('orgId', '') != '' && orgData(dadosUsuario().get('orgId', '')).empresaId == empresaId));
+        allow delete: if ehMaster() || membroDaEmpresa(empresaId);
+      }
     }
 
     // Organizações de cliente (ex.: franquia com vários donos).

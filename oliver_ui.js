@@ -20,6 +20,7 @@
     var LINKS = [
         { href: "app.html", label: "Início", icon: "🏠", always: true },
         { href: "dashboard.html", label: "Dashboard", icon: "📊", key: "relatorios", padrao: false },
+        { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "📥", key: "relatorios", padrao: false },
         { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
         { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
@@ -28,6 +29,7 @@
         { href: "indicadores.html", label: "Meus Indicadores", icon: "📈", clienteOnly: true },
         { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "💵", key: "fluxoCaixa", padrao: true },
         { href: "fechamento.html", label: "Fechamento de Caixa", icon: "💰", key: "fechamentoCaixa", padrao: false },
+        { href: "notas.html", label: "Notas Fiscais", icon: "🧾", key: "notasFiscais", padrao: false },
         { href: "produtos.html", label: "Produtos/Serviços", icon: "📦", key: "produtos", padrao: true },
         { href: "vendas.html", label: "Vendas", icon: "📈", key: "vendas", padrao: true },
         { href: "calculo_margem.html", label: "Cálculo de Margem", icon: "🧮", key: "calculoMargem", padrao: false },
