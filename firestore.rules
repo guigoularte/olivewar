@@ -52,6 +52,10 @@ service cloud.firestore {
     function souMembroDaOrg(orgId) {
       return request.auth != null && dadosUsuario().get('orgId', '') == orgId;
     }
+    // Gerente da organização
+    function gerenteDaOrg(orgId) {
+      return request.auth != null && orgData(orgId).get('gerenteUid', '') == request.auth.uid;
+    }
 
     // Empresas (multiempresa): qualquer usuário autenticado pode ler
     // (necessário para resolver o código de convite no cadastro e listar).
@@ -122,6 +126,14 @@ service cloud.firestore {
         allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
       }
       match /fechamento_despesas/{doc} {
+        allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
+      }
+      // Rotinas operacionais: consultoria/gerente criam; membros leem e marcam o checklist do dia.
+      match /rotinas/{doc} {
+        allow read: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
+        allow create, update, delete: if consultoriaDaOrg(orgId) || gerenteDaOrg(orgId);
+      }
+      match /rotinas_dia/{doc} {
         allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
       }
     }

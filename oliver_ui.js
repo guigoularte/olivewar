@@ -23,6 +23,7 @@
         { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "📥", key: "relatorios", padrao: false },
         { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
         { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
+        { href: "rotinas.html", label: "Rotinas", icon: "📋", orgLink: true },
         { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
         { href: "itens_resolver.html", label: "Itens para Resolver", icon: "✅", key: "itensResolver", padrao: true },
         { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },

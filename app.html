@@ -160,6 +160,9 @@
                 // Organizações: consultoria (cria/gerencia) ou quem já faz parte de uma org
                 const elOrg = document.getElementById('menu-org');
                 if (elOrg) elOrg.style.display = (souConsultoria || dados.orgId) ? 'flex' : 'none';
+                // Rotinas operacionais: consultoria ou membros de organização
+                const elRot = document.getElementById('menu-rotinas');
+                if (elRot) elRot.style.display = (souConsultoria || dados.orgId) ? 'flex' : 'none';
 
                 // Lembrete de pendências (CRM) na tela inicial — só consultoria
                 if (souConsultoria && dados.empresaId) {
@@ -383,6 +386,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.7"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">CRM</span>
+                </a>
+
+                <!-- Rotinas operacionais (consultoria e membros de organização) -->
+                <a id="menu-rotinas" href="rotinas.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-emerald-300/80 hover:border-emerald-500 transition group">
+                    <div class="p-3 bg-emerald-50 text-emerald-700 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Rotinas</span>
                 </a>
 
                 <!-- Organizações (consultoria e membros de organização) -->
