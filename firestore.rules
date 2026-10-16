@@ -137,13 +137,14 @@ service cloud.firestore {
 
       allow delete: if ehMaster();
 
-      // Painel "Itens para Resolver": funcionário cria; dono lê e atualiza (concluir/foto)
+      // Painel "Itens para Resolver": funcionário cria; dono e funcionário atualizam (concluir/foto depois)
       match /itens_resolver/{item} {
         allow read: if request.auth != null
                     && (request.auth.uid == userId || ehMaster() || ehFuncionario());
         allow create: if ehMaster() || (ehFuncionario() && clientePermitido(userId));
         allow update: if request.auth != null
-                      && (request.auth.uid == userId || ehMaster());
+                      && (request.auth.uid == userId || ehMaster()
+                          || (ehFuncionario() && clientePermitido(userId)));
         allow delete: if request.auth != null
                       && (request.auth.uid == userId || ehMaster());
       }

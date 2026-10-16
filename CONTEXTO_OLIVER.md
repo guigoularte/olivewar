@@ -48,6 +48,7 @@ Usado por: o dono (master), funcionários (fazem relatórios de visita) e client
   - **PENDENTE (fix real do limite)**: mover fotos para **Firebase Storage** (guardar só a URL no doc) — remove o teto de 1 MB. Requer habilitar Storage + regras + CORS + ajustar upload e leitura (img/pdf.addImage). Alternativa rápida: comprimir mais forte (perde qualidade).
   - **Rascunho automático** (localStorage) com banner Restaurar/Descartar.
   - Opção **"Cliente não cadastrado"** (nome atendente, empresa, WhatsApp) → e-mail de aviso de novo cliente.
+- `verificar.html` — **Verificar relatório anterior (consultor)**: escolhe cliente/organização, vê os itens (antes/depois lado a lado) e registra o que foi feito com **foto depois** (atualiza `itens_resolver`: fotoDepois, status, verificadoPor, resolvidoEm). Atalho no hub `relatorios.html`. Regra: funcionário pode atualizar `itens_resolver` do cliente (clientePermitido) — antes só dono/master. Arquivo central de relatórios para a Conteal já é o `admin_relatorios.html` (master vê todos).
 - `itens_resolver.html` — cliente vê pendências enviadas, marca concluído, envia foto.
 - `relatorios_view.html` — "Relatórios" (histórico read-only): funcionário vê enviados, cliente vê recebidos.
 - `checklist_data.json` — 155 itens da RDC 275 (extraídos do PDF do cliente).
