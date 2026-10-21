@@ -92,7 +92,8 @@
             const horario = agora.toTimeString().slice(0, 8);
             const dataRef = new Date(agora);
             if (agora.getHours() < 1) dataRef.setDate(dataRef.getDate() - 1);
-            const dataStr = dataRef.toISOString().slice(0, 10);
+            // Data LOCAL (não usar toISOString, que converte p/ UTC e vira o dia seguinte à noite)
+            const dataStr = dataRef.getFullYear() + "-" + String(dataRef.getMonth() + 1).padStart(2, "0") + "-" + String(dataRef.getDate()).padStart(2, "0");
             const btn = document.getElementById('btn-caixa'); btn.disabled = true; btn.innerText = "Salvando...";
             try {
                 await addDoc(col("fechamentos"), {
