@@ -30,6 +30,7 @@
         { href: "indicadores.html", label: "Meus Indicadores", icon: "📈", clienteOnly: true },
         { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "💵", key: "fluxoCaixa", padrao: true },
         { href: "fechamento.html", label: "Fechamento de Caixa", icon: "💰", key: "fechamentoCaixa", padrao: false },
+        { href: "relatorio_semanal.html", label: "Relatório Semanal", icon: "📆", key: "fechamentoCaixa", padrao: false },
         { href: "notas.html", label: "Notas Fiscais", icon: "🧾", key: "notasFiscais", padrao: false },
         { href: "produtos.html", label: "Produtos/Serviços", icon: "📦", key: "produtos", padrao: true },
         { href: "vendas.html", label: "Vendas", icon: "📈", key: "vendas", padrao: true },

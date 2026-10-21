@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Relatório Semanal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="oliver_pdf.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let basePath = null, nomeAlvo = "", isConsultoria = false, minhaEmpresa = null;
+        let fechamentos = [], despesas = [], refData = new Date();
+        let chartDia = null, chartForma = null;
+
+        const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+        const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+        function segunda(d) { const x = new Date(d); const dia = (x.getDay() + 6) % 7; x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - dia); return x; }
+        const ymd = (d) => d.toISOString().slice(0, 10);
+        const dMes = (s) => { const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }); };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const d = snap.exists() ? snap.data() : {};
+            isConsultoria = d.role === "master" || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
+            minhaEmpresa = d.empresaId || null;
+
+            if (isConsultoria) {
+                document.getElementById('bloco-sel').classList.remove('hidden');
+                const sel = document.getElementById('org-sel');
+                try {
+                    if (minhaEmpresa) {
+                        const os = await getDocs(query(collection(db, "organizacoes"), where("empresaId", "==", minhaEmpresa)));
+                        os.forEach(o => { const opt = document.createElement('option'); opt.value = o.id; opt.textContent = o.data().nome || "(organização)"; sel.appendChild(opt); });
+                    }
+                } catch (e) { console.error(e); }
+                document.getElementById('conteudo').classList.remove('hidden');
+            } else if (d.orgId) {
+                basePath = ["organizacoes", d.orgId];
+                try { const o = await getDoc(doc(db, "organizacoes", d.orgId)); if (o.exists()) nomeAlvo = o.data().nome || ""; } catch (e) {}
+                document.getElementById('conteudo').classList.remove('hidden');
+                await carregar();
+            } else {
+                const fx = d.funcionalidades || {};
+                if (!fx.fechamentoCaixa) { alert("Relatório semanal do fechamento de caixa."); window.location.href = "app.html"; return; }
+                basePath = ["usuarios", user.uid]; nomeAlvo = d.nome || "";
+                document.getElementById('conteudo').classList.remove('hidden');
+                await carregar();
+            }
+        });
+
+        window.trocarOrg = async () => {
+            const v = document.getElementById('org-sel').value;
+            if (!v) { basePath = null; document.getElementById('relatorio').classList.add('hidden'); return; }
+            basePath = ["organizacoes", v];
+            nomeAlvo = document.getElementById('org-sel').selectedOptions[0].textContent;
+            await carregar();
+        };
+
+        async function carregar() {
+            try {
+                const [sf, sd] = await Promise.all([
+                    getDocs(collection(db, basePath[0], basePath[1], "fechamentos")),
+                    getDocs(collection(db, basePath[0], basePath[1], "fechamento_despesas"))
+                ]);
+                fechamentos = sf.docs.map(x => x.data()).filter(f => f.data);
+                despesas = sd.docs.map(x => x.data()).filter(d => d.data);
+            } catch (e) { alert("Erro ao carregar: " + e.message); return; }
+            document.getElementById('relatorio').classList.remove('hidden');
+            render();
+        }
+
+        window.mudarSemana = (delta) => { refData.setDate(refData.getDate() + delta * 7); render(); };
+
+        function agregar(ini, fim) {
+            const noIntervalo = (s) => s >= ini && s <= fim;
+            const fs = fechamentos.filter(f => noIntervalo(f.data));
+            const ds = despesas.filter(d => noIntervalo(d.data));
+            const soma = (arr, k) => arr.reduce((s, x) => s + (Number(x[k]) || 0), 0);
+            const faturamento = soma(fs, "faturamentoTotal");
+            const pedidos = soma(fs, "quantidadePedidos");
+            const desp = soma(ds, "valor");
+            return {
+                faturamento, pedidos, ticket: pedidos > 0 ? faturamento / pedidos : 0,
+                formas: { Dinheiro: soma(fs, "dinheiro"), Crédito: soma(fs, "credito"), Débito: soma(fs, "debito"), PIX: soma(fs, "pix"), iFood: soma(fs, "ifood") },
+                despesas: desp, saldo: faturamento - desp, dias: fs.length
+            };
+        }
+
+        let dadosPDF = null;
+        function render() {
+            const ini = segunda(refData);
+            const fim = new Date(ini); fim.setDate(fim.getDate() + 6);
+            const iniStr = ymd(ini), fimStr = ymd(fim);
+            const atual = agregar(iniStr, fimStr);
+            // semana anterior
+            const iniA = new Date(ini); iniA.setDate(iniA.getDate() - 7);
+            const fimA = new Date(ini); fimA.setDate(fimA.getDate() - 1);
+            const anterior = agregar(ymd(iniA), ymd(fimA));
+            const varPct = anterior.faturamento > 0 ? ((atual.faturamento - anterior.faturamento) / anterior.faturamento) * 100 : null;
+
+            document.getElementById('semana-label').innerText = "Semana de " + dMes(iniStr) + " a " + dMes(fimStr);
+            document.getElementById('kpi-fat').innerText = brl(atual.faturamento);
+            document.getElementById('kpi-ped').innerText = atual.pedidos;
+            document.getElementById('kpi-ticket').innerText = brl(atual.ticket);
+            document.getElementById('kpi-desp').innerText = brl(atual.despesas);
+            document.getElementById('kpi-saldo').innerText = brl(atual.saldo);
+            const cmp = document.getElementById('kpi-comp');
+            if (varPct === null) { cmp.innerHTML = '<span class="text-slate-400">sem semana anterior</span>'; }
+            else { const up = varPct >= 0; cmp.innerHTML = `<span class="${up ? 'text-emerald-600' : 'text-red-600'} font-black">${up ? '▲' : '▼'} ${Math.abs(varPct).toFixed(0)}%</span> <span class="text-slate-400">vs semana anterior (${brl(anterior.faturamento)})</span>`; }
+
+            // por dia
+            const porDia = [0, 0, 0, 0, 0, 0, 0];
+            fechamentos.forEach(f => { if (f.data >= iniStr && f.data <= fimStr) { const idx = (new Date(f.data + "T00:00:00").getDay() + 6) % 7; porDia[idx] += Number(f.faturamentoTotal) || 0; } });
+
+            if (window.Chart) {
+                if (chartDia) chartDia.destroy();
+                chartDia = new Chart(document.getElementById('g-dia'), {
+                    type: 'bar', data: { labels: DIAS, datasets: [{ data: porDia, backgroundColor: '#10b981', borderRadius: 6 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+                if (chartForma) chartForma.destroy();
+                const fv = atual.formas;
+                chartForma = new Chart(document.getElementById('g-forma'), {
+                    type: 'doughnut', data: { labels: Object.keys(fv), datasets: [{ data: Object.values(fv), backgroundColor: ['#10b981', '#3b82f6', '#6366f1', '#f59e0b', '#ef4444'] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+                });
+            }
+            dadosPDF = { iniStr, fimStr, atual, anterior, varPct, porDia };
+        }
+
+        window.baixarPDF = () => {
+            if (!dadosPDF) return;
+            const { iniStr, fimStr, atual, anterior, varPct, porDia } = dadosPDF;
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            let y = oliverPdfHeader(pdf, "Relatório Semanal", nomeAlvo || "");
+            pdf.setFontSize(11); pdf.setTextColor(0, 0, 0);
+            pdf.text("Semana de " + dMes(iniStr) + " a " + dMes(fimStr), 14, y); y += 8;
+            const linha = (r, v) => { pdf.setFont("helvetica", "normal"); pdf.setTextColor(90, 90, 90); pdf.text(r, 14, y); pdf.setTextColor(0, 0, 0); pdf.setFont("helvetica", "bold"); pdf.text(String(v), 120, y); y += 7; };
+            linha("Faturamento total", brl(atual.faturamento));
+            if (varPct !== null) linha("Variação vs semana anterior", (varPct >= 0 ? "+" : "") + varPct.toFixed(0) + "% (" + brl(anterior.faturamento) + ")");
+            linha("Pedidos", atual.pedidos);
+            linha("Ticket médio", brl(atual.ticket));
+            linha("Despesas", brl(atual.despesas));
+            linha("Saldo (faturamento - despesas)", brl(atual.saldo));
+            linha("Dias com fechamento", atual.dias);
+            y += 2; pdf.setFont("helvetica", "bold"); pdf.text("Faturamento por dia", 14, y); y += 7;
+            DIAS.forEach((d, i) => linha("  " + d, brl(porDia[i])));
+            y += 2; pdf.setFont("helvetica", "bold"); pdf.text("Por forma de pagamento", 14, y); y += 7;
+            Object.entries(atual.formas).forEach(([k, v]) => linha("  " + k, brl(v)));
+            oliverPdfFooter(pdf);
+            pdf.save("relatorio-semanal.pdf");
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-emerald-700 via-emerald-600 to-emerald-500 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-emerald-900 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-3">
+                <a href="app.html" class="text-emerald-800 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-emerald-900">Relatório Semanal</h1>
+                <div class="w-8"></div>
+            </div>
+
+            <div id="bloco-sel" class="hidden mb-2">
+                <label class="text-xs font-semibold text-slate-600">Organização</label>
+                <select id="org-sel" onchange="trocarOrg()" class="w-full mt-1 p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Selecione…</option>
+                </select>
+            </div>
+
+            <div id="relatorio" class="hidden">
+                <div class="flex items-center justify-between bg-white rounded-xl border border-slate-200 p-2 mb-3">
+                    <button onclick="mudarSemana(-1)" class="px-3 py-1 text-emerald-700 font-black text-lg">‹</button>
+                    <span id="semana-label" class="text-xs font-bold text-slate-700">—</span>
+                    <button onclick="mudarSemana(1)" class="px-3 py-1 text-emerald-700 font-black text-lg">›</button>
+                </div>
+
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Faturamento</div><div id="kpi-fat" class="text-lg font-black text-emerald-700">R$ 0,00</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Pedidos</div><div id="kpi-ped" class="text-lg font-black text-slate-700">0</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Ticket médio</div><div id="kpi-ticket" class="text-lg font-black text-slate-700">R$ 0,00</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Despesas</div><div id="kpi-desp" class="text-lg font-black text-red-600">R$ 0,00</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Saldo</div><div id="kpi-saldo" class="text-lg font-black text-emerald-700">R$ 0,00</div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3 text-center flex flex-col justify-center"><div class="text-[10px] text-slate-400 font-semibold">Comparativo</div><div id="kpi-comp" class="text-[11px] mt-1">—</div></div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
+                    <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-2">Faturamento por dia</p><div style="height:180px"><canvas id="g-dia"></canvas></div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-2">Por forma de pagamento</p><div style="height:180px"><canvas id="g-forma"></canvas></div></div>
+                </div>
+
+                <button onclick="baixarPDF()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm">📄 Baixar PDF da semana</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

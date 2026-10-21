@@ -139,6 +139,9 @@
                 // Notas Fiscais recebidas: caixa de entrada da consultoria
                 const elNotasReceb = document.getElementById('menu-notas-receb');
                 if (elNotasReceb) elNotasReceb.style.display = souConsultoria ? 'flex' : 'none';
+                // Relatório Semanal (fechamento de caixa): consultoria ou quem tem fechamento
+                const elSem = document.getElementById('menu-semanal');
+                if (elSem) elSem.style.display = (souConsultoria || func.fechamentoCaixa) ? 'flex' : 'none';
                 // "Meus Indicadores": para clientes (quem não é consultoria)
                 const elInd = document.getElementById('menu-indicadores');
                 if (elInd) elInd.style.display = souConsultoria ? 'none' : 'flex';
@@ -322,6 +325,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Notas Fiscais</span>
+                </a>
+
+                <!-- Relatório Semanal (fechamento de caixa) -->
+                <a id="menu-semanal" href="relatorio_semanal.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-emerald-300/80 hover:border-emerald-500 transition group">
+                    <div class="p-3 bg-emerald-50 text-emerald-700 rounded-xl group-hover:bg-emerald-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Relatório Semanal</span>
                 </a>
 
                 <!-- Meus Indicadores (clientes) -->
