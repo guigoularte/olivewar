@@ -136,6 +136,10 @@ service cloud.firestore {
       match /rotinas_dia/{doc} {
         allow read, write: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
       }
+      // Relatórios semanais gerados automaticamente (grava via backend/Admin SDK)
+      match /relatorios_semanais/{doc} {
+        allow read: if consultoriaDaOrg(orgId) || souMembroDaOrg(orgId);
+      }
     }
 
     match /usuarios/{userId} {

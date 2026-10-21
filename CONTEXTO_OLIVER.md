@@ -7,6 +7,10 @@
 App web (mobile-first) para viabilidade econômica de pequenos negócios e para consultorias de campo.
 Usado por: o dono (master), funcionários (fazem relatórios de visita) e clientes.
 
+## Backend (NOVO) — funções serverless na Vercel
+- `api/relatorio-semanal.js` — **Vercel Cron** (seg 11:00 UTC / 08:00 BRT, em `vercel.json`): para cada organização com fechamentos na semana passada, calcula indicadores, salva em `organizacoes/{id}/relatorios_semanais/{segunda}` e envia e-mail (Resend) para o `emailRelatorio` da empresa dona. Usa **firebase-admin** (ignora regras).
+- Variáveis de ambiente na Vercel: `FIREBASE_SERVICE_ACCOUNT` (JSON da conta de serviço), `RESEND_API_KEY`, `FROM_EMAIL` (remetente verificado no Resend), `CRON_SECRET` (protege o endpoint; Vercel manda no header Authorization). `package.json` traz firebase-admin + resend. É a base para lembretes por e-mail e, futuramente, IA.
+
 ## Stack
 - **Front-end estático**: HTML + Tailwind via CDN (`https://cdn.tailwindcss.com`). Sem build.
 - **Backend**: Firebase — **Auth** (e-mail/senha) e **Firestore**. Projeto `olivewar-1e5e2`.
