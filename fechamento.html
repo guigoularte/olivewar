@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -49,6 +49,7 @@
                 basePath = ["usuarios", alvoUid];
                 if (uidParam) document.getElementById('subtitulo').innerText = alvoDados.nome || alvoDados.email || "";
             }
+            if (souMaster) document.getElementById('bloco-import').style.display = 'block';
             document.getElementById('conteudo').classList.remove('hidden');
             await carregar();
         });
@@ -152,6 +153,43 @@
             setTimeout(() => { m.style.display = "none"; }, 4000);
         }
 
+        // Importa fechamentos de um CSV (data,horario,diaSemana,dinheiro,credito,debito,pix,ifood,faturamentoTotal,pedidos)
+        window.importarCSV = async (input) => {
+            const file = input.files && input.files[0]; if (!file) return;
+            if (!basePath) { alert("Abra o fechamento de um cliente/organização antes de importar."); input.value = ""; return; }
+            if (!confirm("Importar os fechamentos deste arquivo? Linhas com a mesma data/horário são atualizadas (não duplicam).")) { input.value = ""; return; }
+            try {
+                const txt = await file.text();
+                const linhas = txt.split(/\r?\n/).filter(l => l.trim());
+                if (linhas.length < 2) { alert("Arquivo vazio."); input.value = ""; return; }
+                const header = linhas[0].split(',').map(s => s.trim().replace(/^﻿/, ''));
+                const col = {}; header.forEach((h, i) => col[h] = i);
+                const n = (v) => parseFloat(String(v == null ? "" : v).replace(',', '.')) || 0;
+                let ok = 0, falhas = 0;
+                for (let i = 1; i < linhas.length; i++) {
+                    const c = linhas[i].split(',');
+                    const data = (c[col.data] || "").trim();
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) { falhas++; continue; }
+                    const horario = (c[col.horario] || "22:00:00").trim();
+                    const ped = parseInt(c[col.pedidos]) || 0;
+                    const fat = n(c[col.faturamentoTotal]);
+                    const rec = {
+                        data, horario, diaSemana: (c[col.diaSemana] || "").trim(),
+                        dinheiro: n(c[col.dinheiro]), credito: n(c[col.credito]), debito: n(c[col.debito]),
+                        pix: n(c[col.pix]), ifood: n(c[col.ifood]),
+                        faturamentoTotal: fat, quantidadePedidos: ped, ticketMedio: ped > 0 ? fat / ped : 0,
+                        saldoLiquido: 0, importado: true, criadoEm: new Date().toISOString()
+                    };
+                    const id = ("imp_" + data + "_" + horario).replace(/[^0-9A-Za-z_-]/g, "");
+                    try { await setDoc(doc(db, basePath[0], basePath[1], "fechamentos", id), rec); ok++; }
+                    catch (e) { console.error(e); falhas++; }
+                }
+                input.value = "";
+                alert(ok + " fechamento(s) importado(s)." + (falhas ? " (" + falhas + " linha(s) ignorada(s))" : ""));
+                await carregar();
+            } catch (e) { alert("Erro ao importar: " + e.message); input.value = ""; }
+        };
+
         const dataBR = (s) => { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
         function renderHistorico() {
             const cont = document.getElementById('lista-historico');
@@ -236,6 +274,10 @@
 
             <!-- HISTÓRICO -->
             <div id="painel-historico" style="display:none">
+                <label id="bloco-import" style="display:none" class="block text-center bg-indigo-50 text-indigo-700 text-xs font-bold py-2 rounded-lg cursor-pointer hover:bg-indigo-100 border border-indigo-200 mb-2">
+                    ⬆ Importar fechamentos (CSV)
+                    <input type="file" accept=".csv,text/csv" class="hidden" onchange="importarCSV(this)">
+                </label>
                 <div id="lista-historico"></div>
             </div>
         </div>
