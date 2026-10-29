@@ -3,7 +3,7 @@
 // Disparado pelo Vercel Cron (toda segunda) ou por um cron externo com o segredo.
 
 const admin = require('firebase-admin');
-const { Resend } = require('resend');
+const { enviarEmail, emailConfigurado } = require('../lib/email');
 
 // Inicializa o Firebase Admin uma vez (credencial via variável de ambiente)
 if (!admin.apps.length) {
@@ -12,7 +12,6 @@ if (!admin.apps.length) {
   } catch (e) { console.error('Falha ao iniciar firebase-admin:', e.message); }
 }
 const db = admin.firestore();
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const brl = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const ymd = (d) => d.toISOString().slice(0, 10);
@@ -76,7 +75,7 @@ module.exports = async (req, res) => {
       // E-mail para a consultoria dona (se configurado)
       let emailDest = '';
       if (org.empresaId) { const emp = await db.collection('empresas').doc(org.empresaId).get(); if (emp.exists) emailDest = emp.data().emailRelatorio || ''; }
-      if (resend && emailDest && process.env.FROM_EMAIL) {
+      if (emailConfigurado() && emailDest) {
         const row = (r, v) => `<tr><td style="padding:4px 8px;color:#555">${r}</td><td style="padding:4px 8px;font-weight:700;text-align:right">${v}</td></tr>`;
         const html = `
           <div style="font-family:Arial,sans-serif;max-width:520px">
@@ -94,7 +93,7 @@ module.exports = async (req, res) => {
             </table>
             <p style="color:#999;font-size:12px;margin-top:16px">Gerado automaticamente pelo OliverApp · https://olivewar.vercel.app</p>
           </div>`;
-        try { await resend.emails.send({ from: process.env.FROM_EMAIL, to: emailDest, subject: `Relatório semanal — ${org.nome || 'Organização'} (${iniStr} a ${fimStr})`, html }); emails++; }
+        try { await enviarEmail(emailDest, `Relatório semanal — ${org.nome || 'Organização'} (${iniStr} a ${fimStr})`, html); emails++; }
         catch (e) { console.error('Falha e-mail ' + orgId + ':', e.message); }
       }
       resultados.push({ org: org.nome, faturamento: ind.faturamento, emailPara: emailDest || '(sem e-mail)' });

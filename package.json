@@ -4,7 +4,6 @@
   "private": true,
   "description": "Oliver - funções serverless (relatórios automáticos)",
   "dependencies": {
-    "firebase-admin": "^12.7.0",
-    "resend": "^4.0.0"
+    "firebase-admin": "^12.7.0"
   }
 }

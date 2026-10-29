@@ -2,13 +2,12 @@
 // com as tarefas dele para HOJE. Dados: empresas/{id}/crm_compromissos.
 
 const admin = require('firebase-admin');
-const { Resend } = require('resend');
+const { enviarEmail, emailConfigurado } = require('../lib/email');
 
 if (!admin.apps.length) {
   try { admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}')) }); } catch (e) { console.error(e.message); }
 }
 const db = admin.firestore();
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const hojeBRT = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
 
 module.exports = async (req, res) => {
@@ -17,7 +16,7 @@ module.exports = async (req, res) => {
   const auth = req.headers['authorization'] || '';
   if (secret && auth !== 'Bearer ' + secret && q !== secret) return res.status(401).json({ error: 'não autorizado' });
   if (!admin.apps.length) return res.status(500).json({ error: 'firebase-admin não configurado' });
-  if (!resend || !process.env.FROM_EMAIL) return res.status(200).json({ ok: true, aviso: 'Resend/FROM_EMAIL não configurados — nada enviado.' });
+  if (!emailConfigurado()) return res.status(200).json({ ok: true, aviso: 'EmailJS não configurado (EMAILJS_PRIVATE_KEY/EMAILJS_TEMPLATE) — nada enviado.' });
 
   const hoje = hojeBRT();
   try {
@@ -52,7 +51,7 @@ module.exports = async (req, res) => {
             <ul style="padding-left:18px">${linhas}</ul>
             <p style="color:#999;font-size:12px;margin-top:16px">Abra o Oliver em <a href="https://olivewar.vercel.app/agenda.html">Agenda / Tarefas</a> · OliverApp</p>
           </div>`;
-        try { await resend.emails.send({ from: process.env.FROM_EMAIL, to: email, subject: `Suas tarefas de hoje (${itens.length})`, html }); enviados++; detalhes.push({ para: email, tarefas: itens.length }); }
+        try { await enviarEmail(email, `Suas tarefas de hoje (${itens.length})`, html); enviados++; detalhes.push({ para: email, tarefas: itens.length }); }
         catch (e) { console.error('email ' + email + ':', e.message); detalhes.push({ para: email, erro: e.message }); }
       }
     }
