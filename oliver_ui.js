@@ -21,6 +21,7 @@
         { href: "app.html", label: "Início", icon: "🏠", always: true },
         { href: "dashboard.html", label: "Dashboard", icon: "📊", key: "relatorios", padrao: false },
         { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "📥", key: "relatorios", padrao: false },
+        { href: "agenda.html", label: "Agenda / Tarefas", icon: "🗓️", key: "relatorios", padrao: false },
         { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
         { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
         { href: "rotinas.html", label: "Rotinas", icon: "📋", orgLink: true },

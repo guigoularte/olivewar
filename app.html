@@ -142,6 +142,9 @@
                 // Relatório Semanal (fechamento de caixa): consultoria ou quem tem fechamento
                 const elSem = document.getElementById('menu-semanal');
                 if (elSem) elSem.style.display = (souConsultoria || func.fechamentoCaixa) ? 'flex' : 'none';
+                // Agenda / Tarefas da equipe (consultoria)
+                const elAgenda = document.getElementById('menu-agenda');
+                if (elAgenda) elAgenda.style.display = souConsultoria ? 'flex' : 'none';
                 // "Meus Indicadores": para clientes (quem não é consultoria)
                 const elInd = document.getElementById('menu-indicadores');
                 if (elInd) elInd.style.display = souConsultoria ? 'none' : 'flex';
@@ -389,6 +392,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Notas Recebidas</span>
+                </a>
+
+                <!-- Agenda / Tarefas da equipe (consultoria) -->
+                <a id="menu-agenda" href="agenda.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-indigo-300/80 hover:border-indigo-500 transition group">
+                    <div class="p-3 bg-indigo-50 text-indigo-700 rounded-xl group-hover:bg-indigo-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Agenda / Tarefas</span>
                 </a>
 
                 <!-- CRM (empresas, funcionários e master) -->

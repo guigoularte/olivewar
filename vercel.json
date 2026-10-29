@@ -1,5 +1,6 @@
 {
   "crons": [
-    { "path": "/api/relatorio-semanal", "schedule": "0 11 * * 1" }
+    { "path": "/api/relatorio-semanal", "schedule": "0 11 * * 1" },
+    { "path": "/api/lembrete-tarefas", "schedule": "0 10 * * *" }
   ]
 }

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Agenda / Tarefas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let meuUid = null, meuNome = "", isAdmin = false, minhaEmpresa = null;
+        let equipe = [], tarefas = [];
+        let refMes = new Date(); refMes.setDate(1);
+        const hojeStr = ymdLocal(new Date());
+        let diaSel = hojeStr;
+
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        function ymdLocal(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate() + 0).padStart(2, "0"); }
+        const dataBR = (ds) => { const d = new Date(ds + "T00:00:00"); return isNaN(d) ? ds : d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }); };
+        const hora = (iso) => { if (!iso || iso.length < 16) return ""; return iso.slice(11, 16); };
+        const col = () => collection(db, "empresas", minhaEmpresa, "crm_compromissos");
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const d = meu.exists() ? meu.data() : {};
+            meuNome = (d.nome || user.email || "").trim();
+            isAdmin = d.role === "master" || d.role === "empresa_admin";
+            const souConsultoria = isAdmin || (d.funcionalidades && d.funcionalidades.relatorios === true);
+            minhaEmpresa = d.empresaId || null;
+            if (!souConsultoria) { alert("A Agenda é da equipe da consultoria."); window.location.href = "app.html"; return; }
+            if (!minhaEmpresa) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
+            document.getElementById('conteudo').classList.remove('hidden');
+            await carregar();
+        });
+
+        async function carregar() {
+            try {
+                const [us, ts] = await Promise.all([
+                    getDocs(query(collection(db, "usuarios"), where("empresaId", "==", minhaEmpresa))),
+                    getDocs(col())
+                ]);
+                equipe = us.docs.map(x => ({ id: x.id, ...x.data() }))
+                    .filter(u => u.role === "master" || u.role === "empresa_admin" || (u.funcionalidades && u.funcionalidades.relatorios === true))
+                    .sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+                tarefas = ts.docs.map(x => ({ id: x.id, ...x.data() }));
+            } catch (e) { alert("Erro ao carregar: " + e.message); return; }
+            // preenche o select de responsável
+            const sel = document.getElementById('t-responsavel');
+            sel.innerHTML = equipe.map(u => `<option value="${u.id}" ${u.id === meuUid ? "selected" : ""}>${esc(u.nome || u.email || u.id)}${u.id === meuUid ? " (eu)" : ""}</option>`).join('');
+            render();
+        }
+
+        // tarefas visíveis: admin vê tudo; funcionário vê o que é dele (responsável) ou criou
+        function visiveis() {
+            if (isAdmin) return tarefas;
+            return tarefas.filter(t => (t.responsavelUid || t.funcionarioUid) === meuUid || t.criadoPorUid === meuUid);
+        }
+        const respDe = (t) => t.responsavelNome || t.funcionarioNome || "—";
+
+        function render() { renderResumo(); renderCalendario(); renderDia(); }
+
+        function renderResumo() {
+            const vis = visiveis();
+            const meusHoje = vis.filter(t => (t.data || "").slice(0, 10) === hojeStr && t.status !== "concluido" && (t.responsavelUid || t.funcionarioUid) === meuUid);
+            const atrasadas = vis.filter(t => t.status !== "concluido" && (t.data || "").slice(0, 10) < hojeStr && (t.responsavelUid || t.funcionarioUid) === meuUid);
+            document.getElementById('resumo').innerHTML =
+                `<b class="text-orange-600">${meusHoje.length}</b> pra hoje` + (atrasadas.length ? ` · <b class="text-red-600">${atrasadas.length}</b> atrasada(s)` : "");
+        }
+
+        window.mudarMes = (delta) => { refMes.setMonth(refMes.getMonth() + delta); renderCalendario(); };
+        window.selecionarDia = (ds) => { diaSel = ds; renderCalendario(); renderDia(); };
+
+        function renderCalendario() {
+            const ano = refMes.getFullYear(), mes = refMes.getMonth();
+            document.getElementById('mes-label').innerText = refMes.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+            const primeiro = new Date(ano, mes, 1);
+            const ini = new Date(primeiro); ini.setDate(1 - ((primeiro.getDay() + 6) % 7)); // segunda da 1ª semana
+            const vis = visiveis();
+            const porDia = {};
+            vis.forEach(t => { const d = (t.data || "").slice(0, 10); if (d) (porDia[d] = porDia[d] || []).push(t); });
+            let html = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(d => `<div class="text-center text-[10px] font-bold text-slate-400 py-1">${d}</div>`).join('');
+            const cur = new Date(ini);
+            for (let i = 0; i < 42; i++) {
+                const ds = ymdLocal(cur);
+                const noMes = cur.getMonth() === mes;
+                const lista = porDia[ds] || [];
+                const hojeCls = ds === hojeStr ? "ring-2 ring-orange-400" : "";
+                const selCls = ds === diaSel ? "bg-orange-50 border-orange-200" : "bg-white border-slate-100";
+                html += `<button onclick="selecionarDia('${ds}')" class="min-h-[50px] rounded-lg border ${selCls} ${hojeCls} p-1 text-left ${noMes ? "" : "opacity-40"}">
+                    <div class="text-[11px] font-bold ${noMes ? "text-slate-700" : "text-slate-400"}">${cur.getDate()}</div>
+                    ${lista.length ? `<div class="mt-0.5 flex flex-wrap gap-0.5">${lista.slice(0, 4).map(t => `<span class="w-1.5 h-1.5 rounded-full ${t.status === "concluido" ? "bg-slate-300" : "bg-orange-500"}"></span>`).join('')}</div>` : ""}
+                </button>`;
+                cur.setDate(cur.getDate() + 1);
+            }
+            document.getElementById('grade').innerHTML = html;
+        }
+
+        function renderDia() {
+            document.getElementById('dia-label').innerText = dataBR(diaSel);
+            document.getElementById('nova-data').value = diaSel + "T09:00";
+            const lista = visiveis().filter(t => (t.data || "").slice(0, 10) === diaSel)
+                .sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+            const cont = document.getElementById('lista-dia');
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 py-3">Nenhuma tarefa neste dia.</p>'; return; }
+            cont.innerHTML = lista.map(t => {
+                const feito = t.status === "concluido";
+                const h = hora(t.data);
+                return `<div class="bg-white rounded-xl border ${feito ? "border-slate-200 opacity-60" : "border-slate-200"} p-3 mb-2">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <div class="font-bold text-slate-800 text-sm ${feito ? "line-through" : ""}">${h ? h + " · " : ""}${esc(t.titulo)}</div>
+                            <div class="text-[11px] text-slate-500">👤 ${esc(respDe(t))}${t.criadoPorNome && t.criadoPorUid !== (t.responsavelUid || t.funcionarioUid) ? " · criada por " + esc(t.criadoPorNome) : ""}${t.contatoNome ? " · " + esc(t.contatoNome) : ""}</div>
+                            ${t.descricao ? `<div class="text-[11px] text-slate-500 mt-0.5">${esc(t.descricao)}</div>` : ""}
+                        </div>
+                        <div class="shrink-0 flex flex-col items-end gap-1">
+                            ${feito ? '<span class="text-[9px] text-emerald-600 font-bold">FEITA</span>' : `<button onclick="concluir('${t.id}')" title="Concluir" class="text-emerald-500 hover:text-emerald-700">✔</button>`}
+                            <button onclick="excluir('${t.id}')" class="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        window.toggleForm = () => { const el = document.getElementById('form-nova'); el.style.display = el.style.display === "block" ? "none" : "block"; };
+
+        window.addTarefa = async () => {
+            const titulo = document.getElementById('t-titulo').value.trim();
+            const data = document.getElementById('nova-data').value;
+            if (!titulo || !data) { alert("Informe o título e a data/hora."); return; }
+            const rUid = document.getElementById('t-responsavel').value;
+            const resp = equipe.find(u => u.id === rUid);
+            const respNome = resp ? (resp.nome || resp.email || "") : meuNome;
+            try {
+                await addDoc(col(), {
+                    titulo, data, tipo: document.getElementById('t-tipo').value,
+                    descricao: document.getElementById('t-descricao').value.trim(),
+                    responsavelUid: rUid, responsavelNome: respNome,
+                    funcionarioUid: rUid, funcionarioNome: respNome,       // compat com a aba Agenda do CRM
+                    criadoPorUid: meuUid, criadoPorNome: meuNome,
+                    status: "pendente", criadoEm: serverTimestamp()
+                });
+                document.getElementById('t-titulo').value = ""; document.getElementById('t-descricao').value = "";
+                document.getElementById('form-nova').style.display = "none";
+                await carregar();
+            } catch (e) { alert("Erro ao criar tarefa: " + e.message); }
+        };
+
+        window.concluir = async (id) => {
+            try { await updateDoc(doc(db, "empresas", minhaEmpresa, "crm_compromissos", id), { status: "concluido" }); await carregar(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+        window.excluir = async (id) => {
+            if (!confirm("Excluir esta tarefa?")) return;
+            try { await deleteDoc(doc(db, "empresas", minhaEmpresa, "crm_compromissos", id)); await carregar(); }
+            catch (e) { alert("Erro: " + e.message); }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div id="conteudo" class="hidden overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-1">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-blue-950">Agenda / Tarefas</h1>
+                <div class="w-8"></div>
+            </div>
+            <p id="resumo" class="text-[11px] text-slate-500 mb-2 text-center">—</p>
+
+            <button onclick="toggleForm()" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ Nova tarefa</button>
+            <div id="form-nova" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-3 space-y-2">
+                <input id="t-titulo" placeholder="O que precisa ser feito *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex gap-2">
+                    <input id="nova-data" type="datetime-local" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <select id="t-tipo" class="w-28 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="tarefa">Tarefa</option><option value="visita">Visita</option>
+                        <option value="ligacao">Ligação</option><option value="reuniao">Reunião</option>
+                    </select>
+                </div>
+                <label class="text-[10px] font-semibold text-slate-400">Responsável (quem vai fazer)</label>
+                <select id="t-responsavel" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></select>
+                <textarea id="t-descricao" rows="2" placeholder="Observações" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                <button onclick="addTarefa()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar tarefa</button>
+            </div>
+
+            <!-- Calendário -->
+            <div class="bg-white rounded-xl border border-slate-200 p-2 mb-3">
+                <div class="flex items-center justify-between mb-1">
+                    <button onclick="mudarMes(-1)" class="px-2 text-orange-700 font-black text-lg">‹</button>
+                    <span id="mes-label" class="text-xs font-bold text-slate-700 capitalize">—</span>
+                    <button onclick="mudarMes(1)" class="px-2 text-orange-700 font-black text-lg">›</button>
+                </div>
+                <div id="grade" class="grid grid-cols-7 gap-1"></div>
+            </div>
+
+            <!-- Dia selecionado -->
+            <p class="text-xs font-bold text-slate-700 mb-1 capitalize">📌 <span id="dia-label">—</span></p>
+            <div id="lista-dia"></div>
+        </div>
+    </div>
+</body>
+</html>
