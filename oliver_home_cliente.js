@@ -1,12 +1,12 @@
-// Home do CLIENTE (dono do negócio) — painel orientado a tarefas.
+// Home do CLIENTE (dono do negócio) — "cockpit" orientado a tarefas.
 // Usada pela app.html:
-//  - Desktop: painel completo (resumo financeiro, envio de nota, fila de
-//    conciliação e extrato recente), no estilo do mockup aprovado.
+//  - Desktop: cockpit completo (banner da consultoria, envio de nota, fila de
+//    conciliação, extrato recente e painel de saúde do negócio), nas cores do Oliver.
 //  - Celular: faixa compacta e dinâmica acima dos atalhos de navegação.
 //
-// Ciclo nota -> caixa (Fase 1): o envio da foto grava a nota para a consultoria
-// E cria um PRÉ-LANÇAMENTO em Contas a Pagar (status "pre_lancamento"), que o
-// cliente concilia com 1 clique ("Aprovar e lançar" -> vira conta a pagar).
+// IMPORTANTE: este layout segue o mockup do "cockpit", mas mantém TODAS as funções
+// já criadas no Oliver (envio de nota -> pré-lançamento, conciliação, fluxo de caixa,
+// itens para resolver). Nada de dado inventado: os números vêm do Firestore do cliente.
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -16,8 +16,13 @@ const num = (v) => { const n = parseFloat(String(v).replace(",", ".")); return i
 const ymdLocal = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const mesAnterior = (mes) => { const [a, m] = mes.split("-").map(Number); const d = new Date(a, m - 2, 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); };
 
-const WA_MSG = "Olá Guilherme! Vim pelo app Oliver e gostaria de falar com você.";
-const WA_URL = "https://wa.me/5551989286351?text=" + encodeURIComponent(WA_MSG);
+// WhatsApp da consultoria (usa o telefone do branding; cai no suporte do Oliver se não houver)
+function waLink(tel, msg) {
+    let dig = String(tel || "").replace(/\D/g, "");
+    if (dig.length < 10) dig = "5551989286351";
+    else if (dig.length <= 11) dig = "55" + dig;
+    return "https://wa.me/" + dig + "?text=" + encodeURIComponent(msg);
+}
 
 // Comprime a foto da nota para caber no limite do Firestore (base64).
 function comprimirImagem(file, maxLado = 1200, qualidade = 0.65) {
@@ -40,12 +45,14 @@ function comprimirImagem(file, maxLado = 1200, qualidade = 0.65) {
     });
 }
 
-// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome })
+// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel })
 export async function renderHomeCliente(opts) {
     const { db, uid, empresaId, func, mount, isDesktop } = opts;
     const nome = opts.nome || (localStorage.getItem("oliverNome") || "");
     const consultoriaNome = opts.consultoriaNome || "";
+    const consultoriaTel = opts.consultoriaTel || "";
     const temNotas = !!(func && func.notasFiscais) && !!empresaId;
+    const temMargem = !!(func && func.calculoMargem);
     let fotoPronta = "";
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
@@ -77,7 +84,6 @@ export async function renderHomeCliente(opts) {
                 } else { aPagarSemana += v; }
                 return;
             }
-            // realizado (pago/recebido)
             realizados.push(m);
             if (m.tipo === "entrada") entTot += v; else saiTot += v;
             const md = (m.data || "").slice(0, 7);
@@ -94,19 +100,21 @@ export async function renderHomeCliente(opts) {
             saldoAtual: entTot - saiTot, entMes, saiMes, saldoMes,
             trend: saldoAnt !== 0 ? ((saldoMes - saldoAnt) / Math.abs(saldoAnt)) * 100 : null,
             aPagarTotal, aPagarSemana, vencemHoje, vencidas,
-            preLanc, extrato: realizados.slice(0, 6), itensPend
+            preLanc, extrato: realizados.slice(0, 8), itensPend
         };
     }
 
-    // ---------- Pedaços de HTML comuns ----------
-    // Cartão de conciliação (editável — sem OCR ainda; os mesmos data-attrs servem aos dois layouts)
+    // ---------- Cartão de conciliação (editável; mesmos data-attrs nos 2 layouts) ----------
     function cartaoPreLanc(m) {
         const venc = m.vencimento || ymdLocal();
-        return `<div class="bg-white border border-slate-200 rounded-xl p-3.5 hover:border-orange-300 transition-all" data-pre="${m.id}">
+        return `<div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 hover:border-orange-300 transition-all" data-pre="${m.id}">
             <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+                <div class="w-10 h-10 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center shrink-0 mt-0.5"><i class="fa-solid fa-receipt"></i></div>
                 <div class="flex-1 min-w-0">
-                    <input data-f="descricao" value="${esc(m.descricao || "")}" placeholder="Fornecedor / descrição" class="w-full font-bold text-sm text-slate-800 bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-orange-400 outline-none px-0 py-0.5">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <input data-f="descricao" value="${esc(m.descricao || "")}" placeholder="Fornecedor / descrição" class="font-bold text-sm text-slate-800 bg-transparent border-0 border-b border-transparent hover:border-slate-200 focus:border-orange-400 outline-none px-0 py-0.5 flex-1 min-w-[140px]">
+                        <span class="bg-amber-100 text-amber-800 text-[9px] font-bold px-2 py-0.5 rounded-full">Nota enviada</span>
+                    </div>
                     <div class="grid grid-cols-3 gap-2 mt-2">
                         <div><label class="text-[10px] text-slate-400">Valor R$</label><input data-f="valor" type="number" step="0.01" value="${m.valor ? num(m.valor) : ""}" class="w-full p-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-300"></div>
                         <div><label class="text-[10px] text-slate-400">Vencimento</label><input data-f="vencimento" type="date" value="${venc}" class="w-full p-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-orange-300"></div>
@@ -115,46 +123,66 @@ export async function renderHomeCliente(opts) {
                 </div>
             </div>
             <div class="flex items-center justify-end gap-2 mt-3">
-                <button data-a="descartar" class="text-slate-400 hover:text-rose-600 text-xs px-2 py-2 rounded-lg"><i class="fa-solid fa-trash"></i></button>
-                <button data-a="confirmar" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow-sm flex items-center gap-1"><i class="fa-solid fa-check"></i><span>Aprovar e lançar</span></button>
+                <button data-a="descartar" class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-rose-600 text-xs font-semibold"><i class="fa-solid fa-trash"></i></button>
+                <button data-a="confirmar" class="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1"><i class="fa-solid fa-check"></i><span>Confirmar no caixa</span></button>
             </div>
         </div>`;
     }
 
     const datalist = `<datalist id="cats-pre"><option>Fornecedor</option><option>Aluguel</option><option>Salários</option><option>Impostos</option><option>Energia/Água</option><option>Serviços</option><option>Outros</option></datalist>`;
 
-    // ======================= LAYOUT DESKTOP =======================
+    // ======================= LAYOUT DESKTOP (cockpit) =======================
     function htmlDesktop(d) {
         const trend = d.trend === null ? "" :
-            `<p class="text-[11px] mt-1 font-medium flex items-center ${d.trend >= 0 ? "text-emerald-600" : "text-rose-600"}"><i class="fa-solid fa-arrow-trend-${d.trend >= 0 ? "up" : "down"} mr-1"></i>${d.trend >= 0 ? "+" : ""}${d.trend.toFixed(0)}% vs. mês passado</p>`;
-        const cardSaldo = `<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-medium text-slate-500">Saldo em caixa</p><h3 class="text-2xl font-bold ${d.saldoAtual >= 0 ? "text-slate-800" : "text-rose-600"} mt-1">${brl(d.saldoAtual)}</h3>${trend}</div>
-            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl"><i class="fa-solid fa-wallet"></i></div>
-        </div>`;
-        const avisoVenc = d.vencemHoje > 0
-            ? `<p class="text-[11px] text-amber-600 mt-1 font-medium flex items-center"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${d.vencemHoje} vence(m) hoje</p>`
-            : (d.vencidas > 0 ? `<p class="text-[11px] text-rose-600 mt-1 font-medium flex items-center"><i class="fa-solid fa-circle-exclamation mr-1"></i>${d.vencidas} vencida(s)</p>` : `<p class="text-[11px] text-slate-400 mt-1">nada vence hoje</p>`);
-        const cardPagar = `<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-            <div><p class="text-xs font-medium text-slate-500">A pagar na semana</p><h3 class="text-2xl font-bold text-rose-600 mt-1">${brl(d.aPagarSemana)}</h3>${avisoVenc}</div>
-            <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center text-xl"><i class="fa-solid fa-calendar-xmark"></i></div>
-        </div>`;
-        const cardNotas = `<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between border-l-4 border-l-orange-500">
-            <div><p class="text-xs font-medium text-slate-500">Notas para conciliar</p><h3 class="text-2xl font-bold text-orange-600 mt-1">${d.preLanc.length} nota(s)</h3><p class="text-[11px] text-slate-500 mt-1">Aguardando sua confirmação</p></div>
-            <div class="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center text-xl"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-        </div>`;
+            `<span class="text-[11px] font-bold ${d.trend >= 0 ? "text-emerald-200" : "text-amber-100"}">${d.trend >= 0 ? "▲ +" : "▼ "}${d.trend.toFixed(0)}% vs. mês passado</span>`;
 
-        const upload = temNotas ? `
-            <div class="lg:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="font-bold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-orange-600"></i><span>Enviar nota fiscal</span></h3>
-                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-semibold">leitura automática em breve</span>
+        // Banner da consultoria (cores do Oliver: laranja -> âmbar)
+        const banner = `
+        <section class="bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 rounded-3xl p-5 md:p-6 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden mb-6">
+            <div class="absolute -right-10 -bottom-10 w-56 h-56 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                <div class="lg:col-span-8 space-y-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="bg-white/20 backdrop-blur text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider"><i class="fa-solid fa-hand-sparkles mr-1"></i>Bem-vindo de volta</span>
+                        ${consultoriaNome ? `<span class="text-orange-50 text-xs"><i class="fa-solid fa-building mr-1"></i>${esc(consultoriaNome)}</span>` : ""}
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-black">Olá, ${esc(nome || "bem-vindo")}!</h2>
+                    <p class="text-sm font-medium leading-relaxed text-orange-50">
+                        ${d.preLanc.length > 0
+                            ? `Você tem <strong class="text-white underline decoration-amber-200">${d.preLanc.length} nota(s)</strong> para conciliar. Revise e lance no caixa — assim seus relatórios ficam sempre atualizados.`
+                            : `Envie as notas das suas compras para manter o fluxo de caixa e os relatórios da consultoria sempre atualizados.`}
+                    </p>
+                    <div class="pt-1">
+                        <button id="oliver-open-consultor" class="bg-white text-orange-700 hover:bg-orange-50 text-xs font-bold px-3.5 py-2 rounded-xl transition inline-flex items-center gap-2"><i class="fa-solid fa-comments"></i>Falar com a consultoria</button>
+                    </div>
                 </div>
-                <p class="text-xs text-slate-500 mb-4">Fotografe a nota: ela vai para a sua consultoria e já entra como conta a pagar para você confirmar.</p>
-                <label data-el="drop" class="block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-orange-500 transition-colors bg-slate-50 cursor-pointer group">
+                <div class="lg:col-span-4 bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+                    <p class="text-xs text-orange-100 font-medium">Saldo do mês</p>
+                    <h3 class="text-2xl font-black text-white mt-0.5">${brl(d.saldoMes)}</h3>
+                    <div class="mt-1">${trend || `<span class="text-[11px] text-orange-100">entradas ${brl(d.entMes)}</span>`}</div>
+                    <div class="mt-3 pt-3 border-t border-white/20 flex items-center justify-between text-[11px] text-orange-50">
+                        <span><i class="fa-solid fa-file-invoice-dollar mr-1"></i>${d.preLanc.length} a conciliar</span>
+                        <span><i class="fa-solid fa-calendar-xmark mr-1"></i>${brl(d.aPagarSemana)} a pagar</span>
+                    </div>
+                </div>
+            </div>
+        </section>`;
+
+        // --- Coluna esquerda: envio + conciliação + extrato ---
+        const upload = temNotas ? `
+            <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-orange-600"></i><span>Envio rápido de notas</span></h3>
+                        <p class="text-xs text-slate-500">Alimente o fluxo de caixa sem digitação manual.</p>
+                    </div>
+                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-bold">leitura automática em breve</span>
+                </div>
+                <label data-el="drop" class="block border-2 border-dashed border-orange-300 bg-orange-50/40 hover:bg-orange-50 rounded-2xl p-6 text-center cursor-pointer transition-all group">
                     <input type="file" data-el="foto" accept="image/*" capture="environment" class="hidden">
-                    <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform"><i class="fa-solid fa-receipt text-xl"></i></div>
-                    <p class="text-xs font-semibold text-slate-700" data-el="drop-label">Arraste a foto aqui ou <span class="text-orange-600 underline">clique para selecionar</span></p>
-                    <p class="text-[10px] text-slate-400 mt-1">PNG, JPG (foto do cupom/nota)</p>
+                    <div class="w-12 h-12 bg-white text-orange-600 rounded-2xl flex items-center justify-center text-xl mx-auto shadow-md group-hover:scale-110 transition-transform"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+                    <p class="text-sm font-bold text-slate-800 mt-2" data-el="drop-label">Arraste a nota aqui ou <span class="text-orange-600 underline">clique para enviar</span></p>
+                    <p class="text-xs text-slate-400">Foto do cupom / nota (PNG, JPG)</p>
                 </label>
                 <img data-el="preview" class="hidden w-full max-h-48 object-contain rounded-lg border border-slate-100 mt-3">
                 <div data-el="campos" class="hidden mt-3 space-y-2">
@@ -163,61 +191,122 @@ export async function renderHomeCliente(opts) {
                     <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center mt-2"></p>
-            </div>` : "";
+            </section>` : "";
 
         const cartoes = d.preLanc.map(cartaoPreLanc).join("");
-        const filaVazia = `<div class="text-center py-10 text-sm text-slate-400"><i class="fa-regular fa-circle-check text-3xl text-slate-300 mb-2"></i><p>Nenhuma nota aguardando.${temNotas ? " Envie uma nota ao lado para começar." : ""}</p></div>`;
+        const extras = [];
+        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-green-400 transition"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check"></i></div><div><p class="font-bold text-sm text-slate-800">Itens para resolver</p><p class="text-xs text-slate-500">Pendências do seu acompanhamento</p></div></div><span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.itensPend}</span></a>`);
+        if (d.vencidas > 0) extras.push(`<a href="fluxo_caixa.html" class="flex items-center justify-between p-4 rounded-2xl bg-rose-50 border border-rose-200 hover:border-rose-400 transition"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center"><i class="fa-solid fa-triangle-exclamation"></i></div><div><p class="font-bold text-sm text-rose-700">Contas vencidas</p><p class="text-xs text-rose-600/80">Veja no fluxo de caixa</p></div></div><span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.vencidas}</span></a>`);
+        const filaVazia = `<div class="text-center py-8 text-sm text-slate-400"><i class="fa-regular fa-circle-check text-3xl text-slate-300 mb-2"></i><p>Nenhuma pendência no momento.${temNotas ? " Envie uma nota acima para começar." : ""}</p></div>`;
         const fila = `
-            <div class="${temNotas ? "lg:col-span-7" : "lg:col-span-12"} bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div class="flex items-center justify-between mb-3">
+            <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                     <div>
-                        <h3 class="font-bold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-list-check text-orange-600"></i><span>Itens para resolver (conciliação rápida)</span></h3>
-                        <p class="text-xs text-slate-500">Confira os dados da nota e lance no fluxo de caixa com 1 clique.</p>
+                        <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-list-check text-orange-600"></i><span>Pendências & conciliação</span></h3>
+                        <p class="text-xs text-slate-500">Confira os dados da nota e lance no caixa com 1 clique.</p>
                     </div>
-                    <span class="bg-orange-100 text-orange-700 font-bold text-xs px-2.5 py-1 rounded-full border border-orange-200">${d.preLanc.length} pendente(s)</span>
+                    <span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.preLanc.length + (d.itensPend > 0 ? 1 : 0) + (d.vencidas > 0 ? 1 : 0)} pendente(s)</span>
                 </div>
-                <div class="space-y-3 mt-4 max-h-[360px] overflow-y-auto pr-1">${cartoes || filaVazia}</div>
-            </div>`;
+                <div class="space-y-3">${(cartoes + extras.join("")) || filaVazia}</div>
+            </section>`;
 
-        // Extrato recente
         const linhas = d.extrato.map((m) => {
             const entrada = m.tipo === "entrada";
-            const origem = m.origem === "nota" ? `<span class="bg-orange-50 text-orange-700 text-[10px] px-2 py-0.5 rounded font-medium">Nota conciliada</span>`
-                : (entrada ? `<span class="bg-blue-50 text-blue-700 text-[10px] px-2 py-0.5 rounded font-medium">Venda / Entrada</span>` : `<span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-0.5 rounded font-medium">Lançamento</span>`);
+            const origem = m.origem === "nota" ? `<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold"><i class="fa-solid fa-receipt mr-1"></i>Nota</span>`
+                : (entrada ? `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">Entrada</span>` : `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-medium">Lançamento</span>`);
             return `<tr>
-                <td class="py-3 px-3 font-medium whitespace-nowrap">${m.data ? m.data.split("-").reverse().join("/") : ""}</td>
-                <td class="py-3 px-3 font-semibold text-slate-800">${esc(m.descricao || "")}</td>
-                <td class="py-3 px-3">${origem}</td>
-                <td class="py-3 px-3">${esc(m.categoria || "—")}</td>
-                <td class="py-3 px-3 text-right font-bold ${entrada ? "text-emerald-600" : "text-rose-600"} whitespace-nowrap">${entrada ? "+" : "-"} ${brl(m.valor)}</td>
+                <td class="py-3 font-semibold text-slate-800"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full ${entrada ? "bg-emerald-500" : "bg-rose-500"}"></span><span>${esc(m.descricao || "")}</span></div></td>
+                <td class="py-3 text-slate-500">${esc(m.categoria || "—")}</td>
+                <td class="py-3">${origem}</td>
+                <td class="py-3 font-extrabold ${entrada ? "text-emerald-600" : "text-rose-600"} text-right whitespace-nowrap">${entrada ? "+" : "-"} ${brl(m.valor)}</td>
             </tr>`;
         }).join("");
         const extrato = `
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                <div class="flex items-center justify-between gap-2 mb-4">
-                    <div><h3 class="font-bold text-slate-800 text-base">Extrato recente do fluxo de caixa</h3><p class="text-xs text-slate-500">Últimas movimentações já lançadas.</p></div>
-                    <a href="fluxo_caixa.html" class="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium">Abrir fluxo de caixa</a>
+            <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between mb-3">
+                    <div><h3 class="font-extrabold text-slate-800 text-base">Fluxo de caixa recente</h3><p class="text-xs text-slate-500">Últimas entradas e saídas já lançadas.</p></div>
+                    <a href="fluxo_caixa.html" class="text-xs font-bold text-orange-600 hover:underline">Ver caixa completo →</a>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left text-xs text-slate-600">
-                        <thead class="bg-slate-50 uppercase text-[10px] text-slate-400 font-bold border-b border-slate-200"><tr>
-                            <th class="py-2.5 px-3">Data</th><th class="py-2.5 px-3">Descrição</th><th class="py-2.5 px-3">Origem</th><th class="py-2.5 px-3">Categoria</th><th class="py-2.5 px-3 text-right">Valor</th>
-                        </tr></thead>
-                        <tbody class="divide-y divide-slate-100">${linhas || `<tr><td colspan="5" class="text-center text-slate-400 py-8">Nenhum lançamento ainda.</td></tr>`}</tbody>
+                    <table class="w-full text-left text-xs">
+                        <thead><tr class="border-b border-slate-100 text-slate-400 uppercase text-[10px] tracking-wider"><th class="pb-2 font-bold">Descrição</th><th class="pb-2 font-bold">Categoria</th><th class="pb-2 font-bold">Origem</th><th class="pb-2 font-bold text-right">Valor</th></tr></thead>
+                        <tbody class="divide-y divide-slate-100">${linhas || `<tr><td colspan="4" class="text-center text-slate-400 py-8">Nenhum lançamento ainda.</td></tr>`}</tbody>
                     </table>
+                </div>
+            </section>`;
+
+        // --- Coluna direita: saúde do negócio (dados reais) + consultoria ---
+        const kpi = (rotulo, valor, cor, sub) => `<div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-medium"><span>${rotulo}</span>${sub || ""}</div>
+            <div class="text-2xl font-black ${cor} mt-1">${valor}</div></div>`;
+        const avisoHoje = d.vencemHoje > 0 ? `<span class="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-full">${d.vencemHoje} hoje</span>` : (d.vencidas > 0 ? `<span class="text-rose-600 font-bold bg-rose-50 px-2 py-0.5 rounded-full">${d.vencidas} vencida(s)</span>` : "");
+        const saude = `
+            <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm space-y-4">
+                <div class="border-b border-slate-100 pb-3">
+                    <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-heart-pulse text-orange-600"></i><span>Saúde do negócio</span></h3>
+                    <p class="text-xs text-slate-500">Seus números, atualizados em tempo real.</p>
+                </div>
+                ${kpi("Saldo em caixa", brl(d.saldoAtual), d.saldoAtual >= 0 ? "text-slate-800" : "text-rose-600")}
+                ${kpi("A pagar na semana", brl(d.aPagarSemana), "text-rose-600", avisoHoje)}
+                ${kpi("Entradas do mês", brl(d.entMes), "text-emerald-600")}
+                ${kpi("Notas a conciliar", d.preLanc.length + "", "text-orange-600")}
+                <div class="grid grid-cols-1 gap-2 pt-1">
+                    <a href="fluxo_caixa.html" class="w-full py-2.5 bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-xs rounded-2xl border border-orange-200 transition flex items-center justify-center gap-2">Abrir fluxo de caixa <i class="fa-solid fa-arrow-right text-xs"></i></a>
+                    <a href="indicadores.html" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-2xl border border-slate-200 transition flex items-center justify-center gap-2">Meus indicadores</a>
+                    ${temMargem ? `<a href="calculo_margem.html" class="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-2xl border border-slate-200 transition flex items-center justify-center gap-2">Cálculo de margem</a>` : ""}
+                </div>
+            </section>`;
+
+        const consultoriaCard = `
+            <section class="bg-blue-950 text-white rounded-3xl p-5 border border-blue-900 space-y-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-orange-600 flex items-center justify-center text-lg text-white"><i class="fa-solid fa-handshake"></i></div>
+                    <div><h4 class="font-bold text-sm text-white">${consultoriaNome ? esc(consultoriaNome) : "Sua consultoria"}</h4><p class="text-xs text-blue-200">Acompanhamento do seu negócio</p></div>
+                </div>
+                <p class="text-xs text-blue-100/90">Dúvidas sobre notas, caixa ou metas? Fale direto com quem cuida do seu negócio.</p>
+                <button id="oliver-open-consultor-2" class="w-full py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl transition inline-flex items-center justify-center gap-2"><i class="fa-brands fa-whatsapp"></i>Falar com a consultoria</button>
+            </section>`;
+
+        // --- Modal "Falar com a consultoria" (envia pelo WhatsApp de verdade) ---
+        const modal = `
+            <div id="oliver-modal-consultor" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                <div class="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-100">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-2xl bg-orange-600 text-white flex items-center justify-center"><i class="fa-solid fa-headset"></i></div>
+                            <div><h3 class="font-bold text-slate-800 text-sm">Falar com a consultoria</h3><p class="text-xs text-slate-400">Abre no WhatsApp com sua mensagem pronta</p></div>
+                        </div>
+                        <button data-m="fechar" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Assunto</label>
+                            <select data-m="assunto" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700">
+                                <option>Dúvida sobre envio de notas fiscais</option>
+                                <option>Dúvida sobre o fluxo de caixa</option>
+                                <option>Ajuste no acompanhamento / metas</option>
+                                <option>Outros assuntos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Mensagem</label>
+                            <textarea data-m="msg" rows="3" placeholder="Escreva sua mensagem..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:border-orange-500"></textarea>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 pt-1">
+                        <button data-m="fechar" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl">Cancelar</button>
+                        <button data-m="enviar" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl inline-flex items-center justify-center gap-2"><i class="fa-brands fa-whatsapp"></i>Enviar pelo WhatsApp</button>
+                    </div>
                 </div>
             </div>`;
 
-        const badge = consultoriaNome ? `<span class="bg-orange-100 text-orange-700 text-xs px-2.5 py-0.5 rounded-full font-semibold border border-orange-200"><i class="fa-solid fa-building mr-1"></i>${esc(consultoriaNome)}</span>` : "";
         return `
-            <div class="mb-5">
-                <div class="flex items-center gap-2 flex-wrap"><h2 class="text-xl font-bold text-slate-800">Olá, ${esc(nome || "bem-vindo")}</h2>${badge}</div>
-                <p class="text-xs text-slate-500 mt-0.5">Acompanhe seu caixa, envie notas e resolva pendências em um só lugar.</p>
+            ${banner}
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-8 space-y-6">${upload}${fila}${extrato}</div>
+                <div class="lg:col-span-4 space-y-6">${saude}${consultoriaCard}</div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">${cardSaldo}${cardPagar}${cardNotas}</div>
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-start">${upload}${fila}</div>
-            ${extrato}
-            ${datalist}`;
+            ${modal}${datalist}`;
     }
 
     // ======================= LAYOUT CELULAR =======================
@@ -266,7 +355,7 @@ export async function renderHomeCliente(opts) {
                     <button id="oliver-balao-x" style="position:absolute;top:6px;right:9px;color:#94a3b8;font-size:14px;background:none;border:0;cursor:pointer">✕</button>
                     <p style="font-size:13px;font-weight:800;color:#1e293b;margin-bottom:4px">Oi, eu sou o Oliver 👋</p>
                     <p id="oliver-dica" style="font-size:12px;color:#475569;line-height:1.45"></p>
-                    <a href="${WA_URL}" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:#16a34a;text-decoration:none">💬 Falar com a consultoria</a>
+                    <a id="oliver-balao-wa" href="#" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:#16a34a;text-decoration:none">💬 Falar com a consultoria</a>
                 </div>
                 <button id="oliver-btn" aria-label="Ajuda do Oliver" title="Ajuda do Oliver" style="background:none;border:0;cursor:pointer;padding:0;transition:transform .15s;filter:drop-shadow(0 8px 12px rgba(0,0,0,.2))">
                     <img src="Mascote/oliver_ajuda.png" alt="Oliver" style="width:100px;height:auto;display:block;pointer-events:none">
@@ -282,10 +371,27 @@ export async function renderHomeCliente(opts) {
         }
         const dica = el.querySelector("#oliver-dica");
         if (dica) dica.innerText = d.preLanc.length > 0
-            ? `Você tem ${d.preLanc.length} nota(s) para conciliar. Revise o valor e toque em “Aprovar e lançar”.`
+            ? `Você tem ${d.preLanc.length} nota(s) para conciliar. Revise o valor e toque em “Confirmar no caixa”.`
             : (d.itensPend > 0 ? `Há ${d.itensPend} item(ns) para resolver no seu acompanhamento.`
-                : (temNotas ? `Envie a foto de uma nota no quadro “Enviar nota fiscal” e eu lanço no seu caixa.`
+                : (temNotas ? `Envie a foto de uma nota no quadro “Envio rápido” e eu lanço no seu caixa.`
                     : `Acompanhe seu saldo e contas aqui. Precisa de algo? É só chamar a consultoria.`));
+        const wa = el.querySelector("#oliver-balao-wa");
+        if (wa) wa.href = waLink(consultoriaTel, "Olá! Estou no app Oliver e gostaria de falar com a consultoria.");
+    }
+
+    // ---------- Toast ----------
+    function showToast(titulo, desc) {
+        let t = document.getElementById("oliver-toast");
+        if (!t) {
+            t = document.createElement("div");
+            t.id = "oliver-toast";
+            t.style.cssText = "position:fixed;top:18px;right:18px;z-index:80;background:#0f172a;color:#fff;padding:12px 16px;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.2);max-width:320px;display:none";
+            document.body.appendChild(t);
+        }
+        t.innerHTML = `<p style="font-weight:800;font-size:13px">${esc(titulo)}</p><p style="font-size:12px;color:#cbd5e1;margin-top:2px">${esc(desc)}</p>`;
+        t.style.display = "block";
+        clearTimeout(t._tmr);
+        t._tmr = setTimeout(() => { t.style.display = "none"; }, 3200);
     }
 
     // ---------- Monta e religa eventos ----------
@@ -293,6 +399,7 @@ export async function renderHomeCliente(opts) {
         const d = await carregarDados();
         mount.innerHTML = isDesktop ? htmlDesktop(d) : htmlMobile(d);
         wire();
+        if (isDesktop) wireDesktop();
         montarMascote(d);
     }
 
@@ -343,6 +450,7 @@ export async function renderHomeCliente(opts) {
                     });
                     fotoPronta = "";
                     await montar();
+                    showToast("Nota enviada!", "Ela foi para a consultoria e entrou como nota a conciliar.");
                 } catch (e) { status.innerText = "Erro ao enviar: " + e.message; btn.disabled = false; btn.innerText = "Enviar nota fiscal"; }
             });
         }
@@ -367,7 +475,8 @@ export async function renderHomeCliente(opts) {
                         categoria: val("categoria").value.trim() || "Fornecedor"
                     });
                     await montar();
-                } catch (e) { bConf.disabled = false; bConf.innerHTML = '<i class="fa-solid fa-check"></i><span>Aprovar e lançar</span>'; alert("Erro: " + e.message); }
+                    showToast("Lançado no caixa!", "A nota virou uma conta a pagar no seu fluxo de caixa.");
+                } catch (e) { bConf.disabled = false; bConf.innerHTML = '<i class="fa-solid fa-check"></i><span>Confirmar no caixa</span>'; alert("Erro: " + e.message); }
             });
             if (bDesc) bDesc.addEventListener("click", async () => {
                 if (!confirm("Descartar este pré-lançamento? A nota enviada à consultoria não é afetada.")) return;
@@ -375,6 +484,29 @@ export async function renderHomeCliente(opts) {
                 catch (e) { alert("Erro: " + e.message); }
             });
         });
+    }
+
+    // Extras do desktop: modal "Falar com a consultoria" (abre o WhatsApp)
+    function wireDesktop() {
+        const modal = mount.querySelector("#oliver-modal-consultor");
+        const abrir = () => { if (modal) modal.classList.remove("hidden"); };
+        const b1 = mount.querySelector("#oliver-open-consultor");
+        const b2 = mount.querySelector("#oliver-open-consultor-2");
+        if (b1) b1.addEventListener("click", abrir);
+        if (b2) b2.addEventListener("click", abrir);
+        if (modal) {
+            modal.querySelectorAll('[data-m="fechar"]').forEach((b) => b.addEventListener("click", () => modal.classList.add("hidden")));
+            modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
+            const env = modal.querySelector('[data-m="enviar"]');
+            if (env) env.addEventListener("click", () => {
+                const assunto = modal.querySelector('[data-m="assunto"]').value;
+                const msg = modal.querySelector('[data-m="msg"]').value.trim();
+                const texto = `Olá! Sou ${nome || "cliente do Oliver"}.\nAssunto: ${assunto}` + (msg ? `\n${msg}` : "");
+                window.open(waLink(consultoriaTel, texto), "_blank", "noopener");
+                modal.classList.add("hidden");
+                showToast("Abrindo o WhatsApp...", "Sua mensagem foi preparada para envio.");
+            });
+        }
     }
 
     await montar();

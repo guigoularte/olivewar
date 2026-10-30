@@ -227,10 +227,10 @@
                             if (cards) cards.style.setProperty('display', 'none', 'important');
                         }
                         mountC.classList.remove('hidden');
-                        let consultoriaNome = "";
-                        try { consultoriaNome = (JSON.parse(localStorage.getItem('oliverBranding') || '{}').nome) || ""; } catch (e) {}
+                        let consultoriaNome = "", consultoriaTel = "";
+                        try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
                         try {
-                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop, nome: localStorage.getItem('oliverNome') || "", consultoriaNome });
+                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop, nome: localStorage.getItem('oliverNome') || "", consultoriaNome, consultoriaTel });
                         } catch (e) {
                             console.error("Falha ao montar home do cliente:", e);
                             mountC.classList.add('hidden');
