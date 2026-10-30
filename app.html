@@ -12,6 +12,7 @@
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { renderDashboard } from "./oliver_dashboard.js";
+        import { renderHomeCliente } from "./oliver_home_cliente.js";
 
         // Código de acesso pessoal (6 caracteres, sem 0/O/1/I).
         function gerarCodigoAcesso() {
@@ -212,6 +213,28 @@
                     try { localStorage.setItem('oliverItensPendentes', String(pend)); } catch (e) {}
                 } catch (e) { console.error("Falha no badge de itens:", e); }
 
+                // Home do CLIENTE (dono do negócio): painel orientado a tarefas.
+                // Desktop = 3 blocos (cards de navegação dão lugar à sidebar).
+                // Celular = faixa dinâmica no topo, mantendo os atalhos abaixo.
+                if (!souConsultoria) {
+                    const mountC = document.getElementById('home-cliente');
+                    if (mountC) {
+                        const isDesktop = window.innerWidth >= 1024;
+                        if (isDesktop) {
+                            const cards = document.getElementById('home-cards');
+                            if (cards) cards.style.setProperty('display', 'none', 'important');
+                        }
+                        mountC.classList.remove('hidden');
+                        try {
+                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop });
+                        } catch (e) {
+                            console.error("Falha ao montar home do cliente:", e);
+                            mountC.classList.add('hidden');
+                            if (isDesktop) { const cards = document.getElementById('home-cards'); if (cards) cards.style.removeProperty('display'); }
+                        }
+                    }
+                }
+
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
                 if (!ehMaster && !dados.empresaId) {
                     let codigo = dados.codigoAcesso;
@@ -277,6 +300,9 @@
 
             <!-- Dashboard na home (apenas desktop, para consultoria) -->
             <div id="home-dashboard" class="hidden px-6 mt-6"></div>
+
+            <!-- Home orientada a tarefas (cliente): resumo financeiro, envio rápido e fila de ação -->
+            <div id="home-cliente" class="hidden px-6 mt-6"></div>
 
             <!-- Botões / Cards de Navegação -->
             <div id="home-cards" class="px-6 mt-6 space-y-4">

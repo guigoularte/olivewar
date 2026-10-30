@@ -21,6 +21,8 @@
         const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const dataBR = (s) => { if (!s) return ""; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
+        // Data LOCAL (evita o bug de fuso do toISOString, que à noite vira o dia seguinte)
+        const ymdLocal = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -69,16 +71,25 @@
         window.enviar = async () => {
             if (!fotoPronta) { alert("Tire ou escolha a foto da nota fiscal."); return; }
             const btn = document.getElementById('btn-enviar'); btn.disabled = true; btn.innerText = "Enviando...";
+            const fornecedor = document.getElementById('fornecedor').value.trim();
+            const valor = parseFloat(String(document.getElementById('valor').value).replace(",", ".")) || 0;
             try {
                 await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
-                    foto: fotoPronta,
-                    fornecedor: document.getElementById('fornecedor').value.trim(),
-                    valor: parseFloat(String(document.getElementById('valor').value).replace(",", ".")) || 0,
+                    foto: fotoPronta, fornecedor, valor,
                     obs: document.getElementById('obs').value.trim(),
                     clienteNome: meuNome, clienteId: meuUid, orgId: orgId || "",
                     enviadoPorUid: meuUid, enviadoPorNome: meuNome,
-                    data: new Date().toISOString().slice(0, 10), criadoEm: new Date().toISOString()
+                    data: ymdLocal(), criadoEm: new Date().toISOString()
                 });
+                // Pré-lançamento em Contas a Pagar (para o cliente conciliar na home / fluxo de caixa)
+                try {
+                    await addDoc(collection(db, "usuarios", meuUid, "fluxo_caixa"), {
+                        tipo: "saida", status: "pre_lancamento", origem: "nota",
+                        descricao: fornecedor || "Nota fiscal", valor,
+                        categoria: "Fornecedor", data: ymdLocal(), vencimento: ymdLocal(),
+                        temFoto: true, criadoEm: new Date().toISOString()
+                    });
+                } catch (e) { console.error("Falha ao criar pré-lançamento:", e); }
                 fotoPronta = "";
                 document.getElementById('preview').classList.add('hidden');
                 document.getElementById('status-foto').innerText = "";

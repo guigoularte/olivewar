@@ -126,6 +126,26 @@
             carregar();
         };
 
+        // Conciliação de pré-lançamento (nota fiscal) -> vira Conta a pagar
+        window.confirmarPre = async (id) => {
+            const valor = num(document.getElementById('pre-valor-' + id).value);
+            const vencimento = document.getElementById('pre-venc-' + id).value;
+            if (valor <= 0) { alert("Informe um valor maior que zero."); document.getElementById('pre-valor-' + id).focus(); return; }
+            if (!vencimento) { alert("Informe a data de vencimento."); document.getElementById('pre-venc-' + id).focus(); return; }
+            await updateDoc(doc(db, "usuarios", alvoUid, "fluxo_caixa", id), {
+                status: "a_pagar", tipo: "saida",
+                descricao: document.getElementById('pre-desc-' + id).value.trim() || "Nota fiscal",
+                valor, vencimento, data: vencimento,
+                categoria: document.getElementById('pre-cat-' + id).value.trim() || "Fornecedor"
+            });
+            carregar();
+        };
+        window.descartarPre = async (id) => {
+            if (!confirm("Descartar este pré-lançamento? A nota enviada à consultoria não é afetada.")) return;
+            await deleteDoc(doc(db, "usuarios", alvoUid, "fluxo_caixa", id));
+            carregar();
+        };
+
         window.excluir = async (id) => {
             if (!confirm("Excluir este lançamento?")) return;
             await deleteDoc(doc(db, "usuarios", alvoUid, "fluxo_caixa", id));
@@ -143,7 +163,7 @@
             const mes = document.getElementById('filtro-mes').value;   // AAAA-MM ou ""
             const tipo = document.getElementById('filtro-tipo').value; // "", entrada, saida
             return todas
-                .filter(m => m.status !== "a_pagar")   // só o caixa realizado
+                .filter(m => m.status !== "a_pagar" && m.status !== "pre_lancamento")   // só o caixa realizado
                 .filter(m => !mes || (m.data || "").startsWith(mes))
                 .filter(m => !tipo || m.tipo === tipo)
                 .sort((a, b) => (b.data || "").localeCompare(a.data || "") || (b.criadoEm || "").localeCompare(a.criadoEm || ""));
@@ -160,6 +180,31 @@
             const elSaldo = document.getElementById('tot-saldo');
             elSaldo.innerText = brl(saldo);
             elSaldo.className = "font-black text-[13px] " + (saldo >= 0 ? "text-green-300" : "text-red-300");
+
+            // Pré-lançamentos de nota fiscal (aguardando conciliação)
+            const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const hojeLocal = new Date().getFullYear() + "-" + String(new Date().getMonth() + 1).padStart(2, "0") + "-" + String(new Date().getDate()).padStart(2, "0");
+            const preLanc = todas.filter(m => m.status === "pre_lancamento")
+                .sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+            const blocoPre = document.getElementById('bloco-pre');
+            const listaPre = document.getElementById('lista-pre');
+            if (preLanc.length === 0 || somenteLeitura) { blocoPre.style.display = "none"; }
+            else {
+                blocoPre.style.display = "block";
+                listaPre.innerHTML = preLanc.map(m => `
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                        <input id="pre-desc-${m.id}" value="${esc(m.descricao || "")}" placeholder="Fornecedor / descrição" class="w-full p-2 border border-amber-200 rounded-lg text-sm mb-2 outline-none focus:ring-2 focus:ring-amber-400">
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div><label class="text-[10px] text-slate-500">Valor R$</label><input id="pre-valor-${m.id}" type="number" step="0.01" value="${m.valor ? Number(m.valor) : ""}" class="w-full p-2 border border-amber-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400"></div>
+                            <div><label class="text-[10px] text-slate-500">Vencimento</label><input id="pre-venc-${m.id}" type="date" value="${m.vencimento || hojeLocal}" class="w-full p-2 border border-amber-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-400"></div>
+                        </div>
+                        <input id="pre-cat-${m.id}" list="categorias" value="${esc(m.categoria || "Fornecedor")}" placeholder="Categoria" class="w-full p-2 border border-amber-200 rounded-lg text-sm mb-2 outline-none focus:ring-2 focus:ring-amber-400">
+                        <div class="flex gap-2">
+                            <button onclick="confirmarPre('${m.id}')" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg">✓ Confirmar e lançar</button>
+                            <button onclick="descartarPre('${m.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-bold px-3 py-2 rounded-lg">Descartar</button>
+                        </div>
+                    </div>`).join('');
+            }
 
             // Contas a pagar (pendentes) — mostradas sempre, ordenadas por vencimento
             const hoje = new Date().toISOString().slice(0, 10);
@@ -332,6 +377,13 @@
 
                 <button type="submit" class="w-full bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-blue-700 transition">Registrar lançamento</button>
             </form>
+
+            <!-- Pré-lançamentos de nota fiscal (conciliar) -->
+            <div id="bloco-pre" style="display:none" class="mb-4">
+                <h2 class="text-sm font-bold text-amber-700 mb-1">🧾 Notas a confirmar</h2>
+                <p class="text-[11px] text-slate-500 mb-2">Notas que você enviou e ainda não viraram lançamento. Confira os dados e confirme.</p>
+                <div id="lista-pre" class="space-y-2"></div>
+            </div>
 
             <!-- Contas a pagar (pendentes) -->
             <div id="bloco-pagar" style="display:none" class="mb-4">

@@ -166,3 +166,14 @@ Impacto: refactor médio/grande, principalmente nas regras e nas queries. Fazer 
 1. Abrir o Claude Code na mesma pasta do projeto (`C:\Users\guilh\Gui\OliveWar`).
 2. Pedir para ler este arquivo (`CONTEXTO_OLIVER.md`) — ele resume tudo.
 3. O código completo está no Git (histórico de commits conta a evolução).
+
+## Redesign UX — Fase 1 (nota -> caixa + home orientada a tarefas)
+- **Home do cliente** (`oliver_home_cliente.js`, montado por `app.html` em `#home-cliente`, só para NÃO-consultoria):
+  - Desktop (>=1024): painel de 3 blocos — Resumo Financeiro (Saldo do mês / A pagar / Entradas) em cima, e Envio Rápido + Fila de Ação lado a lado. Os cards de navegação (`#home-cards`) ficam ocultos (a sidebar faz a navegação).
+  - Celular: faixa dinâmica no topo (resumo + envio + fila) e os atalhos de navegação seguem abaixo.
+- **Envio rápido**: foto da nota -> grava em `empresas/{empresaId}/notas_fiscais` (consultoria) E cria um PRÉ-LANÇAMENTO em `usuarios/{uid}/fluxo_caixa` com `status:"pre_lancamento"`, `origem:"nota"`.
+- **Conciliação**: `fluxo_caixa.html` e a Fila de Ação mostram os pré-lançamentos como cartões editáveis (descrição/valor/vencimento/categoria) com [Confirmar e lançar] (vira `a_pagar`) e [Descartar] (deleta o pré-lançamento; a nota enviada não é afetada).
+- `filtradas()` do fluxo de caixa passou a excluir também `pre_lancamento` do caixa realizado.
+- `notas.html` também cria o pré-lançamento ao enviar; datas passaram a usar data LOCAL (ymdLocal) evitando o bug de fuso.
+- Regras do Firestore: sem mudança (dono já tem read/write em `usuarios/{uid}/**`).
+- **Fase 2 (próxima)**: ler XML da NF-e para preencher o pré-lançamento automaticamente (exato, sem IA).
