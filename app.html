@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Oliver - Painel</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>.drag-active{border-color:#ea580c !important;background-color:#fff7ed !important;}</style>
     <script src="oliver_ui.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script type="module">
@@ -225,8 +227,10 @@
                             if (cards) cards.style.setProperty('display', 'none', 'important');
                         }
                         mountC.classList.remove('hidden');
+                        let consultoriaNome = "";
+                        try { consultoriaNome = (JSON.parse(localStorage.getItem('oliverBranding') || '{}').nome) || ""; } catch (e) {}
                         try {
-                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop });
+                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop, nome: localStorage.getItem('oliverNome') || "", consultoriaNome });
                         } catch (e) {
                             console.error("Falha ao montar home do cliente:", e);
                             mountC.classList.add('hidden');

@@ -177,3 +177,15 @@ Impacto: refactor médio/grande, principalmente nas regras e nas queries. Fazer 
 - `notas.html` também cria o pré-lançamento ao enviar; datas passaram a usar data LOCAL (ymdLocal) evitando o bug de fuso.
 - Regras do Firestore: sem mudança (dono já tem read/write em `usuarios/{uid}/**`).
 - **Fase 2 (próxima)**: ler XML da NF-e para preencher o pré-lançamento automaticamente (exato, sem IA).
+
+## Home desktop do cliente — redesign (mockup aprovado) + mascote
+- `oliver_home_cliente.js` (desktop) reescrito no estilo do mockup `oliver_redesign_dashboard.html`:
+  header (Olá, {nome} + badge da consultoria), 3 cards de resumo (Saldo em caixa + variação vs. mês
+  anterior · A pagar na semana + "X vence(m) hoje" · Notas para conciliar), bloco Enviar nota +
+  fila de conciliação (cartões editáveis "Aprovar e lançar"/descartar) e Extrato recente (tabela).
+  Usa Font Awesome (adicionado no `<head>` da `app.html`) e paleta laranja/slate padrão do Tailwind.
+- **Mascote Oliver** flutuante (canto inferior direito, só desktop): `Mascote/oliver_ajuda.png`
+  (pose "joinha", fundo removido). Botão abre balão de ajuda com dica contextual (nº de notas a
+  conciliar / itens a resolver) + link "Falar com a consultoria" (WhatsApp). Abre sozinho 1x por sessão.
+- **Mobile**: mantido como estava (faixa dinâmica) — layout mobile ainda a definir pelo cliente.
+- Verificado com harness local (mock do Firestore) antes de publicar: cálculos e layout OK.
