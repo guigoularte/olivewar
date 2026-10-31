@@ -94,7 +94,8 @@ export async function renderHomeCliente(opts) {
     const nome = opts.nome || (localStorage.getItem("oliverNome") || "");
     const consultoriaNome = opts.consultoriaNome || "";
     const consultoriaTel = opts.consultoriaTel || "";
-    const temNotas = !!(func && func.notasFiscais) && !!empresaId;
+    // Enviar nota é parte central do cockpit: liberado para todo cliente vinculado a uma consultoria.
+    const temNotas = !!empresaId;
     const temMargem = !!(func && func.calculoMargem);
     let fotoPronta = "";      // dataURL da foto comprimida ou do PDF
     let arquivoTipo = "image"; // "image" | "pdf"
