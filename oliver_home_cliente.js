@@ -45,7 +45,41 @@ function comprimirImagem(file, maxLado = 1200, qualidade = 0.65) {
     });
 }
 
-// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel })
+// Menu completo do app mobile (espelha a sidebar do desktop; mesma regra de permissão)
+const MENU = [
+    { href: "dashboard.html", label: "Dashboard", icon: "fa-chart-pie", key: "relatorios", padrao: false, sec: "Gestão" },
+    { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
+    { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
+    { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
+    { href: "rotinas.html", label: "Rotinas de Gestão", icon: "fa-clipboard-check", orgLink: true, sec: "Gestão" },
+    { href: "itens_resolver.html", label: "Itens para Resolver", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
+    { href: "indicadores.html", label: "Meus Indicadores", icon: "fa-gauge-high", clienteOnly: true, sec: "Gestão" },
+    { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "fa-chart-line", key: "fluxoCaixa", padrao: true, sec: "Financeiro & Caixa" },
+    { href: "notas.html", label: "Notas & Comprovantes", icon: "fa-receipt", key: "notasFiscais", padrao: false, sec: "Financeiro & Caixa" },
+    { href: "fechamento.html", label: "Fechamento de Caixa", icon: "fa-cash-register", key: "fechamentoCaixa", padrao: false, sec: "Financeiro & Caixa" },
+    { href: "calculo_margem.html", label: "Margens & CMV", icon: "fa-calculator", key: "calculoMargem", padrao: false, sec: "Financeiro & Caixa" },
+    { href: "cvl.html", label: "Margem Completo", icon: "fa-chart-column", key: "cvlCompleto", padrao: false, sec: "Financeiro & Caixa" },
+    { href: "produtos.html", label: "Produtos / Serviços", icon: "fa-box", key: "produtos", padrao: true, sec: "Financeiro & Caixa" },
+    { href: "vendas.html", label: "Vendas", icon: "fa-arrow-trend-up", key: "vendas", padrao: true, sec: "Financeiro & Caixa" },
+    { href: "relatorios.html", label: "Escrever Relatórios", icon: "fa-pen-to-square", key: "relatorios", padrao: false, sec: "Relatórios" },
+    { href: "relatorios_view.html", label: "Relatórios & DRE", icon: "fa-file-invoice", key: "relatoriosHistorico", padrao: true, sec: "Relatórios" },
+    { href: "relatorio_semanal.html", label: "Relatório Semanal", icon: "fa-calendar-week", key: "fechamentoCaixa", padrao: false, sec: "Relatórios" },
+    { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "fa-inbox", key: "relatorios", padrao: false, sec: "Relatórios" },
+    { href: "admin.html", label: "Painel Master", icon: "fa-shield-halved", master: true, sec: "Sistema" },
+    { href: "perfil.html", label: "Perfil", icon: "fa-user", always: true, sec: "Sistema" },
+    { href: "configuracoes.html", label: "Configurações", icon: "fa-gear", always: true, sec: "Sistema" }
+];
+const MENU_SECOES = ["Gestão", "Financeiro & Caixa", "Relatórios", "Sistema"];
+function podeVerMenu(l, p) {
+    if (l.always) return true;
+    if (l.master) return !!p.master;
+    if (l.orgLink) return !!(p.master || (p.func && p.func.relatorios) || p.org);
+    if (l.clienteOnly) return !(p.master || (p.func && p.func.relatorios));
+    if (l.key) return p.master || ((l.key in (p.func || {})) ? p.func[l.key] : l.padrao);
+    return true;
+}
+
+// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel, inicialTab })
 export async function renderHomeCliente(opts) {
     const { db, uid, empresaId, func, mount, isDesktop } = opts;
     const nome = opts.nome || (localStorage.getItem("oliverNome") || "");
@@ -372,13 +406,18 @@ export async function renderHomeCliente(opts) {
             </div>`;
         const paneCockpit = `<div data-pane="cockpit" class="space-y-3.5">${banner}${captura}${fila}${saude}</div>`;
 
-        // --- Aba Rotinas ---
-        const paneRotinas = `<div data-pane="rotinas" class="hidden space-y-3">
-            <a href="rotinas.html" class="block bg-white rounded-3xl p-4 border border-slate-200 shadow-sm">
-                <div class="flex items-center gap-3"><div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check"></i></div><div><h2 class="font-bold text-sm text-slate-800">Rotinas de gestão</h2><p class="text-xs text-slate-500">Checklists do seu acompanhamento</p></div><i class="fa-solid fa-chevron-right text-slate-300 ml-auto"></i></div>
-            </a>
-            ${d.itensPend > 0 ? `<a href="itens_resolver.html" class="block bg-white rounded-3xl p-4 border border-slate-200 shadow-sm"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-2xl bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-list-check"></i></div><div><h2 class="font-bold text-sm text-slate-800">Itens para resolver</h2><p class="text-xs text-slate-500">${d.itensPend} pendência(s)</p></div><span class="ml-auto bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></div></a>` : ""}
-        </div>`;
+        // --- Aba Menu (todas as funções permitidas) ---
+        let perms; try { perms = JSON.parse(localStorage.getItem("oliverPerms")) || { master: false, func: {} }; } catch (e) { perms = { master: false, func: {} }; }
+        const menuItem = (l) => `<a href="${l.href}" class="flex items-center gap-3 p-3 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-[.99]">
+            <div class="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center"><i class="fa-solid ${l.icon}"></i></div>
+            <span class="text-sm font-semibold text-slate-800">${l.label}</span><i class="fa-solid fa-chevron-right text-slate-300 ml-auto text-xs"></i></a>`;
+        let menuHtml = "";
+        MENU_SECOES.forEach((sec) => {
+            const its = MENU.filter((l) => l.sec === sec && podeVerMenu(l, perms));
+            if (!its.length) return;
+            menuHtml += `<p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 pt-2">${sec}</p>` + its.map(menuItem).join("");
+        });
+        const paneMenu = `<div data-pane="menu" class="hidden space-y-2">${menuHtml || '<p class="text-xs text-slate-400 text-center py-4">Nenhuma função disponível.</p>'}</div>`;
 
         // --- Aba Caixa ---
         const linhas = d.extrato.slice(0, 8).map((m) => {
@@ -431,11 +470,11 @@ export async function renderHomeCliente(opts) {
                 </div>
             </header>
             <main data-el="scroll" class="flex-1 overflow-y-auto p-3.5 space-y-4 bg-slate-50" style="-webkit-overflow-scrolling:touch">
-                ${paneCockpit}${paneRotinas}${paneCaixa}${panerPerfil}
+                ${paneCockpit}${paneMenu}${paneCaixa}${panerPerfil}
             </main>
             <nav class="bg-white border-t border-slate-200 px-4 py-2.5 flex items-center justify-around shrink-0 shadow-lg">
-                ${navBtn("cockpit", "fa-compass", "Cockpit", true)}
-                ${navBtn("rotinas", "fa-list-check", "Rotinas", false, totalPend || null)}
+                ${navBtn("cockpit", "fa-compass", "Cockpit", true, totalPend || null)}
+                ${navBtn("menu", "fa-table-cells-large", "Menu", false)}
                 <button data-tab="__cam" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-camera text-lg"></i></button>
                 ${navBtn("caixa", "fa-chart-line", "Caixa", false)}
                 ${navBtn("perfil", "fa-user", "Perfil", false)}
@@ -548,6 +587,8 @@ export async function renderHomeCliente(opts) {
             try { localStorage.removeItem("oliverPerms"); } catch (e2) {}
             location.href = "login.html";
         });
+        // Aba inicial (master/consultoria abrem no Menu)
+        if (opts.inicialTab && opts.inicialTab !== "cockpit") switchTab(opts.inicialTab);
     }
 
     function wire(root) {

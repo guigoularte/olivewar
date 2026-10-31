@@ -219,27 +219,24 @@
                 // Home do CLIENTE (dono do negócio): painel orientado a tarefas.
                 // Desktop = 3 blocos (cards de navegação dão lugar à sidebar).
                 // Celular = faixa dinâmica no topo, mantendo os atalhos abaixo.
-                if (!souConsultoria) {
+                {
                     const isDesktop = window.innerWidth >= 1024;
                     let consultoriaNome = "", consultoriaTel = "";
                     try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
                     const nome = localStorage.getItem('oliverNome') || "";
                     const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel, codigo: dados.codigoAcesso || "" };
-                    if (isDesktop) {
-                        // Desktop: cockpit (sidebar escura + topo), cobrindo a sidebar laranja padrão.
+                    if (!isDesktop) {
+                        // Celular: app em abas para TODOS (master/consultoria abrem no Menu).
+                        try { await renderHomeCliente({ ...baseHome, mount: document.getElementById('home-cliente') || document.body, isDesktop: false, inicialTab: souConsultoria ? 'menu' : 'cockpit' }); }
+                        catch (e) { console.error("Falha ao montar app mobile:", e); }
+                    } else if (!souConsultoria) {
+                        // Desktop (cliente): cockpit (sidebar escura + topo), cobrindo a sidebar padrão.
                         try {
                             const mount = montarCockpit({ nome, negocioNome: consultoriaNome, consultoriaNome, codigo: dados.codigoAcesso || "", func, itensPend: parseInt(localStorage.getItem('oliverItensPendentes') || '0', 10) || 0, consultoriaTel });
                             await renderHomeCliente({ ...baseHome, mount, isDesktop: true });
                         } catch (e) { console.error("Falha ao montar cockpit:", e); }
-                    } else {
-                        // Celular: faixa dinâmica acima dos atalhos (layout de app).
-                        const mountC = document.getElementById('home-cliente');
-                        if (mountC) {
-                            mountC.classList.remove('hidden');
-                            try { await renderHomeCliente({ ...baseHome, mount: mountC, isDesktop: false }); }
-                            catch (e) { console.error("Falha ao montar home do cliente:", e); mountC.classList.add('hidden'); }
-                        }
                     }
+                    // Desktop (master/consultoria): dashboard + sidebar escura, já tratados acima.
                 }
 
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
