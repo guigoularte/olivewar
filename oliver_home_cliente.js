@@ -220,17 +220,21 @@ export async function renderHomeCliente(opts) {
                         <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-cloud-arrow-up text-orange-600"></i><span>Envio rápido de notas</span></h3>
                         <p class="text-xs text-slate-500">Alimente o fluxo de caixa sem digitação manual.</p>
                     </div>
-                    <span class="text-[10px] bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-bold">leitura automática em breve</span>
+                    <span class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full font-bold flex items-center gap-1"><i class="fa-solid fa-robot text-[9px]"></i>OCR em breve</span>
                 </div>
                 <label data-el="drop" class="block border-2 border-dashed border-orange-300 bg-orange-50/40 hover:bg-orange-50 rounded-2xl p-6 text-center cursor-pointer transition-all group">
                     <input type="file" data-el="foto" accept="image/*,application/pdf,.pdf" class="hidden">
                     <div class="w-12 h-12 bg-white text-orange-600 rounded-2xl flex items-center justify-center text-xl mx-auto shadow-md group-hover:scale-110 transition-transform"><i class="fa-solid fa-file-invoice-dollar"></i></div>
                     <p class="text-sm font-bold text-slate-800 mt-2" data-el="drop-label">Arraste a nota aqui ou <span class="text-orange-600 underline">clique para enviar</span></p>
-                    <p class="text-xs text-slate-400">Foto (PNG/JPG) ou PDF da nota/cupom</p>
+                    <div class="flex items-center justify-center gap-2 mt-2 text-[11px] text-slate-500 flex-wrap">
+                        <span class="bg-white px-2.5 py-1 rounded-lg border border-slate-200"><i class="fa-regular fa-file-code text-orange-500 mr-1"></i>XML NF-e <span class="text-slate-400">(em breve)</span></span>
+                        <span class="bg-white px-2.5 py-1 rounded-lg border border-slate-200"><i class="fa-regular fa-file-pdf text-rose-500 mr-1"></i>PDF</span>
+                        <span class="bg-white px-2.5 py-1 rounded-lg border border-slate-200"><i class="fa-solid fa-camera text-blue-500 mr-1"></i>Foto de cupom</span>
+                    </div>
                 </label>
                 <img data-el="preview" class="hidden w-full max-h-48 object-contain rounded-lg border border-slate-100 mt-3">
-                <div data-el="campos" class="hidden mt-3 space-y-2">
-                    <p class="text-[11px] font-semibold text-slate-600">Para lançar certo, informe:</p>
+                <div data-el="campos" class="mt-3 space-y-2">
+                    <p class="text-[11px] font-semibold text-slate-600">Sempre informe o que é a nota e o valor da compra:</p>
                     <input data-el="fornecedor" placeholder="O que é esta nota? (ex.: Hortifruti, Energia) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <input data-el="valor" type="number" step="0.01" placeholder="Valor da compra (R$) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
@@ -386,8 +390,8 @@ export async function renderHomeCliente(opts) {
                     <input type="file" data-el="foto" accept="image/*,application/pdf,.pdf" class="hidden">
                 </label>
                 <img data-el="preview" class="hidden w-full max-h-44 object-contain rounded-lg border border-slate-100">
-                <div data-el="campos" class="hidden space-y-2">
-                    <p class="text-[11px] font-semibold text-slate-600">Para lançar certo, informe:</p>
+                <div data-el="campos" class="space-y-2">
+                    <p class="text-[11px] font-semibold text-slate-600">Sempre informe o que é a nota e o valor:</p>
                     <input data-el="fornecedor" placeholder="O que é esta nota? (ex.: Hortifruti) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <input data-el="valor" type="number" step="0.01" placeholder="Valor da compra (R$) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <button data-el="enviar" class="w-full bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
