@@ -160,16 +160,37 @@
         return "https://wa.me/" + dig + "?text=" + encodeURIComponent("Olá! Estou no app Oliver e gostaria de ajuda.");
     }
 
+    // Abre o vídeo especial de Halloween em tela cheia
+    function abrirHalloween() {
+        if (document.getElementById("oliver-hw-modal")) return;
+        var m = document.createElement("div");
+        m.id = "oliver-hw-modal";
+        m.style.cssText = "position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;";
+        m.innerHTML =
+            '<video src="Mascote/halloween.mp4" autoplay controls playsinline style="max-width:100%;max-height:82vh;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.6)"></video>' +
+            '<button id="oliver-hw-x" style="margin-top:16px;background:linear-gradient(to right,#7c3aed,#f97316);color:#fff;font-weight:800;border:0;border-radius:12px;padding:10px 22px;cursor:pointer">Fechar 🎃</button>';
+        document.body.appendChild(m);
+        var fechar = function () { var v = m.querySelector("video"); if (v) { try { v.pause(); } catch (e) {} } m.remove(); };
+        m.querySelector("#oliver-hw-x").addEventListener("click", fechar);
+        m.addEventListener("click", function (e) { if (e.target === m) fechar(); });
+    }
+
     // Ajudante Oliver flutuante — em todas as telas internas (desktop e celular)
     function montarMascoteGlobal() {
         if (document.querySelector(".oliver-mascote")) return;
+        var hoje = new Date();
+        var ehHalloween = (hoje.getMonth() === 9 && hoje.getDate() === 31); // 31 de outubro
+        var halloweenBtn = ehHalloween
+            ? '<button class="oliver-hw-btn" style="display:block;width:100%;margin-top:10px;background:linear-gradient(to right,#7c3aed,#f97316);color:#fff;font-weight:800;border:0;border-radius:10px;padding:9px;cursor:pointer;font-size:12px">🎃 Especial de Halloween</button>'
+            : '';
         var el = document.createElement("div");
         el.className = "oliver-mascote";
         el.innerHTML =
             '<div class="oliver-balao" style="display:none">' +
                 '<button class="oliver-balao-x" aria-label="Fechar">✕</button>' +
-                '<p style="font-weight:800;font-size:13px;color:#1e293b;margin:0 0 4px">Oi, eu sou o Oliver 👋</p>' +
-                '<p style="font-size:12px;color:#475569;margin:0;line-height:1.4">Precisa de ajuda? Fale com a sua consultoria.</p>' +
+                '<p style="font-weight:800;font-size:13px;color:#1e293b;margin:0 0 4px">Oi, eu sou o Oliver ' + (ehHalloween ? '🎃' : '👋') + '</p>' +
+                '<p style="font-size:12px;color:#475569;margin:0;line-height:1.4">' + (ehHalloween ? 'Feliz Halloween! Tenho uma surpresa pra você:' : 'Precisa de ajuda? Fale com a sua consultoria.') + '</p>' +
+                halloweenBtn +
                 '<a href="' + waDaConsultoria() + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:#16a34a;text-decoration:none">💬 Falar com a consultoria</a>' +
             '</div>' +
             '<button class="oliver-mascote-btn" aria-label="Ajuda do Oliver" title="Ajuda do Oliver">' +
@@ -180,6 +201,8 @@
         var balao = el.querySelector(".oliver-balao");
         btn.addEventListener("click", function () { balao.style.display = (balao.style.display === "none" ? "block" : "none"); });
         el.querySelector(".oliver-balao-x").addEventListener("click", function () { balao.style.display = "none"; });
+        var hw = el.querySelector(".oliver-hw-btn");
+        if (hw) hw.addEventListener("click", abrirHalloween);
         try { if (!sessionStorage.getItem("oliverBalaoVisto")) { balao.style.display = "block"; sessionStorage.setItem("oliverBalaoVisto", "1"); } } catch (e) {}
     }
 
