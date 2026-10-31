@@ -574,7 +574,7 @@ export async function renderHomeCliente(opts) {
             mount.innerHTML = htmlDesktop(d);
             wire(mount);
             wireDesktop(mount);
-            montarMascote(d);
+            // (o ajudante Oliver é global, montado pelo oliver_ui.js em todas as telas)
         } else {
             montarAppMobile(d);
         }

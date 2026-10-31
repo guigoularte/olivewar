@@ -17,7 +17,14 @@
       body.oliver-dt .px-6.mt-6.space-y-4{display:grid !important;grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:1rem !important;}
       body.oliver-dt .px-6.mt-6.space-y-4 > *{margin-top:0 !important;}
       .oliver-sidebar{display:flex !important;}
-    }`;
+    }
+    .oliver-mascote{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;align-items:flex-end;gap:8px;font-family:Inter,system-ui,sans-serif;}
+    .oliver-mascote-btn{width:88px;background:none;border:0;cursor:pointer;padding:0;transition:transform .15s;filter:drop-shadow(0 8px 12px rgba(0,0,0,.2));}
+    .oliver-mascote-btn:hover{transform:scale(1.05);}
+    .oliver-mascote-btn img{width:100%;height:auto;display:block;pointer-events:none;}
+    .oliver-balao{max-width:240px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 12px 30px rgba(0,0,0,.14);border-radius:16px;padding:12px 14px;position:relative;}
+    .oliver-balao-x{position:absolute;top:6px;right:9px;color:#94a3b8;font-size:14px;background:none;border:0;cursor:pointer;}
+    @media (max-width:1023px){.oliver-mascote{bottom:78px;right:12px;}.oliver-mascote-btn{width:58px;}}`;
 
     // Links: sec = seção (null = topo). icon = Font Awesome. Mantém as regras de permissão.
     var LINKS = [
@@ -145,6 +152,37 @@
         });
     }
 
+    function waDaConsultoria() {
+        var tel = "";
+        try { tel = (JSON.parse(localStorage.getItem("oliverBranding") || "{}").telefone) || ""; } catch (e) {}
+        var dig = String(tel).replace(/\D/g, "");
+        if (dig.length < 10) dig = "5551989286351"; else if (dig.length <= 11) dig = "55" + dig;
+        return "https://wa.me/" + dig + "?text=" + encodeURIComponent("Olá! Estou no app Oliver e gostaria de ajuda.");
+    }
+
+    // Ajudante Oliver flutuante — em todas as telas internas (desktop e celular)
+    function montarMascoteGlobal() {
+        if (document.querySelector(".oliver-mascote")) return;
+        var el = document.createElement("div");
+        el.className = "oliver-mascote";
+        el.innerHTML =
+            '<div class="oliver-balao" style="display:none">' +
+                '<button class="oliver-balao-x" aria-label="Fechar">✕</button>' +
+                '<p style="font-weight:800;font-size:13px;color:#1e293b;margin:0 0 4px">Oi, eu sou o Oliver 👋</p>' +
+                '<p style="font-size:12px;color:#475569;margin:0;line-height:1.4">Precisa de ajuda? Fale com a sua consultoria.</p>' +
+                '<a href="' + waDaConsultoria() + '" target="_blank" rel="noopener" style="display:inline-block;margin-top:8px;font-size:12px;font-weight:700;color:#16a34a;text-decoration:none">💬 Falar com a consultoria</a>' +
+            '</div>' +
+            '<button class="oliver-mascote-btn" aria-label="Ajuda do Oliver" title="Ajuda do Oliver">' +
+                '<img src="Mascote/oliver_ajuda.png" alt="Oliver">' +
+            '</button>';
+        document.body.appendChild(el);
+        var btn = el.querySelector(".oliver-mascote-btn");
+        var balao = el.querySelector(".oliver-balao");
+        btn.addEventListener("click", function () { balao.style.display = (balao.style.display === "none" ? "block" : "none"); });
+        el.querySelector(".oliver-balao-x").addEventListener("click", function () { balao.style.display = "none"; });
+        try { if (!sessionStorage.getItem("oliverBalaoVisto")) { balao.style.display = "block"; sessionStorage.setItem("oliverBalaoVisto", "1"); } } catch (e) {}
+    }
+
     function aplicarModo() {
         document.body.classList.toggle("oliver-dt", window.innerWidth >= 1024);
     }
@@ -173,6 +211,7 @@
             montarSidebar();
             aplicarModo();
             window.addEventListener("resize", aplicarModo);
+            montarMascoteGlobal();
         }
 
         // ---- Rodapé: crédito + WhatsApp ----
