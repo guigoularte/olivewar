@@ -18,9 +18,10 @@ export function montarCockpit(opts) {
 
     // Permissões (default liberado quando não informado, como no resto do app)
     const permFluxo = (("fluxoCaixa" in func) ? func.fluxoCaixa : true);
-    const permNotas = !!func.notasFiscais;
     const permMargem = !!func.calculoMargem;
+    const permFech = !!func.fechamentoCaixa;
     const permRel = (("relatoriosHistorico" in func) ? func.relatoriosHistorico : true);
+    const permItens = (("itensResolver" in func) ? func.itensResolver : true);
 
     // Monta um item de menu. Sem href => "em breve" (desabilitado, visual apagado).
     function item(icon, label, href, extra) {
@@ -42,15 +43,21 @@ export function montarCockpit(opts) {
     const section = (t) => `<div style="padding:14px 12px 4px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em">${t}</div>`;
 
     const nav =
-        section("Método de Gestão") +
         item("fa-compass", "Cockpit Principal", "app.html", { active: true }) +
-        item("fa-bullseye", "Plano de Ação", null) +
-        item("fa-list-check", "Rotinas de Gestão", "rotinas.html", itens > 0 ? { badge: itens } : {}) +
-        item("fa-calculator", "Margens & CMV", permMargem ? "calculo_margem.html" : null) +
-        section("Suporte Operacional") +
+        section("Gestão") +
+        item("fa-list-check", "Itens para Resolver", permItens ? "itens_resolver.html" : null, (permItens && itens > 0) ? { badge: itens } : {}) +
+        item("fa-clipboard-check", "Rotinas de Gestão", "rotinas.html") +
+        item("fa-gauge-high", "Meus Indicadores", "indicadores.html") +
+        section("Financeiro & Caixa") +
         item("fa-chart-line", "Fluxo de Caixa", permFluxo ? "fluxo_caixa.html" : null) +
-        item("fa-receipt", "Notas & Comprovantes", permNotas ? "notas.html" : null, { tag: "OCR em breve" }) +
-        item("fa-file-invoice", "Relatórios & DRE", permRel ? "relatorios_view.html" : null);
+        item("fa-receipt", "Notas & Comprovantes", "notas.html", { tag: "OCR em breve" }) +
+        item("fa-cash-register", "Fechamento de Caixa", permFech ? "fechamento.html" : null) +
+        item("fa-calculator", "Margens & CMV", permMargem ? "calculo_margem.html" : null) +
+        section("Relatórios") +
+        item("fa-file-invoice", "Relatórios & DRE", permRel ? "relatorios_view.html" : null) +
+        section("Sistema") +
+        item("fa-user", "Perfil", "perfil.html") +
+        item("fa-gear", "Configurações", "configuracoes.html");
 
     const rodapeCodigo = codigo ? `
         <div style="background:rgba(30,41,59,.6);border-radius:12px;padding:10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">

@@ -214,6 +214,12 @@ export async function renderHomeCliente(opts) {
         </section>`;
 
         // --- Coluna esquerda: envio + conciliação + extrato ---
+        const semEmpresaDt = `
+            <section class="bg-white rounded-3xl p-5 md:p-6 border border-amber-200 shadow-sm">
+                <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-link text-amber-600"></i><span>Vincule sua consultoria para enviar notas</span></h3>
+                <p class="text-xs text-slate-500 mt-1">Informe este código à sua consultoria para liberar o acompanhamento e o envio de notas:</p>
+                <div class="mt-3 text-center"><span class="font-mono font-black tracking-[0.3em] text-2xl text-orange-700 bg-orange-50 rounded-xl py-2 px-5 inline-block border border-orange-200">${esc(opts.codigo || "------")}</span></div>
+            </section>`;
         const upload = temNotas ? `
             <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm">
                 <div class="flex items-center justify-between mb-3">
@@ -241,7 +247,7 @@ export async function renderHomeCliente(opts) {
                     <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center mt-2"></p>
-            </section>` : "";
+            </section>` : semEmpresaDt;
 
         const cartoes = d.preLanc.map(cartaoPreLanc).join("");
         const extras = [];
@@ -379,6 +385,11 @@ export async function renderHomeCliente(opts) {
                     <span><i class="fa-solid fa-calendar-xmark mr-1"></i>${brl(d.aPagarSemana)} a pagar</span>
                 </div>
             </div>`;
+        const semEmpresaMb = `<div class="bg-white rounded-3xl p-4 border border-amber-200 shadow-sm">
+            <p class="text-sm font-black text-slate-800"><i class="fa-solid fa-link text-amber-600 mr-1"></i>Vincule sua consultoria</p>
+            <p class="text-[11px] text-slate-500 mt-1">Informe este código à sua consultoria para liberar o envio de notas:</p>
+            <div class="mt-2 text-center"><span class="font-mono font-black tracking-[0.25em] text-xl text-orange-700 bg-orange-50 rounded-xl py-2 px-4 inline-block border border-orange-200">${esc(opts.codigo || "------")}</span></div>
+        </div>`;
         const captura = temNotas ? `
             <div class="bg-white rounded-3xl p-3.5 border border-orange-200/80 shadow-sm space-y-2">
                 <div class="flex items-center justify-between px-1">
@@ -398,7 +409,7 @@ export async function renderHomeCliente(opts) {
                     <button data-el="enviar" class="w-full bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center"></p>
-            </div>` : "";
+            </div>` : semEmpresaMb;
         const cards = d.preLanc.map(cartaoPreLanc).join("");
         const extras = [];
         if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-3 border border-slate-100 rounded-2xl bg-slate-50"><div class="flex items-center gap-2.5"><div class="w-8 h-8 bg-green-100 text-green-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><h3 class="text-xs font-bold text-slate-800">Itens do acompanhamento</h3><p class="text-[10px] text-slate-400">Pendências da consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);

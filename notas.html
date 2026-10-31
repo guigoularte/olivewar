@@ -33,7 +33,7 @@
             meuNome = d.nome || user.email || "";
             orgId = d.orgId || null;
             const fx = d.funcionalidades || {};
-            if (!(d.role === "master" || fx.notasFiscais)) { alert("Esta funcionalidade não está disponível para a sua conta."); window.location.href = "app.html"; return; }
+            if (!(d.role === "master" || fx.notasFiscais || d.empresaId || d.orgId)) { alert("Vincule sua conta a uma consultoria para enviar notas."); window.location.href = "app.html"; return; }
             // Resolve a empresa (consultoria) de destino
             if (orgId) { try { const o = await getDoc(doc(db, "organizacoes", orgId)); if (o.exists()) empresaId = o.data().empresaId || null; } catch (e) {} }
             else { empresaId = d.empresaId || null; }
