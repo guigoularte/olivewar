@@ -24,6 +24,15 @@ function waLink(tel, msg) {
     return "https://wa.me/" + dig + "?text=" + encodeURIComponent(msg);
 }
 
+// Lê um arquivo como dataURL (usado para PDF).
+function lerDataURL(file) {
+    return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = (e) => resolve(e.target.result);
+        r.onerror = reject; r.readAsDataURL(file);
+    });
+}
+
 // Comprime a foto da nota para caber no limite do Firestore (base64).
 function comprimirImagem(file, maxLado = 1200, qualidade = 0.65) {
     return new Promise((resolve, reject) => {
@@ -87,7 +96,8 @@ export async function renderHomeCliente(opts) {
     const consultoriaTel = opts.consultoriaTel || "";
     const temNotas = !!(func && func.notasFiscais) && !!empresaId;
     const temMargem = !!(func && func.calculoMargem);
-    let fotoPronta = "";
+    let fotoPronta = "";      // dataURL da foto comprimida ou do PDF
+    let arquivoTipo = "image"; // "image" | "pdf"
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
     async function carregarDados() {
@@ -213,15 +223,16 @@ export async function renderHomeCliente(opts) {
                     <span class="text-[10px] bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-bold">leitura automática em breve</span>
                 </div>
                 <label data-el="drop" class="block border-2 border-dashed border-orange-300 bg-orange-50/40 hover:bg-orange-50 rounded-2xl p-6 text-center cursor-pointer transition-all group">
-                    <input type="file" data-el="foto" accept="image/*" capture="environment" class="hidden">
+                    <input type="file" data-el="foto" accept="image/*,application/pdf,.pdf" class="hidden">
                     <div class="w-12 h-12 bg-white text-orange-600 rounded-2xl flex items-center justify-center text-xl mx-auto shadow-md group-hover:scale-110 transition-transform"><i class="fa-solid fa-file-invoice-dollar"></i></div>
                     <p class="text-sm font-bold text-slate-800 mt-2" data-el="drop-label">Arraste a nota aqui ou <span class="text-orange-600 underline">clique para enviar</span></p>
-                    <p class="text-xs text-slate-400">Foto do cupom / nota (PNG, JPG)</p>
+                    <p class="text-xs text-slate-400">Foto (PNG/JPG) ou PDF da nota/cupom</p>
                 </label>
                 <img data-el="preview" class="hidden w-full max-h-48 object-contain rounded-lg border border-slate-100 mt-3">
                 <div data-el="campos" class="hidden mt-3 space-y-2">
-                    <input data-el="fornecedor" placeholder="Fornecedor / loja (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
-                    <input data-el="valor" type="number" step="0.01" placeholder="Valor R$ (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <p class="text-[11px] font-semibold text-slate-600">Para lançar certo, informe:</p>
+                    <input data-el="fornecedor" placeholder="O que é esta nota? (ex.: Hortifruti, Energia) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input data-el="valor" type="number" step="0.01" placeholder="Valor da compra (R$) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center mt-2"></p>
@@ -371,13 +382,14 @@ export async function renderHomeCliente(opts) {
                 </div>
                 <label data-el="drop" class="block w-full bg-gradient-to-r from-orange-500 to-orange-600 active:scale-[.98] text-white font-bold py-3.5 px-4 rounded-2xl shadow-md flex items-center justify-center gap-2.5 transition text-xs cursor-pointer">
                     <span class="w-7 h-7 bg-white/20 rounded-xl flex items-center justify-center"><i class="fa-solid fa-camera text-sm"></i></span>
-                    <span data-el="drop-label">Tirar foto da nota / recibo</span>
-                    <input type="file" data-el="foto" accept="image/*" capture="environment" class="hidden">
+                    <span data-el="drop-label">Foto ou PDF da nota / recibo</span>
+                    <input type="file" data-el="foto" accept="image/*,application/pdf,.pdf" class="hidden">
                 </label>
                 <img data-el="preview" class="hidden w-full max-h-44 object-contain rounded-lg border border-slate-100">
                 <div data-el="campos" class="hidden space-y-2">
-                    <input data-el="fornecedor" placeholder="Fornecedor / loja (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
-                    <input data-el="valor" type="number" step="0.01" placeholder="Valor R$ (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <p class="text-[11px] font-semibold text-slate-600">Para lançar certo, informe:</p>
+                    <input data-el="fornecedor" placeholder="O que é esta nota? (ex.: Hortifruti) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
+                    <input data-el="valor" type="number" step="0.01" placeholder="Valor da compra (R$) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <button data-el="enviar" class="w-full bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center"></p>
@@ -601,14 +613,22 @@ export async function renderHomeCliente(opts) {
             const campos = root.querySelector('[data-el="campos"]');
             const processar = async (arq) => {
                 if (!arq) return;
-                if (!/^image\//.test(arq.type)) { status.innerText = "Por enquanto envie uma foto (PNG/JPG). PDF e XML chegam na próxima fase."; return; }
-                status.innerText = "Processando foto...";
+                const ehPdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name || "");
+                const ehImg = /^image\//.test(arq.type);
+                if (!ehImg && !ehPdf) { status.innerText = "Envie uma foto (PNG/JPG) ou um PDF."; return; }
+                status.innerText = ehPdf ? "Lendo PDF..." : "Processando foto...";
                 try {
-                    fotoPronta = await comprimirImagem(arq);
-                    preview.src = fotoPronta; preview.classList.remove("hidden");
+                    if (ehImg) {
+                        fotoPronta = await comprimirImagem(arq); arquivoTipo = "image";
+                        preview.src = fotoPronta; preview.classList.remove("hidden");
+                    } else {
+                        const dataUrl = await lerDataURL(arq); arquivoTipo = "pdf";
+                        if (dataUrl.length > 1300000) { fotoPronta = ""; status.innerText = "PDF muito grande (máx ~1MB). Envie um PDF menor ou uma foto."; return; }
+                        fotoPronta = dataUrl; preview.classList.add("hidden");
+                    }
                     campos.classList.remove("hidden");
-                    status.innerText = "Foto pronta ✓";
-                } catch (e) { status.innerText = "Não foi possível processar a foto."; }
+                    status.innerText = ehPdf ? ("PDF pronto ✓ — " + (arq.name || "arquivo")) : "Foto pronta ✓";
+                } catch (e) { status.innerText = "Não foi possível processar o arquivo."; }
             };
             foto.addEventListener("change", (e) => processar(e.target.files[0]));
             if (drop) {
@@ -618,25 +638,27 @@ export async function renderHomeCliente(opts) {
             }
             const btn = root.querySelector('[data-el="enviar"]');
             if (btn) btn.addEventListener("click", async () => {
-                if (!fotoPronta) { status.innerText = "Escolha a foto da nota primeiro."; return; }
-                btn.disabled = true; btn.innerText = "Enviando...";
+                if (!fotoPronta) { status.innerText = "Escolha a foto ou o PDF da nota primeiro."; return; }
                 const fornecedor = root.querySelector('[data-el="fornecedor"]').value.trim();
                 const valor = num(root.querySelector('[data-el="valor"]').value);
+                if (!fornecedor) { status.innerText = "Diga o que é esta nota (ex.: Hortifruti, Energia)."; root.querySelector('[data-el="fornecedor"]').focus(); return; }
+                if (valor <= 0) { status.innerText = "Informe o valor da compra."; root.querySelector('[data-el="valor"]').focus(); return; }
+                btn.disabled = true; btn.innerText = "Enviando...";
                 try {
                     const meuNome = localStorage.getItem("oliverNome") || "";
                     await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
-                        foto: fotoPronta, fornecedor, valor, obs: "",
+                        foto: fotoPronta, arquivoTipo, fornecedor, valor, obs: "",
                         clienteNome: meuNome, clienteId: uid, orgId: opts.orgId || "",
                         enviadoPorUid: uid, enviadoPorNome: meuNome,
                         data: ymdLocal(), criadoEm: new Date().toISOString()
                     });
                     await addDoc(collection(db, "usuarios", uid, "fluxo_caixa"), {
                         tipo: "saida", status: "pre_lancamento", origem: "nota",
-                        descricao: fornecedor || "Nota fiscal", valor,
+                        descricao: fornecedor, valor,
                         categoria: "Fornecedor", data: ymdLocal(), vencimento: ymdLocal(),
                         temFoto: true, criadoEm: new Date().toISOString()
                     });
-                    fotoPronta = "";
+                    fotoPronta = ""; arquivoTipo = "image";
                     await montar();
                     showToast("Nota enviada!", "Ela foi para a consultoria e entrou como nota a conciliar.");
                 } catch (e) { status.innerText = "Erro ao enviar: " + e.message; btn.disabled = false; btn.innerText = "Enviar nota fiscal"; }

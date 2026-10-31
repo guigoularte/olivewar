@@ -16,7 +16,8 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let meuUid = null, meuNome = "", empresaId = null, orgId = null, fotoPronta = "";
+        let meuUid = null, meuNome = "", empresaId = null, orgId = null, fotoPronta = "", arquivoTipo = "image";
+        const lerDataURL = (file) => new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsDataURL(file); });
 
         const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -63,19 +64,27 @@
 
         window.selecionarFoto = async (input) => {
             const arq = input.files[0]; if (!arq) return;
-            document.getElementById('status-foto').innerText = "Processando foto...";
-            try { fotoPronta = await comprimirImagem(arq); document.getElementById('preview').src = fotoPronta; document.getElementById('preview').classList.remove('hidden'); document.getElementById('status-foto').innerText = "Foto pronta ✓"; }
-            catch (e) { document.getElementById('status-foto').innerText = "Não foi possível processar a foto."; }
+            const st = document.getElementById('status-foto');
+            const ehPdf = /pdf/i.test(arq.type) || /\.pdf$/i.test(arq.name || "");
+            const ehImg = /^image\//.test(arq.type);
+            if (!ehImg && !ehPdf) { st.innerText = "Envie uma foto (PNG/JPG) ou um PDF."; return; }
+            st.innerText = ehPdf ? "Lendo PDF..." : "Processando foto...";
+            try {
+                if (ehImg) { fotoPronta = await comprimirImagem(arq); arquivoTipo = "image"; document.getElementById('preview').src = fotoPronta; document.getElementById('preview').classList.remove('hidden'); st.innerText = "Foto pronta ✓"; }
+                else { const d = await lerDataURL(arq); if (d.length > 1300000) { fotoPronta = ""; st.innerText = "PDF muito grande (máx ~1MB)."; return; } fotoPronta = d; arquivoTipo = "pdf"; document.getElementById('preview').classList.add('hidden'); st.innerText = "PDF pronto ✓ — " + (arq.name || "arquivo"); }
+            } catch (e) { st.innerText = "Não foi possível processar o arquivo."; }
         };
 
         window.enviar = async () => {
-            if (!fotoPronta) { alert("Tire ou escolha a foto da nota fiscal."); return; }
-            const btn = document.getElementById('btn-enviar'); btn.disabled = true; btn.innerText = "Enviando...";
+            if (!fotoPronta) { alert("Tire a foto ou escolha o PDF da nota fiscal."); return; }
             const fornecedor = document.getElementById('fornecedor').value.trim();
             const valor = parseFloat(String(document.getElementById('valor').value).replace(",", ".")) || 0;
+            if (!fornecedor) { alert("Diga o que é esta nota (ex.: Hortifruti, Energia)."); document.getElementById('fornecedor').focus(); return; }
+            if (valor <= 0) { alert("Informe o valor da compra."); document.getElementById('valor').focus(); return; }
+            const btn = document.getElementById('btn-enviar'); btn.disabled = true; btn.innerText = "Enviando...";
             try {
                 await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
-                    foto: fotoPronta, fornecedor, valor,
+                    foto: fotoPronta, arquivoTipo, fornecedor, valor,
                     obs: document.getElementById('obs').value.trim(),
                     clienteNome: meuNome, clienteId: meuUid, orgId: orgId || "",
                     enviadoPorUid: meuUid, enviadoPorNome: meuNome,
@@ -85,12 +94,12 @@
                 try {
                     await addDoc(collection(db, "usuarios", meuUid, "fluxo_caixa"), {
                         tipo: "saida", status: "pre_lancamento", origem: "nota",
-                        descricao: fornecedor || "Nota fiscal", valor,
+                        descricao: fornecedor, valor,
                         categoria: "Fornecedor", data: ymdLocal(), vencimento: ymdLocal(),
                         temFoto: true, criadoEm: new Date().toISOString()
                     });
                 } catch (e) { console.error("Falha ao criar pré-lançamento:", e); }
-                fotoPronta = "";
+                fotoPronta = ""; arquivoTipo = "image";
                 document.getElementById('preview').classList.add('hidden');
                 document.getElementById('status-foto').innerText = "";
                 ['fornecedor', 'valor', 'obs'].forEach(id => document.getElementById(id).value = "");
@@ -137,13 +146,13 @@
                 <p class="text-[11px] text-slate-500 mb-3">Tire a foto da nota fiscal da sua compra e envie para a sua consultoria.</p>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 space-y-2 mb-4">
                     <label class="block text-center bg-blue-50 text-blue-700 font-bold py-3 rounded-xl cursor-pointer hover:bg-blue-100">
-                        📷 Tirar / escolher foto da nota
-                        <input type="file" id="foto" accept="image/*" capture="environment" class="hidden" onchange="selecionarFoto(this)">
+                        📷 Foto ou PDF da nota
+                        <input type="file" id="foto" accept="image/*,application/pdf,.pdf" class="hidden" onchange="selecionarFoto(this)">
                     </label>
                     <p id="status-foto" class="text-[11px] text-slate-500 text-center"></p>
                     <img id="preview" class="hidden w-full max-h-56 object-contain rounded-lg border border-slate-100">
-                    <input id="fornecedor" placeholder="Fornecedor / loja (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
-                    <input id="valor" type="number" step="0.01" placeholder="Valor (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <input id="fornecedor" placeholder="O que é esta nota? (ex.: Hortifruti) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <input id="valor" type="number" step="0.01" placeholder="Valor da compra (R$) *" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     <input id="obs" placeholder="Observação (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     <button id="btn-enviar" onclick="enviar()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>

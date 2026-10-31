@@ -51,10 +51,15 @@
             document.getElementById('contador').innerText = lista.length + " nota(s)";
             const c = document.getElementById('lista');
             if (lista.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center mt-8">Nenhuma nota recebida.</p>'; return; }
-            c.innerHTML = lista.map(n => `
+            c.innerHTML = lista.map(n => {
+                const ehPdf = n.arquivoTipo === "pdf" || String(n.foto || "").startsWith("data:application/pdf");
+                const thumb = ehPdf
+                    ? `<button onclick="ampliar('${n.id}')" class="w-20 h-20 rounded-lg shrink-0 bg-rose-50 border border-rose-100 text-rose-600 flex flex-col items-center justify-center cursor-pointer"><span class="text-2xl">📄</span><span class="text-[9px] font-bold">PDF</span></button>`
+                    : `<img src="${n.foto}" onclick="ampliar('${n.id}')" class="w-20 h-20 rounded-lg object-cover shrink-0 cursor-pointer">`;
+                return `
                 <div class="bg-white rounded-xl border border-slate-200 mb-2 p-2">
                     <div class="flex gap-2">
-                        <img src="${n.foto}" onclick="ampliar('${n.id}')" class="w-20 h-20 rounded-lg object-cover shrink-0 cursor-pointer">
+                        ${thumb}
                         <div class="min-w-0 flex-1 text-xs">
                             <div class="font-bold text-slate-800 truncate">${esc(n.clienteNome) || "cliente"}</div>
                             <div class="text-slate-500 truncate">${esc(n.fornecedor) || "Nota fiscal"}</div>
@@ -63,11 +68,14 @@
                         </div>
                         ${podeExcluir ? `<button onclick="excluir('${n.id}')" class="text-red-400 hover:text-red-600 text-sm self-start">🗑</button>` : ""}
                     </div>
-                </div>`).join('');
+                </div>`;
+            }).join('');
         };
 
         window.ampliar = (id) => {
             const n = notas.find(x => x.id === id); if (!n) return;
+            const ehPdf = n.arquivoTipo === "pdf" || String(n.foto || "").startsWith("data:application/pdf");
+            if (ehPdf) { const w = window.open(); if (w) { w.document.write('<iframe src="' + n.foto + '" style="border:0;width:100%;height:100%"></iframe>'); } return; }
             document.getElementById('modal-img').src = n.foto;
             document.getElementById('modal').classList.remove('hidden');
         };
