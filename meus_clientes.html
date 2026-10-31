@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Meus Clientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="oliver_ui.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let meuUid = null, meuNome = "";
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const quando = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const snap = await getDoc(doc(db, "usuarios", user.uid));
+            const d = snap.exists() ? snap.data() : {};
+            meuNome = (d.nome || user.email || "").trim();
+            const func = d.funcionalidades || {};
+            const ehMaster = d.role === "master";
+            const souConsultoria = ehMaster || func.relatorios === true;
+            if (!souConsultoria) { alert("Esta área é da consultoria."); window.location.href = "app.html"; return; }
+
+            const minhaEmpresa = d.empresaId || "";
+            const permitidos = Array.isArray(d.clientesPermitidos) ? d.clientesPermitidos : [];
+
+            let todos = [];
+            try { const s = await getDocs(collection(db, "usuarios")); todos = s.docs.map(x => ({ id: x.id, ...x.data() })); }
+            catch (e) { document.getElementById('lista').innerHTML = '<p class="text-xs text-red-500 py-4 text-center">Erro ao carregar: ' + esc(e.message) + '</p>'; return; }
+
+            const clientes = todos.filter(u => {
+                if (u.id === meuUid) return false;
+                if (u.role === "master") return false;
+                if (u.funcionalidades && u.funcionalidades.relatorios === true) return false; // esconde outros funcionários
+                if (minhaEmpresa && (u.empresaId || "") !== minhaEmpresa) return false;       // escopo da empresa
+                if (!ehMaster && permitidos.length > 0 && !permitidos.includes(u.id)) return false; // funcionário: só seus clientes
+                return true;
+            }).sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || ""));
+
+            render(clientes);
+        });
+
+        function render(clientes) {
+            document.getElementById('contador').innerText = clientes.length + " cliente(s)";
+            const c = document.getElementById('lista');
+            if (clientes.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Nenhum cliente vinculado ainda.</p>'; return; }
+            c.innerHTML = clientes.map(u => {
+                const nome = esc(u.nome || u.email || "cliente");
+                const o = u.orientacao || {};
+                const info = o.atualizadoEm ? `<span class="text-[10px] text-slate-400">Atualizado ${quando(o.atualizadoEm)}${o.autor ? " por " + esc(o.autor) : ""}</span>` : "";
+                return `
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-3">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">${esc((u.nome || u.email || "C")[0].toUpperCase())}</div>
+                        <div class="min-w-0"><p class="font-bold text-slate-800 text-sm truncate">${nome}</p><p class="text-[11px] text-slate-400 truncate">${esc(u.email || "")}</p></div>
+                    </div>
+                    <label class="text-[11px] font-semibold text-slate-600">Orientação para o cliente (aparece no painel dele)</label>
+                    <textarea id="ori-${u.id}" rows="3" class="w-full mt-1 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Ex.: Esta semana, envie as notas das compras de insumos para calcularmos o CMV.">${esc(o.texto || "")}</textarea>
+                    <div class="flex items-center justify-between mt-2">
+                        ${info || '<span></span>'}
+                        <button onclick="salvar('${u.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg">Salvar orientação</button>
+                    </div>
+                    <p id="st-${u.id}" class="text-[11px] text-emerald-600 text-right mt-1"></p>
+                </div>`;
+            }).join('');
+        }
+
+        window.salvar = async (uid) => {
+            const texto = document.getElementById('ori-' + uid).value.trim();
+            const st = document.getElementById('st-' + uid);
+            st.innerText = "Salvando..."; st.className = "text-[11px] text-slate-400 text-right mt-1";
+            try {
+                await updateDoc(doc(db, "usuarios", uid), { orientacao: { texto, autor: meuNome.split(" ")[0] || meuNome, atualizadoEm: new Date().toISOString() } });
+                st.innerText = texto ? "Orientação salva ✓" : "Orientação removida";
+                st.className = "text-[11px] text-emerald-600 text-right mt-1";
+            } catch (e) { st.innerText = "Erro: " + e.message; st.className = "text-[11px] text-red-500 text-right mt-1"; }
+        };
+    </script>
+</head>
+<body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col p-6 overflow-hidden">
+        <div class="overflow-y-auto flex-1">
+            <div class="flex items-center justify-between mb-3">
+                <a href="app.html" class="text-blue-900 font-bold text-sm">← Voltar</a>
+                <h1 class="text-base font-black text-blue-950">Meus Clientes</h1>
+                <div class="w-10"></div>
+            </div>
+            <p class="text-[11px] text-slate-500 mb-1">Escreva uma orientação para cada cliente. Ela aparece no painel inicial (cockpit) dele.</p>
+            <p id="contador" class="text-[11px] font-bold text-slate-600 mb-3">—</p>
+            <div id="lista"></div>
+        </div>
+    </div>
+</body>
+</html>

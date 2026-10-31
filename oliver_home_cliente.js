@@ -57,6 +57,7 @@ function comprimirImagem(file, maxLado = 1200, qualidade = 0.65) {
 // Menu completo do app mobile (espelha a sidebar do desktop; mesma regra de permissão)
 const MENU = [
     { href: "dashboard.html", label: "Dashboard", icon: "fa-chart-pie", key: "relatorios", padrao: false, sec: "Gestão" },
+    { href: "meus_clientes.html", label: "Meus Clientes", icon: "fa-user-group", consultoria: true, sec: "Gestão" },
     { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
@@ -83,6 +84,7 @@ function podeVerMenu(l, p) {
     if (l.always) return true;
     if (l.master) return !!p.master;
     if (l.orgLink) return !!(p.master || (p.func && p.func.relatorios) || p.org);
+    if (l.consultoria) return !!(p.master || (p.func && p.func.relatorios));
     if (l.clienteOnly) return !(p.master || (p.func && p.func.relatorios));
     if (l.key) return p.master || ((l.key in (p.func || {})) ? p.func[l.key] : l.padrao);
     return true;
@@ -94,6 +96,7 @@ export async function renderHomeCliente(opts) {
     const nome = opts.nome || (localStorage.getItem("oliverNome") || "");
     const consultoriaNome = opts.consultoriaNome || "";
     const consultoriaTel = opts.consultoriaTel || "";
+    const orientacao = (opts.orientacao && opts.orientacao.texto) ? opts.orientacao : null;
     // Enviar nota é parte central do cockpit: liberado para todo cliente vinculado a uma consultoria.
     const temNotas = !!empresaId;
     const temMargem = !!(func && func.calculoMargem);
@@ -188,14 +191,16 @@ export async function renderHomeCliente(opts) {
             <div class="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
                 <div class="lg:col-span-8 space-y-2">
                     <div class="flex items-center gap-2 flex-wrap">
-                        <span class="bg-white/20 backdrop-blur text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider"><i class="fa-solid fa-hand-sparkles mr-1"></i>Bem-vindo de volta</span>
+                        <span class="bg-white/20 backdrop-blur text-white text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider"><i class="fa-solid ${orientacao ? "fa-user-tie" : "fa-hand-sparkles"} mr-1"></i>${orientacao ? "Orientação da consultoria" : "Bem-vindo de volta"}</span>
                         ${consultoriaNome ? `<span class="text-orange-50 text-xs"><i class="fa-solid fa-building mr-1"></i>${esc(consultoriaNome)}</span>` : ""}
                     </div>
                     <h2 class="text-xl md:text-2xl font-black">Olá, ${esc(nome || "bem-vindo")}!</h2>
                     <p class="text-sm font-medium leading-relaxed text-orange-50">
-                        ${d.preLanc.length > 0
-                            ? `Você tem <strong class="text-white underline decoration-amber-200">${d.preLanc.length} nota(s)</strong> para conciliar. Revise e lance no caixa — assim seus relatórios ficam sempre atualizados.`
-                            : `Envie as notas das suas compras para manter o fluxo de caixa e os relatórios da consultoria sempre atualizados.`}
+                        ${orientacao
+                            ? `“${esc(orientacao.texto)}”${orientacao.autor ? `<br><span class="text-[11px] text-orange-100">— ${esc(orientacao.autor)}</span>` : ""}`
+                            : (d.preLanc.length > 0
+                                ? `Você tem <strong class="text-white underline decoration-amber-200">${d.preLanc.length} nota(s)</strong> para conciliar. Revise e lance no caixa — assim seus relatórios ficam sempre atualizados.`
+                                : `Envie as notas das suas compras para manter o fluxo de caixa e os relatórios da consultoria sempre atualizados.`)}
                     </p>
                     <div class="pt-1">
                         <button id="oliver-open-consultor" class="bg-white text-orange-700 hover:bg-orange-50 text-xs font-bold px-3.5 py-2 rounded-xl transition inline-flex items-center gap-2"><i class="fa-solid fa-comments"></i>Falar com a consultoria</button>
@@ -375,11 +380,11 @@ export async function renderHomeCliente(opts) {
             <div class="bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 rounded-3xl p-4 text-white shadow-md relative overflow-hidden">
                 <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
                 <div class="flex justify-between items-center mb-1.5">
-                    <span class="text-[10px] font-bold uppercase tracking-wider bg-black/20 px-2.5 py-1 rounded-full text-orange-100 flex items-center gap-1"><i class="fa-solid fa-hand-sparkles"></i> Bem-vindo</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider bg-black/20 px-2.5 py-1 rounded-full text-orange-100 flex items-center gap-1"><i class="fa-solid ${orientacao ? "fa-user-tie" : "fa-hand-sparkles"}"></i> ${orientacao ? "Orientação" : "Bem-vindo"}</span>
                     ${consultoriaNome ? `<span class="text-[10px] text-orange-100 font-medium">${esc(consultoriaNome)}</span>` : ""}
                 </div>
                 <p class="text-sm font-bold">Olá, ${esc(nome || "bem-vindo")}!</p>
-                <p class="text-xs font-medium leading-relaxed text-white/95 mt-1">${d.preLanc.length > 0 ? `Você tem <b>${d.preLanc.length} nota(s)</b> para conciliar. Confirme para manter o caixa em dia.` : `Tire foto das notas das suas compras para manter o caixa e os relatórios atualizados.`}</p>
+                <p class="text-xs font-medium leading-relaxed text-white/95 mt-1">${orientacao ? `“${esc(orientacao.texto)}”${orientacao.autor ? ` <span class="text-orange-100">— ${esc(orientacao.autor)}</span>` : ""}` : (d.preLanc.length > 0 ? `Você tem <b>${d.preLanc.length} nota(s)</b> para conciliar. Confirme para manter o caixa em dia.` : `Tire foto das notas das suas compras para manter o caixa e os relatórios atualizados.`)}</p>
                 <div class="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-[11px] text-orange-50">
                     <span><i class="fa-solid fa-file-invoice-dollar mr-1"></i>${d.preLanc.length} a conciliar</span>
                     <span><i class="fa-solid fa-calendar-xmark mr-1"></i>${brl(d.aPagarSemana)} a pagar</span>

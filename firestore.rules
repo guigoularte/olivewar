@@ -160,7 +160,10 @@ service cloud.firestore {
       allow update: if ehMaster()
                     || (request.auth != null
                         && request.auth.uid == userId
-                        && naoAlterou(['role', 'funcionalidades', 'clientesPermitidos', 'categoria', 'empresaId']));
+                        && naoAlterou(['role', 'funcionalidades', 'clientesPermitidos', 'categoria', 'empresaId']))
+                    // Funcionário pode gravar APENAS a orientação dos clientes que atende
+                    || (ehFuncionario() && clientePermitido(userId)
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['orientacao']));
 
       allow delete: if ehMaster();
 
