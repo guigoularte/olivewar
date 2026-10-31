@@ -154,8 +154,9 @@
                 if (elInd) elInd.style.display = souConsultoria ? 'none' : 'flex';
 
                 // No desktop (onde já existe a sidebar) a HOME vira o dashboard.
-                // No celular mantém os cards de navegação como está.
-                if (window.innerWidth >= 1024 && souConsultoria && dados.empresaId) {
+                // Exceção: consultor/master que TAMBÉM envia notas (notasFiscais) recebe o
+                // painel de envio (tratado no bloco da home abaixo), então aqui pulamos o dashboard.
+                if (window.innerWidth >= 1024 && souConsultoria && dados.empresaId && !(func && func.notasFiscais)) {
                     const cards = document.getElementById('home-cards');
                     if (cards) cards.style.setProperty('display', 'none', 'important');
                     const dash = document.getElementById('home-dashboard');
@@ -225,9 +226,10 @@
                     try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
                     const nome = localStorage.getItem('oliverNome') || "";
                     const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel, codigo: dados.codigoAcesso || "", orientacao: dados.orientacao || null };
+                    const consultorComNotas = souConsultoria && !!(func && func.notasFiscais);
                     if (!isDesktop) {
-                        // Celular: app em abas para TODOS (master/consultoria abrem no Menu).
-                        try { await renderHomeCliente({ ...baseHome, mount: document.getElementById('home-cliente') || document.body, isDesktop: false, inicialTab: souConsultoria ? 'menu' : 'cockpit' }); }
+                        // Celular: app em abas para TODOS. Consultor que envia notas abre no Cockpit; demais consultoria no Menu.
+                        try { await renderHomeCliente({ ...baseHome, mount: document.getElementById('home-cliente') || document.body, isDesktop: false, inicialTab: (souConsultoria && !consultorComNotas) ? 'menu' : 'cockpit' }); }
                         catch (e) { console.error("Falha ao montar app mobile:", e); }
                     } else if (!souConsultoria) {
                         // Desktop (cliente): cockpit (sidebar escura + topo), cobrindo a sidebar padrão.
@@ -235,8 +237,18 @@
                             const mount = montarCockpit({ nome, negocioNome: consultoriaNome, consultoriaNome, codigo: dados.codigoAcesso || "", func, itensPend: parseInt(localStorage.getItem('oliverItensPendentes') || '0', 10) || 0, consultoriaTel });
                             await renderHomeCliente({ ...baseHome, mount, isDesktop: true });
                         } catch (e) { console.error("Falha ao montar cockpit:", e); }
+                    } else if (consultorComNotas) {
+                        // Desktop (consultor/master que também envia notas): painel de envio no conteúdo,
+                        // mantendo a sidebar completa da consultoria (oliver_ui.js).
+                        const cards = document.getElementById('home-cards'); if (cards) cards.style.setProperty('display', 'none', 'important');
+                        const dash = document.getElementById('home-dashboard');
+                        if (dash) {
+                            dash.classList.remove('hidden');
+                            try { await renderHomeCliente({ ...baseHome, mount: dash, isDesktop: true }); }
+                            catch (e) { console.error("Falha ao montar envio no home do consultor:", e); }
+                        }
                     }
-                    // Desktop (master/consultoria): dashboard + sidebar escura, já tratados acima.
+                    // Desktop (consultoria sem notas): dashboard + sidebar escura, já tratados acima.
                 }
 
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria
