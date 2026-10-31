@@ -16,9 +16,13 @@
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let meuUid = null, meuNome = "";
+        let meuUid = null, meuNome = "", ehMaster = false, permitidos = [];
+        let usuarios = [], aba = "clientes", busca = "";
+
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const quando = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
+        // Mesma categorização do Painel Master
+        const categoriaDe = (u) => (u.categoria === "cliente" || u.categoria === "funcionario") ? u.categoria : ((u.funcionalidades && u.funcionalidades.relatorios) ? "funcionario" : "novo");
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -27,52 +31,75 @@
             const d = snap.exists() ? snap.data() : {};
             meuNome = (d.nome || user.email || "").trim();
             const func = d.funcionalidades || {};
-            const ehMaster = d.role === "master";
+            ehMaster = d.role === "master";
             const souConsultoria = ehMaster || func.relatorios === true;
             if (!souConsultoria) { alert("Esta área é da consultoria."); window.location.href = "app.html"; return; }
+            permitidos = Array.isArray(d.clientesPermitidos) ? d.clientesPermitidos : [];
 
-            const minhaEmpresa = d.empresaId || "";
-            const permitidos = Array.isArray(d.clientesPermitidos) ? d.clientesPermitidos : [];
-
-            let todos = [];
-            try { const s = await getDocs(collection(db, "usuarios")); todos = s.docs.map(x => ({ id: x.id, ...x.data() })); }
-            catch (e) { document.getElementById('lista').innerHTML = '<p class="text-xs text-red-500 py-4 text-center">Erro ao carregar: ' + esc(e.message) + '</p>'; return; }
-
-            const clientes = todos.filter(u => {
-                if (u.id === meuUid) return false;
-                if (u.role === "master") return false;
-                if (u.funcionalidades && u.funcionalidades.relatorios === true) return false; // esconde outros funcionários
-                if (minhaEmpresa && (u.empresaId || "") !== minhaEmpresa) return false;       // escopo da empresa
-                if (!ehMaster && permitidos.length > 0 && !permitidos.includes(u.id)) return false; // funcionário: só seus clientes
-                return true;
-            }).sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || ""));
-
-            render(clientes);
+            try {
+                const s = await getDocs(collection(db, "usuarios"));
+                usuarios = [];
+                s.forEach((x) => {
+                    if (x.id === meuUid) return;
+                    const u = { id: x.id, ...x.data() };
+                    if (u.role === "master") return;
+                    // Funcionário vê só os clientes atribuídos (se houver lista)
+                    if (!ehMaster && permitidos.length > 0 && !permitidos.includes(u.id)) return;
+                    usuarios.push(u);
+                });
+            } catch (e) { document.getElementById('lista').innerHTML = '<p class="text-xs text-red-500 py-4 text-center">Erro ao carregar: ' + esc(e.message) + '</p>'; return; }
+            render();
         });
 
-        function render(clientes) {
-            document.getElementById('contador').innerText = clientes.length + " cliente(s)";
+        const tabCls = (ativo) => "flex-1 py-2 rounded-lg text-xs font-bold transition " + (ativo ? "bg-indigo-600 text-white" : "bg-white text-slate-500 border border-slate-200");
+        window.trocarAba = (a) => { aba = a; document.getElementById('busca').value = ""; busca = ""; render(); };
+        window.buscar = (v) => { busca = (v || "").toLowerCase(); render(); };
+
+        function render() {
+            const cont = { novo: 0, cliente: 0, funcionario: 0 };
+            usuarios.forEach(u => cont[categoriaDe(u)]++);
+            document.getElementById('tab-novos').className = tabCls(aba === "novos");
+            document.getElementById('tab-clientes').className = tabCls(aba === "clientes");
+            document.getElementById('tab-funcionarios').className = tabCls(aba === "funcionarios");
+            document.getElementById('tab-novos').innerText = "Novos (" + cont.novo + ")";
+            document.getElementById('tab-clientes').innerText = "Clientes (" + cont.cliente + ")";
+            document.getElementById('tab-funcionarios').innerText = "Funcionários (" + cont.funcionario + ")";
+
+            const alvo = aba === "novos" ? "novo" : aba === "clientes" ? "cliente" : "funcionario";
+            const lista = usuarios
+                .filter(u => categoriaDe(u) === alvo)
+                .filter(u => (u.nome || u.email || "").toLowerCase().includes(busca))
+                .sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || "", "pt", { sensitivity: "base" }));
+
+            const rot = { novos: "novo(s)", clientes: "cliente(s)", funcionarios: "funcionário(s)" };
+            document.getElementById('contador').innerText = lista.length + " " + rot[aba];
             const c = document.getElementById('lista');
-            if (clientes.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Nenhum cliente vinculado ainda.</p>'; return; }
-            c.innerHTML = clientes.map(u => {
-                const nome = esc(u.nome || u.email || "cliente");
-                const o = u.orientacao || {};
-                const info = o.atualizadoEm ? `<span class="text-[10px] text-slate-400">Atualizado ${quando(o.atualizadoEm)}${o.autor ? " por " + esc(o.autor) : ""}</span>` : "";
-                return `
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-3">
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">${esc((u.nome || u.email || "C")[0].toUpperCase())}</div>
-                        <div class="min-w-0"><p class="font-bold text-slate-800 text-sm truncate">${nome}</p><p class="text-[11px] text-slate-400 truncate">${esc(u.email || "")}</p></div>
-                    </div>
-                    <label class="text-[11px] font-semibold text-slate-600">Orientação para o cliente (aparece no painel dele)</label>
-                    <textarea id="ori-${u.id}" rows="3" class="w-full mt-1 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Ex.: Esta semana, envie as notas das compras de insumos para calcularmos o CMV.">${esc(o.texto || "")}</textarea>
-                    <div class="flex items-center justify-between mt-2">
-                        ${info || '<span></span>'}
-                        <button onclick="salvar('${u.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg">Salvar orientação</button>
-                    </div>
-                    <p id="st-${u.id}" class="text-[11px] text-emerald-600 text-right mt-1"></p>
-                </div>`;
-            }).join('');
+            if (lista.length === 0) { c.innerHTML = '<p class="text-sm text-slate-400 text-center py-8">Nenhum registro nesta aba.</p>'; return; }
+            c.innerHTML = lista.map(cardHTML).join('');
+        }
+
+        function cardHTML(u) {
+            const nome = esc(u.nome || u.email || "usuário");
+            const cat = categoriaDe(u);
+            const o = u.orientacao || {};
+            const info = o.atualizadoEm ? `<span class="text-[10px] text-slate-400">Atualizado ${quando(o.atualizadoEm)}${o.autor ? " por " + esc(o.autor) : ""}</span>` : "";
+            const aviso = cat === "cliente" ? "Aparece no painel inicial do cliente." : "Será exibida quando a central de mensagens desse perfil estiver ativa.";
+            return `
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-3">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm shrink-0">${esc((u.nome || u.email || "U")[0].toUpperCase())}</div>
+                    <div class="min-w-0 flex-1"><p class="font-bold text-slate-800 text-sm truncate">${nome}</p><p class="text-[11px] text-slate-400 truncate">${esc(u.email || "")}</p></div>
+                    <span class="text-[9px] font-bold px-2 py-0.5 rounded-full ${cat === "cliente" ? "bg-emerald-100 text-emerald-700" : cat === "funcionario" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}">${cat === "cliente" ? "Cliente" : cat === "funcionario" ? "Funcionário" : "Novo"}</span>
+                </div>
+                <label class="text-[11px] font-semibold text-slate-600">Mensagem / orientação</label>
+                <textarea id="ori-${u.id}" rows="3" class="w-full mt-1 p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Ex.: Esta semana, envie as notas das compras de insumos para calcularmos o CMV.">${esc(o.texto || "")}</textarea>
+                <p class="text-[10px] text-slate-400 mt-0.5">${aviso}</p>
+                <div class="flex items-center justify-between mt-2">
+                    ${info || '<span></span>'}
+                    <button onclick="salvar('${u.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg">Salvar</button>
+                </div>
+                <p id="st-${u.id}" class="text-[11px] text-emerald-600 text-right mt-1"></p>
+            </div>`;
         }
 
         window.salvar = async (uid) => {
@@ -81,7 +108,8 @@
             st.innerText = "Salvando..."; st.className = "text-[11px] text-slate-400 text-right mt-1";
             try {
                 await updateDoc(doc(db, "usuarios", uid), { orientacao: { texto, autor: meuNome.split(" ")[0] || meuNome, atualizadoEm: new Date().toISOString() } });
-                st.innerText = texto ? "Orientação salva ✓" : "Orientação removida";
+                const u = usuarios.find(x => x.id === uid); if (u) u.orientacao = { texto, autor: meuNome.split(" ")[0] || meuNome, atualizadoEm: new Date().toISOString() };
+                st.innerText = texto ? "Mensagem salva ✓" : "Mensagem removida";
                 st.className = "text-[11px] text-emerald-600 text-right mt-1";
             } catch (e) { st.innerText = "Erro: " + e.message; st.className = "text-[11px] text-red-500 text-right mt-1"; }
         };
@@ -95,7 +123,13 @@
                 <h1 class="text-base font-black text-blue-950">Meus Clientes</h1>
                 <div class="w-10"></div>
             </div>
-            <p class="text-[11px] text-slate-500 mb-1">Escreva uma orientação para cada cliente. Ela aparece no painel inicial (cockpit) dele.</p>
+            <p class="text-[11px] text-slate-500 mb-3">Escreva uma mensagem/orientação para cada usuário. Para clientes, ela aparece no painel inicial (cockpit) deles.</p>
+            <div class="flex gap-2 mb-3">
+                <button id="tab-novos" onclick="trocarAba('novos')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Novos</button>
+                <button id="tab-clientes" onclick="trocarAba('clientes')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white">Clientes</button>
+                <button id="tab-funcionarios" onclick="trocarAba('funcionarios')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Funcionários</button>
+            </div>
+            <input id="busca" oninput="buscar(this.value)" placeholder="🔎 Procurar pelo nome..." class="w-full p-2.5 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-400 mb-2">
             <p id="contador" class="text-[11px] font-bold text-slate-600 mb-3">—</p>
             <div id="lista"></div>
         </div>
