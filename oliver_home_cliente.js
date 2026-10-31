@@ -309,68 +309,138 @@ export async function renderHomeCliente(opts) {
             ${modal}${datalist}`;
     }
 
-    // ======================= LAYOUT CELULAR (app) =======================
+    // ======================= APP CELULAR (abas: Cockpit / Rotinas / Caixa / Perfil) =======================
     function htmlMobile(d) {
-        const trendTxt = d.trend === null ? "" :
-            `<p class="text-[9px] ${d.trend >= 0 ? "text-emerald-600" : "text-rose-600"} font-medium mt-0.5"><i class="fa-solid fa-arrow-${d.trend >= 0 ? "up" : "down"} mr-0.5"></i>${d.trend >= 0 ? "+" : ""}${d.trend.toFixed(0)}% no mês</p>`;
-        const resumo = `
-            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm mb-3">
-                <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                    <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Resumo do caixa</span>
-                    <a href="fluxo_caixa.html" class="text-[10px] text-orange-600 font-bold">Ver caixa →</a>
+        const codigo = opts.codigo || "";
+        const totalPend = d.preLanc.length + (d.itensPend > 0 ? 1 : 0);
+
+        // --- Aba Cockpit ---
+        const banner = `
+            <div class="bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 rounded-3xl p-4 text-white shadow-md relative overflow-hidden">
+                <div class="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+                <div class="flex justify-between items-center mb-1.5">
+                    <span class="text-[10px] font-bold uppercase tracking-wider bg-black/20 px-2.5 py-1 rounded-full text-orange-100 flex items-center gap-1"><i class="fa-solid fa-hand-sparkles"></i> Bem-vindo</span>
+                    ${consultoriaNome ? `<span class="text-[10px] text-orange-100 font-medium">${esc(consultoriaNome)}</span>` : ""}
                 </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <p class="text-[10px] text-slate-400 font-medium">Saldo atual</p>
-                        <p class="text-sm font-extrabold ${d.saldoAtual >= 0 ? "text-slate-800" : "text-rose-600"} mt-0.5">${brl(d.saldoAtual)}</p>${trendTxt}
-                    </div>
-                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <p class="text-[10px] text-slate-400 font-medium">A pagar (semana)</p>
-                        <p class="text-sm font-extrabold text-rose-600 mt-0.5">${brl(d.aPagarSemana)}</p>
-                        <p class="text-[9px] ${d.vencemHoje > 0 ? "text-amber-600" : "text-slate-400"} font-medium mt-0.5"><i class="fa-solid fa-clock mr-0.5"></i>${d.vencemHoje > 0 ? d.vencemHoje + " vence(m) hoje" : "nada hoje"}</p>
-                    </div>
+                <p class="text-sm font-bold">Olá, ${esc(nome || "bem-vindo")}!</p>
+                <p class="text-xs font-medium leading-relaxed text-white/95 mt-1">${d.preLanc.length > 0 ? `Você tem <b>${d.preLanc.length} nota(s)</b> para conciliar. Confirme para manter o caixa em dia.` : `Tire foto das notas das suas compras para manter o caixa e os relatórios atualizados.`}</p>
+                <div class="mt-3 pt-2.5 border-t border-white/20 flex items-center justify-between text-[11px] text-orange-50">
+                    <span><i class="fa-solid fa-file-invoice-dollar mr-1"></i>${d.preLanc.length} a conciliar</span>
+                    <span><i class="fa-solid fa-calendar-xmark mr-1"></i>${brl(d.aPagarSemana)} a pagar</span>
                 </div>
             </div>`;
-        const envio = temNotas ? `
-            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm mb-3">
-                <div class="flex items-center justify-between mb-2">
-                    <p class="text-sm font-black text-blue-950">📷 Envio rápido de nota</p>
-                    <span class="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">auto em breve</span>
+        const captura = temNotas ? `
+            <div class="bg-white rounded-3xl p-3.5 border border-orange-200/80 shadow-sm space-y-2">
+                <div class="flex items-center justify-between px-1">
+                    <div class="text-left"><h2 class="text-xs font-extrabold text-slate-800">Captura de comprovantes</h2><p class="text-[10px] text-slate-400">A nota vira conta a pagar para você confirmar</p></div>
+                    <span class="bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-full">OCR em breve</span>
                 </div>
-                <label data-el="drop" class="block text-center border-2 border-dashed border-orange-200 bg-orange-50/60 text-orange-700 font-bold py-4 rounded-xl cursor-pointer hover:bg-orange-100 transition text-sm">
-                    <span data-el="drop-label"><i class="fa-solid fa-camera mr-1"></i>Tirar / escolher foto</span>
+                <label data-el="drop" class="block w-full bg-gradient-to-r from-orange-500 to-orange-600 active:scale-[.98] text-white font-bold py-3.5 px-4 rounded-2xl shadow-md flex items-center justify-center gap-2.5 transition text-xs cursor-pointer">
+                    <span class="w-7 h-7 bg-white/20 rounded-xl flex items-center justify-center"><i class="fa-solid fa-camera text-sm"></i></span>
+                    <span data-el="drop-label">Tirar foto da nota / recibo</span>
                     <input type="file" data-el="foto" accept="image/*" capture="environment" class="hidden">
                 </label>
-                <img data-el="preview" class="hidden w-full max-h-44 object-contain rounded-lg border border-slate-100 mt-2">
-                <div data-el="campos" class="hidden mt-2 space-y-2">
+                <img data-el="preview" class="hidden w-full max-h-44 object-contain rounded-lg border border-slate-100">
+                <div data-el="campos" class="hidden space-y-2">
                     <input data-el="fornecedor" placeholder="Fornecedor / loja (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <input data-el="valor" type="number" step="0.01" placeholder="Valor R$ (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
-                    <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
+                    <button data-el="enviar" class="w-full bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
-                <p data-el="status" class="text-[11px] text-slate-500 text-center mt-2"></p>
+                <p data-el="status" class="text-[11px] text-slate-500 text-center"></p>
             </div>` : "";
-        const totalPend = d.preLanc.length + (d.itensPend > 0 ? 1 : 0);
         const cards = d.preLanc.map(cartaoPreLanc).join("");
         const extras = [];
-        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-3 shadow-sm"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><p class="text-xs font-bold text-slate-800">Itens do acompanhamento</p><p class="text-[10px] text-slate-400">Pendências da consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);
-        const feed = `
-            <div class="flex items-center justify-between px-1 mb-2">
-                <div class="flex items-center gap-1.5"><h3 class="font-bold text-slate-800 text-xs uppercase tracking-wide">Itens para resolver</h3>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">${totalPend}</span>` : ""}</div>
-            </div>
-            <div class="space-y-2 mb-3">${(cards + extras.join("")) || `<div class="bg-white border border-slate-200 rounded-2xl p-4 text-center text-xs text-slate-400">Tudo em dia por aqui ✅</div>`}</div>`;
-        const linhas = d.extrato.slice(0, 3).map((m) => {
+        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-3 border border-slate-100 rounded-2xl bg-slate-50"><div class="flex items-center gap-2.5"><div class="w-8 h-8 bg-green-100 text-green-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><h3 class="text-xs font-bold text-slate-800">Itens do acompanhamento</h3><p class="text-[10px] text-slate-400">Pendências da consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);
+        const fila = `
+            <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-1.5"><h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Itens para resolver</h2>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">${totalPend}</span>` : ""}</div>
+                    <span class="text-[10px] text-orange-600 font-bold">Conciliação</span>
+                </div>
+                <div class="space-y-2.5">${(cards + extras.join("")) || `<div class="text-center py-4"><div class="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><i class="fa-solid fa-circle-check"></i></div><p class="text-xs font-bold text-slate-700 mt-1">Tudo em dia!</p></div>`}</div>
+            </div>`;
+        const kpi = (rot, val, cor) => `<div class="bg-slate-50 p-3 rounded-2xl border border-slate-100"><p class="text-[10px] text-slate-400 font-semibold">${rot}</p><p class="text-base font-black ${cor} leading-none mt-1">${val}</p></div>`;
+        const saude = `
+            <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm space-y-3">
+                <div class="flex items-center justify-between"><h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-1.5"><i class="fa-solid fa-chart-pie text-orange-500"></i> Saúde do negócio</h2></div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    ${kpi("Saldo em caixa", brl(d.saldoAtual), d.saldoAtual >= 0 ? "text-slate-800" : "text-rose-600")}
+                    ${kpi("A pagar (semana)", brl(d.aPagarSemana), "text-rose-600")}
+                    ${kpi("Entradas (mês)", brl(d.entMes), "text-emerald-600")}
+                    ${kpi("Notas a conciliar", d.preLanc.length + "", "text-orange-600")}
+                </div>
+            </div>`;
+        const paneCockpit = `<div data-pane="cockpit" class="space-y-3.5">${banner}${captura}${fila}${saude}</div>`;
+
+        // --- Aba Rotinas ---
+        const paneRotinas = `<div data-pane="rotinas" class="hidden space-y-3">
+            <a href="rotinas.html" class="block bg-white rounded-3xl p-4 border border-slate-200 shadow-sm">
+                <div class="flex items-center gap-3"><div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check"></i></div><div><h2 class="font-bold text-sm text-slate-800">Rotinas de gestão</h2><p class="text-xs text-slate-500">Checklists do seu acompanhamento</p></div><i class="fa-solid fa-chevron-right text-slate-300 ml-auto"></i></div>
+            </a>
+            ${d.itensPend > 0 ? `<a href="itens_resolver.html" class="block bg-white rounded-3xl p-4 border border-slate-200 shadow-sm"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-2xl bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-list-check"></i></div><div><h2 class="font-bold text-sm text-slate-800">Itens para resolver</h2><p class="text-xs text-slate-500">${d.itensPend} pendência(s)</p></div><span class="ml-auto bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></div></a>` : ""}
+        </div>`;
+
+        // --- Aba Caixa ---
+        const linhas = d.extrato.slice(0, 8).map((m) => {
             const entrada = m.tipo === "entrada";
-            return `<div class="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                <div class="flex items-center gap-2"><div class="w-6 h-6 rounded-full ${entrada ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} flex items-center justify-center text-[10px]"><i class="fa-solid fa-arrow-${entrada ? "down" : "up"}"></i></div><div><p class="font-bold text-slate-800 text-[11px]">${esc(m.descricao || "")}</p><p class="text-[9px] text-slate-400">${m.data ? m.data.split("-").reverse().join("/") : ""}${m.origem === "nota" ? " • Nota" : ""}</p></div></div>
-                <span class="font-extrabold ${entrada ? "text-emerald-600" : "text-rose-600"} text-xs">${entrada ? "+" : "-"} ${brl(m.valor)}</span>
+            return `<div class="flex justify-between items-center py-2 border-b border-slate-100 last:border-0 text-xs">
+                <div><p class="font-bold text-slate-800">${esc(m.descricao || "")}</p><p class="text-[10px] text-slate-400">${m.data ? m.data.split("-").reverse().join("/") : ""}${m.origem === "nota" ? " • Nota" : ""}</p></div>
+                <span class="font-extrabold ${entrada ? "text-emerald-600" : "text-rose-600"}">${entrada ? "+" : "-"} ${brl(m.valor)}</span>
             </div>`;
         }).join("");
-        const extrato = d.extrato.length ? `
-            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm">
-                <div class="flex items-center justify-between mb-1"><h3 class="font-bold text-slate-800 text-xs uppercase tracking-wide">Últimos lançamentos</h3><a href="fluxo_caixa.html" class="text-[10px] text-orange-600 font-bold">Ver tudo →</a></div>
-                ${linhas}
-            </div>` : "";
-        return `${resumo}${envio}${feed}${extrato}${datalist}`;
+        const paneCaixa = `<div data-pane="caixa" class="hidden space-y-3">
+            <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm space-y-3">
+                <div class="flex justify-between items-center"><h2 class="font-bold text-sm text-slate-800">Fluxo de caixa</h2><span class="text-xs font-bold ${d.saldoAtual >= 0 ? "text-emerald-600" : "text-rose-600"}">Saldo: ${brl(d.saldoAtual)}</span></div>
+                <div>${linhas || `<p class="text-xs text-slate-400 text-center py-3">Nenhum lançamento ainda.</p>`}</div>
+                <a href="fluxo_caixa.html" class="block text-center bg-orange-50 text-orange-700 font-bold text-xs py-2.5 rounded-xl border border-orange-200">Abrir fluxo de caixa completo</a>
+            </div>
+        </div>`;
+
+        // --- Aba Perfil ---
+        const panerPerfil = `<div data-pane="perfil" class="hidden space-y-3">
+            <div class="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm text-center space-y-2">
+                <div class="w-14 h-14 bg-orange-100 text-orange-700 rounded-full flex items-center justify-center font-bold text-xl mx-auto">${esc((nome[0] || "U").toUpperCase())}</div>
+                <h2 class="font-bold text-sm text-slate-800">${esc(nome || "Usuário")}</h2>
+                <div class="pt-3 border-t border-slate-100 text-left space-y-2 text-xs">
+                    ${consultoriaNome ? `<div class="flex justify-between py-1"><span class="text-slate-400">Consultoria:</span><span class="font-bold text-slate-700">${esc(consultoriaNome)}</span></div>` : ""}
+                    ${codigo ? `<div class="flex justify-between py-1"><span class="text-slate-400">Seu código:</span><span class="font-mono font-bold text-orange-600">${esc(codigo)}</span></div>` : ""}
+                </div>
+                <div class="pt-2 space-y-2">
+                    <a href="configuracoes.html" class="block text-center bg-slate-50 text-slate-700 font-bold text-xs py-2.5 rounded-xl border border-slate-200">Configurações</a>
+                    <a href="#" data-m="sair" class="block text-center bg-rose-50 text-rose-600 font-bold text-xs py-2.5 rounded-xl border border-rose-100">Sair</a>
+                </div>
+            </div>
+        </div>`;
+
+        const navBtn = (tab, icon, label, active, badge) => `<button data-tab="${tab}" class="flex flex-col items-center gap-0.5 ${active ? "text-orange-600 font-bold" : "text-slate-400 font-medium"} relative">
+            <i class="fa-solid ${icon} text-base"></i><span class="text-[9px]">${label}</span>
+            ${badge ? `<span class="absolute -top-1 right-2 bg-rose-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">${badge}</span>` : ""}
+        </button>`;
+
+        return `
+            <header class="bg-orange-600 text-white px-4 py-3 shrink-0 shadow-md">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-9 h-9 rounded-xl bg-white text-orange-600 flex items-center justify-center font-extrabold text-xl">O</div>
+                        <div><h1 class="font-bold text-base leading-none">Oliver</h1><p class="text-[10px] text-orange-100 mt-0.5">${esc(consultoriaNome || "Seu negócio")}</p></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button data-m="consultor" class="bg-white/15 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5"><i class="fa-solid fa-comment-dots text-orange-200"></i>Consultor</button>
+                        <button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>
+                    </div>
+                </div>
+            </header>
+            <main data-el="scroll" class="flex-1 overflow-y-auto p-3.5 space-y-4 bg-slate-50" style="-webkit-overflow-scrolling:touch">
+                ${paneCockpit}${paneRotinas}${paneCaixa}${panerPerfil}
+            </main>
+            <nav class="bg-white border-t border-slate-200 px-4 py-2.5 flex items-center justify-around shrink-0 shadow-lg">
+                ${navBtn("cockpit", "fa-compass", "Cockpit", true)}
+                ${navBtn("rotinas", "fa-list-check", "Rotinas", false, totalPend || null)}
+                <button data-tab="__cam" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-camera text-lg"></i></button>
+                ${navBtn("caixa", "fa-chart-line", "Caixa", false)}
+                ${navBtn("perfil", "fa-user", "Perfil", false)}
+            </nav>
+            ${datalist}`;
     }
 
     // ---------- Mascote Oliver (ajudante flutuante — só desktop) ----------
@@ -428,20 +498,66 @@ export async function renderHomeCliente(opts) {
     // ---------- Monta e religa eventos ----------
     async function montar() {
         const d = await carregarDados();
-        mount.innerHTML = isDesktop ? htmlDesktop(d) : htmlMobile(d);
-        wire();
-        if (isDesktop) wireDesktop();
-        montarMascote(d);
+        if (isDesktop) {
+            mount.innerHTML = htmlDesktop(d);
+            wire(mount);
+            wireDesktop(mount);
+            montarMascote(d);
+        } else {
+            montarAppMobile(d);
+        }
     }
 
-    function wire() {
+    // Monta o app mobile (abas) como overlay que cobre a tela toda.
+    function montarAppMobile(d) {
+        let ov = document.getElementById("oliver-app-mobile");
+        if (!ov) {
+            ov = document.createElement("div");
+            ov.id = "oliver-app-mobile";
+            ov.style.cssText = "position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;background:#f8fafc;font-family:Inter,system-ui,sans-serif";
+            document.body.appendChild(ov);
+        }
+        ov.innerHTML = htmlMobile(d);
+        wire(ov);
+        wireMobile(ov, d);
+    }
+
+    function wireMobile(root, d) {
+        const switchTab = (t) => {
+            root.querySelectorAll("[data-pane]").forEach((p) => p.classList.toggle("hidden", p.getAttribute("data-pane") !== t));
+            root.querySelectorAll("[data-tab]").forEach((b) => {
+                const bt = b.getAttribute("data-tab"); if (bt === "__cam") return;
+                const act = bt === t;
+                b.classList.toggle("text-orange-600", act); b.classList.toggle("font-bold", act);
+                b.classList.toggle("text-slate-400", !act); b.classList.toggle("font-medium", !act);
+            });
+            const sc = root.querySelector('[data-el="scroll"]'); if (sc) sc.scrollTop = 0;
+        };
+        root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+            const t = b.getAttribute("data-tab");
+            if (t === "__cam") { switchTab("cockpit"); const f = root.querySelector('[data-el="foto"]'); if (f) f.click(); return; }
+            switchTab(t);
+        }));
+        root.querySelectorAll('[data-m="consultor"]').forEach((b) => b.addEventListener("click", () => {
+            window.open(waLink(consultoriaTel, `Olá! Sou ${nome || "cliente do Oliver"} e gostaria de falar com a consultoria.`), "_blank", "noopener");
+        }));
+        const bell = root.querySelector('[data-m="bell"]'); if (bell) bell.addEventListener("click", () => showToast("Avisos", "Você está em dia — sem novas notificações."));
+        const sair = root.querySelector('[data-m="sair"]'); if (sair) sair.addEventListener("click", async (e) => {
+            e.preventDefault();
+            try { const m = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"); await m.signOut(m.getAuth()); } catch (err) {}
+            try { localStorage.removeItem("oliverPerms"); } catch (e2) {}
+            location.href = "login.html";
+        });
+    }
+
+    function wire(root) {
         // Envio rápido
-        const foto = mount.querySelector('[data-el="foto"]');
+        const foto = root.querySelector('[data-el="foto"]');
         if (foto) {
-            const drop = mount.querySelector('[data-el="drop"]');
-            const status = mount.querySelector('[data-el="status"]');
-            const preview = mount.querySelector('[data-el="preview"]');
-            const campos = mount.querySelector('[data-el="campos"]');
+            const drop = root.querySelector('[data-el="drop"]');
+            const status = root.querySelector('[data-el="status"]');
+            const preview = root.querySelector('[data-el="preview"]');
+            const campos = root.querySelector('[data-el="campos"]');
             const processar = async (arq) => {
                 if (!arq) return;
                 if (!/^image\//.test(arq.type)) { status.innerText = "Por enquanto envie uma foto (PNG/JPG). PDF e XML chegam na próxima fase."; return; }
@@ -459,12 +575,12 @@ export async function renderHomeCliente(opts) {
                 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag-active"); }));
                 drop.addEventListener("drop", (e) => { if (e.dataTransfer.files && e.dataTransfer.files[0]) processar(e.dataTransfer.files[0]); });
             }
-            const btn = mount.querySelector('[data-el="enviar"]');
+            const btn = root.querySelector('[data-el="enviar"]');
             if (btn) btn.addEventListener("click", async () => {
                 if (!fotoPronta) { status.innerText = "Escolha a foto da nota primeiro."; return; }
                 btn.disabled = true; btn.innerText = "Enviando...";
-                const fornecedor = mount.querySelector('[data-el="fornecedor"]').value.trim();
-                const valor = num(mount.querySelector('[data-el="valor"]').value);
+                const fornecedor = root.querySelector('[data-el="fornecedor"]').value.trim();
+                const valor = num(root.querySelector('[data-el="valor"]').value);
                 try {
                     const meuNome = localStorage.getItem("oliverNome") || "";
                     await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
@@ -487,7 +603,7 @@ export async function renderHomeCliente(opts) {
         }
 
         // Conciliação: confirmar / descartar
-        mount.querySelectorAll("[data-pre]").forEach((card) => {
+        root.querySelectorAll("[data-pre]").forEach((card) => {
             const id = card.getAttribute("data-pre");
             const val = (k) => card.querySelector(`[data-f="${k}"]`);
             const bConf = card.querySelector('[data-a="confirmar"]');
@@ -518,11 +634,11 @@ export async function renderHomeCliente(opts) {
     }
 
     // Extras do desktop: modal "Falar com a consultoria" (abre o WhatsApp)
-    function wireDesktop() {
-        const modal = mount.querySelector("#oliver-modal-consultor");
+    function wireDesktop(root) {
+        const modal = root.querySelector("#oliver-modal-consultor");
         const abrir = () => { if (modal) modal.classList.remove("hidden"); };
-        const b1 = mount.querySelector("#oliver-open-consultor");
-        const b2 = mount.querySelector("#oliver-open-consultor-2");
+        const b1 = root.querySelector("#oliver-open-consultor");
+        const b2 = root.querySelector("#oliver-open-consultor-2");
         if (b1) b1.addEventListener("click", abrir);
         if (b2) b2.addEventListener("click", abrir);
         if (modal) {

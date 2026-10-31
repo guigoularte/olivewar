@@ -224,7 +224,7 @@
                     let consultoriaNome = "", consultoriaTel = "";
                     try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
                     const nome = localStorage.getItem('oliverNome') || "";
-                    const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel };
+                    const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel, codigo: dados.codigoAcesso || "" };
                     if (isDesktop) {
                         // Desktop: cockpit (sidebar escura + topo), cobrindo a sidebar laranja padrão.
                         try {
