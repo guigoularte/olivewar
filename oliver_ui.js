@@ -1,14 +1,16 @@
-// UI compartilhada do Oliver: layout desktop (sidebar) + rodapé de crédito/contato.
+// UI compartilhada do Oliver: layout desktop (sidebar "cockpit" escura) + rodapé.
+// Roda em todas as telas internas; os links e as permissões (podeVer) valem para
+// todos os perfis (master, consultoria, cliente). Visual alinhado ao cockpit.
 (function () {
     // ---- Estilos do modo desktop (>=1024px) ----
     var css = `
     .oliver-sidebar{display:none;}
     @media (min-width:1024px){
-      body.oliver-dt{align-items:stretch !important;justify-content:flex-start !important;background:#FBF7F0 !important;}
+      body.oliver-dt{align-items:stretch !important;justify-content:flex-start !important;background:#f1f5f9 !important;}
       body.oliver-dt > .oliver-card{
-        max-width:920px !important;width:100% !important;flex:0 0 auto !important;
+        max-width:1100px !important;width:100% !important;flex:0 0 auto !important;
         min-height:100vh !important;border:0 !important;border-radius:0 !important;
-        box-shadow:none !important;background:#FBF7F0 !important;
+        box-shadow:none !important;background:#f1f5f9 !important;
       }
       body.oliver-dt .border-t.px-8{display:none !important;}
       body.oliver-dt .oliver-hide-dt{display:none !important;}
@@ -17,30 +19,36 @@
       .oliver-sidebar{display:flex !important;}
     }`;
 
+    // Links: sec = seção (null = topo). icon = Font Awesome. Mantém as regras de permissão.
     var LINKS = [
-        { href: "app.html", label: "Início", icon: "🏠", always: true },
-        { href: "dashboard.html", label: "Dashboard", icon: "📊", key: "relatorios", padrao: false },
-        { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "📥", key: "relatorios", padrao: false },
-        { href: "agenda.html", label: "Agenda / Tarefas", icon: "🗓️", key: "relatorios", padrao: false },
-        { href: "crm.html", label: "CRM", icon: "🤝", key: "relatorios", padrao: false },
-        { href: "organizacoes.html", label: "Organizações", icon: "👥", orgLink: true },
-        { href: "rotinas.html", label: "Rotinas", icon: "📋", orgLink: true },
-        { href: "relatorios.html", label: "Escrever Relatórios", icon: "✍️", key: "relatorios", padrao: false },
-        { href: "itens_resolver.html", label: "Itens para Resolver", icon: "✅", key: "itensResolver", padrao: true },
-        { href: "relatorios_view.html", label: "Relatórios", icon: "📄", key: "relatoriosHistorico", padrao: true },
-        { href: "indicadores.html", label: "Meus Indicadores", icon: "📈", clienteOnly: true },
-        { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "💵", key: "fluxoCaixa", padrao: true },
-        { href: "fechamento.html", label: "Fechamento de Caixa", icon: "💰", key: "fechamentoCaixa", padrao: false },
-        { href: "relatorio_semanal.html", label: "Relatório Semanal", icon: "📆", key: "fechamentoCaixa", padrao: false },
-        { href: "notas.html", label: "Notas Fiscais", icon: "🧾", key: "notasFiscais", padrao: false },
-        { href: "produtos.html", label: "Produtos/Serviços", icon: "📦", key: "produtos", padrao: true },
-        { href: "vendas.html", label: "Vendas", icon: "📈", key: "vendas", padrao: true },
-        { href: "calculo_margem.html", label: "Cálculo de Margem", icon: "🧮", key: "calculoMargem", padrao: false },
-        { href: "cvl.html", label: "Margem Completo", icon: "📊", key: "cvlCompleto", padrao: false },
-        { href: "admin.html", label: "Painel Master", icon: "🛡️", master: true },
-        { href: "perfil.html", label: "Perfil", icon: "👤", always: true },
-        { href: "configuracoes.html", label: "Configurações", icon: "⚙️", always: true }
+        { href: "app.html", label: "Cockpit Principal", icon: "fa-compass", always: true, sec: null },
+
+        { href: "dashboard.html", label: "Dashboard", icon: "fa-chart-pie", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
+        { href: "rotinas.html", label: "Rotinas de Gestão", icon: "fa-clipboard-check", orgLink: true, sec: "Gestão" },
+        { href: "itens_resolver.html", label: "Itens para Resolver", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
+        { href: "indicadores.html", label: "Meus Indicadores", icon: "fa-gauge-high", clienteOnly: true, sec: "Gestão" },
+
+        { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "fa-chart-line", key: "fluxoCaixa", padrao: true, sec: "Financeiro & Caixa" },
+        { href: "notas.html", label: "Notas & Comprovantes", icon: "fa-receipt", key: "notasFiscais", padrao: false, tag: "OCR em breve", sec: "Financeiro & Caixa" },
+        { href: "fechamento.html", label: "Fechamento de Caixa", icon: "fa-cash-register", key: "fechamentoCaixa", padrao: false, sec: "Financeiro & Caixa" },
+        { href: "calculo_margem.html", label: "Margens & CMV", icon: "fa-calculator", key: "calculoMargem", padrao: false, sec: "Financeiro & Caixa" },
+        { href: "cvl.html", label: "Margem Completo", icon: "fa-chart-column", key: "cvlCompleto", padrao: false, sec: "Financeiro & Caixa" },
+        { href: "produtos.html", label: "Produtos / Serviços", icon: "fa-box", key: "produtos", padrao: true, sec: "Financeiro & Caixa" },
+        { href: "vendas.html", label: "Vendas", icon: "fa-arrow-trend-up", key: "vendas", padrao: true, sec: "Financeiro & Caixa" },
+
+        { href: "relatorios.html", label: "Escrever Relatórios", icon: "fa-pen-to-square", key: "relatorios", padrao: false, sec: "Relatórios" },
+        { href: "relatorios_view.html", label: "Relatórios & DRE", icon: "fa-file-invoice", key: "relatoriosHistorico", padrao: true, sec: "Relatórios" },
+        { href: "relatorio_semanal.html", label: "Relatório Semanal", icon: "fa-calendar-week", key: "fechamentoCaixa", padrao: false, sec: "Relatórios" },
+        { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "fa-inbox", key: "relatorios", padrao: false, sec: "Relatórios" },
+
+        { href: "admin.html", label: "Painel Master", icon: "fa-shield-halved", master: true, sec: "Sistema" },
+        { href: "perfil.html", label: "Perfil", icon: "fa-user", always: true, sec: "Sistema" },
+        { href: "configuracoes.html", label: "Configurações", icon: "fa-gear", always: true, sec: "Sistema" }
     ];
+    var SECOES = ["Gestão", "Financeiro & Caixa", "Relatórios", "Sistema"];
 
     function perms() {
         try { return JSON.parse(localStorage.getItem("oliverPerms")) || { master: false, func: {} }; }
@@ -55,41 +63,70 @@
         return true;
     }
 
+    function linkHTML(l, atual, pendItens) {
+        var ativo = (l.href === atual);
+        var bg = ativo
+            ? "background:#ea580c;color:#fff;box-shadow:0 4px 12px rgba(234,88,12,.3);"
+            : "color:#94a3b8;";
+        var right = "";
+        if (l.href === "itens_resolver.html" && pendItens > 0)
+            right = '<span style="margin-left:auto;background:#f43f5e;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px">' + pendItens + '</span>';
+        else if (l.tag)
+            right = '<span style="margin-left:auto;background:rgba(16,185,129,.18);color:#34d399;font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px">' + l.tag + '</span>';
+        var hover = ativo ? "" :
+            ' onmouseover="this.style.background=\'#1e293b\';this.style.color=\'#e2e8f0\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'#94a3b8\'"';
+        return '<a href="' + l.href + '"' + hover +
+            ' style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;font-size:13px;font-weight:600;text-decoration:none;margin-bottom:2px;' + bg + '">' +
+            '<i class="fa-solid ' + l.icon + '" style="width:18px;text-align:center"></i><span>' + l.label + '</span>' + right + '</a>';
+    }
+
     function montarSidebar() {
         var p = perms();
         var atual = (location.pathname.split("/").pop() || "app.html");
         var nome = localStorage.getItem("oliverNome") || "Usuário";
+        var pendItens = parseInt(localStorage.getItem("oliverItensPendentes") || "0", 10) || 0;
+        var marcaNome = "";
+        try { marcaNome = (JSON.parse(localStorage.getItem("oliverBranding") || "{}").nome) || ""; } catch (e) {}
+
+        var visiveis = LINKS.filter(function (l) { return podeVer(l, p); });
+        var nav = "";
+        // Topo (sem seção)
+        visiveis.filter(function (l) { return !l.sec; }).forEach(function (l) { nav += linkHTML(l, atual, pendItens); });
+        // Seções
+        SECOES.forEach(function (sec) {
+            var itens = visiveis.filter(function (l) { return l.sec === sec; });
+            if (!itens.length) return;
+            nav += '<div style="padding:14px 12px 4px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em">' + sec + '</div>';
+            itens.forEach(function (l) { nav += linkHTML(l, atual, pendItens); });
+        });
+
+        var seletor = marcaNome ? (
+            '<div style="padding:12px">' +
+              '<div style="background:rgba(30,41,59,.8);border:1px solid rgba(51,65,85,.6);border-radius:12px;padding:10px;display:flex;align-items:center;gap:10px">' +
+                '<div style="width:28px;height:28px;border-radius:8px;background:rgba(249,115,22,.2);color:#fb923c;display:flex;align-items:center;justify-content:center"><i class="fa-solid fa-store"></i></div>' +
+                '<div style="overflow:hidden"><p style="margin:0;color:#fff;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + marcaNome + '</p><p style="margin:0;color:#34d399;font-size:10px">● Consultoria ativa</p></div>' +
+              '</div>' +
+            '</div>') : "";
 
         var aside = document.createElement("aside");
         aside.className = "oliver-sidebar";
         aside.style.cssText =
             "width:256px;flex-shrink:0;position:sticky;top:0;height:100vh;color:#fff;flex-direction:column;" +
-            "background:linear-gradient(to bottom,#f97316,#f59e0b);";
-
-        var pendItens = parseInt(localStorage.getItem("oliverItensPendentes") || "0", 10) || 0;
-        var links = LINKS.filter(function (l) { return podeVer(l, p); }).map(function (l) {
-            var ativo = (l.href === atual);
-            var badge = (l.href === "itens_resolver.html" && pendItens > 0)
-                ? '<span style="margin-left:auto;background:#ef4444;color:#fff;border-radius:999px;min-width:20px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">' + pendItens + '</span>'
-                : '';
-            return '<a href="' + l.href + '" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;' +
-                'font-size:14px;font-weight:600;text-decoration:none;color:#fff;margin-bottom:2px;' +
-                (ativo ? "background:rgba(255,255,255,.22);" : "") + '" ' +
-                'onmouseover="this.style.background=\'rgba(255,255,255,.12)\'" ' +
-                'onmouseout="this.style.background=\'' + (ativo ? "rgba(255,255,255,.22)" : "transparent") + '\'">' +
-                '<span>' + l.icon + '</span>' + l.label + badge + '</a>';
-        }).join("");
+            "justify-content:space-between;background:#0f172a;overflow:hidden;font-family:Inter,system-ui,sans-serif;";
 
         aside.innerHTML =
-            '<div style="padding:22px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,.2)">' +
-                '<div style="width:40px;height:40px;background:rgba(255,255,255,.2);border-radius:14px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px">O</div>' +
-                '<span style="font-size:22px;font-weight:900;letter-spacing:-.5px">Oliver</span>' +
+            '<div style="overflow-y:auto">' +
+              '<div style="padding:18px;border-bottom:1px solid #1e293b;display:flex;align-items:center;gap:12px">' +
+                '<div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(to top right,#ea580c,#f97316);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:18px">O</div>' +
+                '<div><p style="margin:0;color:#fff;font-weight:700;font-size:17px;line-height:1">Oliver</p><p style="margin:2px 0 0;color:#64748b;font-size:10px">Gestão & Caixa</p></div>' +
+              '</div>' +
+              seletor +
+              '<nav style="padding:4px 10px 14px">' + nav + '</nav>' +
             '</div>' +
-            '<nav style="flex:1;overflow-y:auto;padding:14px 12px">' + links + '</nav>' +
-            '<div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,.2);display:flex;align-items:center;gap:10px">' +
-                '<div style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-weight:700">' + (nome[0] || "U").toUpperCase() + '</div>' +
-                '<div style="font-size:12px;line-height:1.2"><div style="font-weight:700">' + nome + '</div>' +
-                '<a href="#" id="oliver-sair" style="color:rgba(255,255,255,.85);text-decoration:none">Sair</a></div>' +
+            '<div style="padding:12px;border-top:1px solid #1e293b;display:flex;align-items:center;gap:10px">' +
+              '<div style="width:32px;height:32px;border-radius:10px;background:#334155;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">' + (nome[0] || "U").toUpperCase() + '</div>' +
+              '<div style="line-height:1.2"><div style="color:#fff;font-size:12px;font-weight:700">' + nome + '</div>' +
+              '<a href="#" id="oliver-sair" style="color:#64748b;font-size:10px;text-decoration:none">Sair</a></div>' +
             '</div>';
 
         document.body.insertBefore(aside, document.body.firstChild);
@@ -114,6 +151,14 @@
         var style = document.createElement("style");
         style.textContent = css;
         document.head.appendChild(style);
+
+        // Garante os ícones (Font Awesome) em todas as telas
+        if (!document.querySelector('link[href*="font-awesome"]')) {
+            var fa = document.createElement("link");
+            fa.rel = "stylesheet";
+            fa.href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css";
+            document.head.appendChild(fa);
+        }
 
         // Marca o cartão principal (a "moldura")
         var card = document.querySelector('body > div[class*="max-w-sm"], body > div[class*="max-w-none"]');
