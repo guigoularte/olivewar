@@ -15,6 +15,7 @@
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { renderDashboard } from "./oliver_dashboard.js";
         import { renderHomeCliente } from "./oliver_home_cliente.js";
+        import { montarCockpit } from "./oliver_cockpit.js";
 
         // Código de acesso pessoal (6 caracteres, sem 0/O/1/I).
         function gerarCodigoAcesso() {
@@ -219,22 +220,24 @@
                 // Desktop = 3 blocos (cards de navegação dão lugar à sidebar).
                 // Celular = faixa dinâmica no topo, mantendo os atalhos abaixo.
                 if (!souConsultoria) {
-                    const mountC = document.getElementById('home-cliente');
-                    if (mountC) {
-                        const isDesktop = window.innerWidth >= 1024;
-                        if (isDesktop) {
-                            const cards = document.getElementById('home-cards');
-                            if (cards) cards.style.setProperty('display', 'none', 'important');
-                        }
-                        mountC.classList.remove('hidden');
-                        let consultoriaNome = "", consultoriaTel = "";
-                        try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
+                    const isDesktop = window.innerWidth >= 1024;
+                    let consultoriaNome = "", consultoriaTel = "";
+                    try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
+                    const nome = localStorage.getItem('oliverNome') || "";
+                    const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel };
+                    if (isDesktop) {
+                        // Desktop: cockpit (sidebar escura + topo), cobrindo a sidebar laranja padrão.
                         try {
-                            await renderHomeCliente({ db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, mount: mountC, isDesktop, nome: localStorage.getItem('oliverNome') || "", consultoriaNome, consultoriaTel });
-                        } catch (e) {
-                            console.error("Falha ao montar home do cliente:", e);
-                            mountC.classList.add('hidden');
-                            if (isDesktop) { const cards = document.getElementById('home-cards'); if (cards) cards.style.removeProperty('display'); }
+                            const mount = montarCockpit({ nome, negocioNome: consultoriaNome, consultoriaNome, codigo: dados.codigoAcesso || "", func, itensPend: parseInt(localStorage.getItem('oliverItensPendentes') || '0', 10) || 0, consultoriaTel });
+                            await renderHomeCliente({ ...baseHome, mount, isDesktop: true });
+                        } catch (e) { console.error("Falha ao montar cockpit:", e); }
+                    } else {
+                        // Celular: faixa dinâmica acima dos atalhos (layout de app).
+                        const mountC = document.getElementById('home-cliente');
+                        if (mountC) {
+                            mountC.classList.remove('hidden');
+                            try { await renderHomeCliente({ ...baseHome, mount: mountC, isDesktop: false }); }
+                            catch (e) { console.error("Falha ao montar home do cliente:", e); mountC.classList.add('hidden'); }
                         }
                     }
                 }

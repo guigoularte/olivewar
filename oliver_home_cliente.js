@@ -309,37 +309,68 @@ export async function renderHomeCliente(opts) {
             ${modal}${datalist}`;
     }
 
-    // ======================= LAYOUT CELULAR =======================
+    // ======================= LAYOUT CELULAR (app) =======================
     function htmlMobile(d) {
-        const card = (rotulo, valor, cor) =>
-            `<a href="fluxo_caixa.html" class="flex-1 bg-white rounded-2xl border border-slate-200 p-3 text-center hover:border-orange-400 transition">
-                <div class="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">${rotulo}</div>
-                <div class="font-black ${cor} text-[13px] mt-1">${valor}</div></a>`;
-        const resumo = `<div class="flex gap-2 mb-3">
-            ${card("Saldo", brl(d.saldoAtual), d.saldoAtual >= 0 ? "text-emerald-600" : "text-rose-600")}
-            ${card("A pagar", brl(d.aPagarSemana), d.aPagarSemana > 0 ? "text-rose-600" : "text-slate-500")}
-            ${card("Conciliar", d.preLanc.length + "", d.preLanc.length > 0 ? "text-orange-600" : "text-slate-500")}
-        </div>`;
+        const trendTxt = d.trend === null ? "" :
+            `<p class="text-[9px] ${d.trend >= 0 ? "text-emerald-600" : "text-rose-600"} font-medium mt-0.5"><i class="fa-solid fa-arrow-${d.trend >= 0 ? "up" : "down"} mr-0.5"></i>${d.trend >= 0 ? "+" : ""}${d.trend.toFixed(0)}% no mês</p>`;
+        const resumo = `
+            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm mb-3">
+                <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Resumo do caixa</span>
+                    <a href="fluxo_caixa.html" class="text-[10px] text-orange-600 font-bold">Ver caixa →</a>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <p class="text-[10px] text-slate-400 font-medium">Saldo atual</p>
+                        <p class="text-sm font-extrabold ${d.saldoAtual >= 0 ? "text-slate-800" : "text-rose-600"} mt-0.5">${brl(d.saldoAtual)}</p>${trendTxt}
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                        <p class="text-[10px] text-slate-400 font-medium">A pagar (semana)</p>
+                        <p class="text-sm font-extrabold text-rose-600 mt-0.5">${brl(d.aPagarSemana)}</p>
+                        <p class="text-[9px] ${d.vencemHoje > 0 ? "text-amber-600" : "text-slate-400"} font-medium mt-0.5"><i class="fa-solid fa-clock mr-0.5"></i>${d.vencemHoje > 0 ? d.vencemHoje + " vence(m) hoje" : "nada hoje"}</p>
+                    </div>
+                </div>
+            </div>`;
         const envio = temNotas ? `
-            <div class="bg-white rounded-2xl border border-slate-200 p-4 mb-3">
-                <p class="text-sm font-black text-blue-950 mb-1">📷 Envio rápido de nota</p>
-                <p class="text-[11px] text-slate-500 mb-3">A nota vai para a consultoria e já entra como conta a pagar para você confirmar.</p>
-                <label data-el="drop" class="block text-center border-2 border-dashed border-orange-200 bg-orange-50/60 text-orange-700 font-bold py-5 rounded-xl cursor-pointer hover:bg-orange-100 transition">
-                    <span data-el="drop-label">Tirar / escolher foto da nota</span>
+            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm mb-3">
+                <div class="flex items-center justify-between mb-2">
+                    <p class="text-sm font-black text-blue-950">📷 Envio rápido de nota</p>
+                    <span class="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">auto em breve</span>
+                </div>
+                <label data-el="drop" class="block text-center border-2 border-dashed border-orange-200 bg-orange-50/60 text-orange-700 font-bold py-4 rounded-xl cursor-pointer hover:bg-orange-100 transition text-sm">
+                    <span data-el="drop-label"><i class="fa-solid fa-camera mr-1"></i>Tirar / escolher foto</span>
                     <input type="file" data-el="foto" accept="image/*" capture="environment" class="hidden">
                 </label>
-                <img data-el="preview" class="hidden w-full max-h-48 object-contain rounded-lg border border-slate-100 mt-2">
+                <img data-el="preview" class="hidden w-full max-h-44 object-contain rounded-lg border border-slate-100 mt-2">
                 <div data-el="campos" class="hidden mt-2 space-y-2">
                     <input data-el="fornecedor" placeholder="Fornecedor / loja (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
                     <input data-el="valor" type="number" step="0.01" placeholder="Valor R$ (opcional)" class="w-full p-2.5 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-orange-400">
-                    <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl text-sm">Enviar nota fiscal</button>
+                    <button data-el="enviar" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 rounded-xl text-sm">Enviar nota fiscal</button>
                 </div>
                 <p data-el="status" class="text-[11px] text-slate-500 text-center mt-2"></p>
             </div>` : "";
-        const partes = d.preLanc.map(cartaoPreLanc);
-        if (d.itensPend > 0) partes.push(`<a href="itens_resolver.html" class="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-3 hover:border-green-400 transition"><div><p class="text-sm font-bold text-slate-800">✅ Itens para resolver</p><p class="text-[11px] text-slate-500">Pendências do seu acompanhamento</p></div><span class="bg-red-500 text-white text-xs font-black rounded-full min-w-[26px] h-7 px-2 flex items-center justify-center">${d.itensPend}</span></a>`);
-        const fila = `<p class="text-xs font-bold text-slate-600 mb-2">Fila de ação</p><div class="space-y-2">${partes.length ? partes.join("") : `<div class="bg-white border border-slate-200 rounded-xl p-5 text-center text-sm text-slate-400">Tudo em dia por aqui ✅</div>`}</div>`;
-        return `${resumo}${envio}${fila}${datalist}`;
+        const totalPend = d.preLanc.length + (d.itensPend > 0 ? 1 : 0);
+        const cards = d.preLanc.map(cartaoPreLanc).join("");
+        const extras = [];
+        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between bg-white border border-slate-200 rounded-2xl p-3 shadow-sm"><div class="flex items-center gap-2"><div class="w-8 h-8 rounded-lg bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><p class="text-xs font-bold text-slate-800">Itens do acompanhamento</p><p class="text-[10px] text-slate-400">Pendências da consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);
+        const feed = `
+            <div class="flex items-center justify-between px-1 mb-2">
+                <div class="flex items-center gap-1.5"><h3 class="font-bold text-slate-800 text-xs uppercase tracking-wide">Itens para resolver</h3>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">${totalPend}</span>` : ""}</div>
+            </div>
+            <div class="space-y-2 mb-3">${(cards + extras.join("")) || `<div class="bg-white border border-slate-200 rounded-2xl p-4 text-center text-xs text-slate-400">Tudo em dia por aqui ✅</div>`}</div>`;
+        const linhas = d.extrato.slice(0, 3).map((m) => {
+            const entrada = m.tipo === "entrada";
+            return `<div class="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
+                <div class="flex items-center gap-2"><div class="w-6 h-6 rounded-full ${entrada ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"} flex items-center justify-center text-[10px]"><i class="fa-solid fa-arrow-${entrada ? "down" : "up"}"></i></div><div><p class="font-bold text-slate-800 text-[11px]">${esc(m.descricao || "")}</p><p class="text-[9px] text-slate-400">${m.data ? m.data.split("-").reverse().join("/") : ""}${m.origem === "nota" ? " • Nota" : ""}</p></div></div>
+                <span class="font-extrabold ${entrada ? "text-emerald-600" : "text-rose-600"} text-xs">${entrada ? "+" : "-"} ${brl(m.valor)}</span>
+            </div>`;
+        }).join("");
+        const extrato = d.extrato.length ? `
+            <div class="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm">
+                <div class="flex items-center justify-between mb-1"><h3 class="font-bold text-slate-800 text-xs uppercase tracking-wide">Últimos lançamentos</h3><a href="fluxo_caixa.html" class="text-[10px] text-orange-600 font-bold">Ver tudo →</a></div>
+                ${linhas}
+            </div>` : "";
+        return `${resumo}${envio}${feed}${extrato}${datalist}`;
     }
 
     // ---------- Mascote Oliver (ajudante flutuante — só desktop) ----------
