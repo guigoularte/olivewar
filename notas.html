@@ -90,21 +90,31 @@
                     enviadoPorUid: meuUid, enviadoPorNome: meuNome,
                     data: ymdLocal(), criadoEm: new Date().toISOString()
                 });
-                // Pré-lançamento em Contas a Pagar (para o cliente conciliar na home / fluxo de caixa)
+                // Nota com valor vira DESPESA automática no fluxo de caixa
                 try {
                     await addDoc(collection(db, "usuarios", meuUid, "fluxo_caixa"), {
-                        tipo: "saida", status: "pre_lancamento", origem: "nota",
-                        descricao: fornecedor, valor,
-                        categoria: "Fornecedor", data: ymdLocal(), vencimento: ymdLocal(),
-                        temFoto: true, criadoEm: new Date().toISOString()
+                        tipo: "saida", status: "pago", origem: "nota",
+                        descricao: fornecedor, valor, categoria: "Fornecedor", forma: "",
+                        data: ymdLocal(), temFoto: true, criadoEm: new Date().toISOString()
                     });
-                } catch (e) { console.error("Falha ao criar pré-lançamento:", e); }
+                } catch (e) { console.error("Falha ao lançar despesa no fluxo de caixa:", e); }
+                // Cliente de organização: grava também como despesa do fechamento (entra no relatório semanal)
+                if (orgId) {
+                    try {
+                        const DIAS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+                        await addDoc(collection(db, "organizacoes", orgId, "fechamento_despesas"), {
+                            data: ymdLocal(), diaSemana: DIAS[new Date().getDay()],
+                            descricao: "Nota: " + fornecedor, valor, quemRetirou: meuNome,
+                            origem: "nota", criadoEm: new Date().toISOString()
+                        });
+                    } catch (e) { console.error("Falha ao gravar despesa da organização:", e); }
+                }
                 fotoPronta = ""; arquivoTipo = "image";
                 document.getElementById('preview').classList.add('hidden');
                 document.getElementById('status-foto').innerText = "";
                 ['fornecedor', 'valor', 'obs'].forEach(id => document.getElementById(id).value = "");
                 document.getElementById('foto').value = "";
-                alert("Nota enviada! Sua consultoria já pode ver.");
+                alert("Nota enviada! Lançada como despesa no fluxo de caixa" + (orgId ? " e no relatório semanal." : "."));
                 await carregarMinhas();
             } catch (e) { alert("Erro ao enviar: " + e.message); }
             finally { btn.disabled = false; btn.innerText = "Enviar nota fiscal"; }

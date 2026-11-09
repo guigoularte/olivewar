@@ -673,15 +673,27 @@ export async function renderHomeCliente(opts) {
                         enviadoPorUid: uid, enviadoPorNome: meuNome,
                         data: ymdLocal(), criadoEm: new Date().toISOString()
                     });
+                    // Nota com valor vira DESPESA automática no fluxo de caixa
                     await addDoc(collection(db, "usuarios", uid, "fluxo_caixa"), {
-                        tipo: "saida", status: "pre_lancamento", origem: "nota",
-                        descricao: fornecedor, valor,
-                        categoria: "Fornecedor", data: ymdLocal(), vencimento: ymdLocal(),
-                        temFoto: true, criadoEm: new Date().toISOString()
+                        tipo: "saida", status: "pago", origem: "nota",
+                        descricao: fornecedor, valor, categoria: "Fornecedor", forma: "",
+                        data: ymdLocal(), temFoto: true, criadoEm: new Date().toISOString()
                     });
+                    // Cliente de organização: grava também como despesa do fechamento (entra no relatório semanal)
+                    if (opts.orgId) {
+                        try {
+                            const DIAS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+                            const hojeD = new Date();
+                            await addDoc(collection(db, "organizacoes", opts.orgId, "fechamento_despesas"), {
+                                data: ymdLocal(), diaSemana: DIAS[hojeD.getDay()],
+                                descricao: "Nota: " + fornecedor, valor, quemRetirou: meuNome,
+                                origem: "nota", criadoEm: new Date().toISOString()
+                            });
+                        } catch (e) { console.error("Falha ao gravar despesa da organização:", e); }
+                    }
                     fotoPronta = ""; arquivoTipo = "image";
                     await montar();
-                    showToast("Nota enviada!", "Ela foi para a consultoria e entrou como nota a conciliar.");
+                    showToast("Nota enviada!", "Lançada como despesa no caixa" + (opts.orgId ? " e no relatório semanal." : "."));
                 } catch (e) { status.innerText = "Erro ao enviar: " + e.message; btn.disabled = false; btn.innerText = "Enviar nota fiscal"; }
             });
         }
