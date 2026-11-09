@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -120,21 +120,47 @@
             finally { btn.disabled = false; btn.innerText = "Enviar nota fiscal"; }
         };
 
+        // Editar o valor de uma nota já enviada: atualiza a nota + a despesa no caixa + a despesa da organização.
+        window.editarNota = async (notaId, atual) => {
+            const novo = prompt("Novo valor da compra (R$):", atual);
+            if (novo === null) return;
+            const valor = parseFloat(String(novo).replace(",", "."));
+            if (isNaN(valor) || valor <= 0) { alert("Informe um valor maior que zero."); return; }
+            try {
+                await updateDoc(doc(db, "empresas", empresaId, "notas_fiscais", notaId), { valor });
+                const fs = await getDocs(query(collection(db, "usuarios", meuUid, "fluxo_caixa"), where("notaId", "==", notaId)));
+                for (const dd of fs.docs) await updateDoc(doc(db, "usuarios", meuUid, "fluxo_caixa", dd.id), { valor });
+                if (orgId) {
+                    const os = await getDocs(query(collection(db, "organizacoes", orgId, "fechamento_despesas"), where("notaId", "==", notaId)));
+                    for (const dd of os.docs) await updateDoc(doc(db, "organizacoes", orgId, "fechamento_despesas", dd.id), { valor });
+                }
+                alert("Valor atualizado! A despesa no caixa" + (orgId ? " e no relatório semanal" : "") + " foi corrigida.");
+                await carregarMinhas();
+            } catch (e) { alert("Erro ao editar: " + e.message); }
+        };
+
         async function carregarMinhas() {
             const cont = document.getElementById('minhas');
             try {
                 const s = await getDocs(query(collection(db, "empresas", empresaId, "notas_fiscais"), where("enviadoPorUid", "==", meuUid)));
-                const notas = s.docs.map(d => d.data()).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")).slice(0, 30);
+                const notas = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")).slice(0, 30);
                 if (notas.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Nenhuma nota enviada ainda.</p>'; return; }
-                cont.innerHTML = notas.map(n => `
+                cont.innerHTML = notas.map(n => {
+                    const ehPdf = n.arquivoTipo === "pdf" || String(n.foto || "").startsWith("data:application/pdf");
+                    const thumb = ehPdf
+                        ? `<div class="w-16 h-16 rounded-lg shrink-0 bg-rose-50 border border-rose-100 text-rose-600 flex flex-col items-center justify-center"><span class="text-xl">📄</span><span class="text-[9px] font-bold">PDF</span></div>`
+                        : `<img src="${n.foto}" class="w-16 h-16 rounded-lg object-cover shrink-0">`;
+                    return `
                     <div class="bg-white rounded-xl border border-slate-200 mb-2 p-2 flex gap-2">
-                        <img src="${n.foto}" class="w-16 h-16 rounded-lg object-cover shrink-0">
-                        <div class="min-w-0 text-xs">
+                        ${thumb}
+                        <div class="min-w-0 text-xs flex-1">
                             <div class="font-bold text-slate-800 truncate">${esc(n.fornecedor) || "Nota fiscal"}</div>
                             <div class="text-slate-500">${dataBR(n.data)}${n.valor ? " · " + brl(n.valor) : ""}</div>
                             ${n.obs ? `<div class="text-[11px] text-slate-400 truncate">${esc(n.obs)}</div>` : ""}
+                            <button onclick="editarNota('${n.id}', ${Number(n.valor) || 0})" class="mt-1 text-[11px] font-bold text-blue-700 hover:text-blue-900">✏️ Editar valor</button>
                         </div>
-                    </div>`).join('');
+                    </div>`;
+                }).join('');
             } catch (e) { cont.innerHTML = '<p class="text-xs text-red-500 py-2">Erro ao carregar: ' + esc(e.message) + '</p>'; }
         }
     </script>

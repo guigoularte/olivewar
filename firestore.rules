@@ -95,6 +95,9 @@ service cloud.firestore {
                       && request.resource.data.enviadoPorUid == request.auth.uid
                       && (minhaEmpresaId() == empresaId
                           || (dadosUsuario().get('orgId', '') != '' && orgData(dadosUsuario().get('orgId', '')).empresaId == empresaId));
+        // Editar (ex.: corrigir o valor): o remetente ou a consultoria.
+        allow update: if ehMaster() || membroDaEmpresa(empresaId)
+                      || (request.auth != null && resource.data.enviadoPorUid == request.auth.uid);
         allow delete: if ehMaster() || membroDaEmpresa(empresaId);
       }
     }

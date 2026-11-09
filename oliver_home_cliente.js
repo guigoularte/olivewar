@@ -268,6 +268,7 @@ export async function renderHomeCliente(opts) {
                     </div>
                     <span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.preLanc.length + (d.itensPend > 0 ? 1 : 0) + (d.vencidas > 0 ? 1 : 0)} pendente(s)</span>
                 </div>
+                ${d.preLanc.length > 0 ? `<button data-a="contabilizar-todas" class="w-full mb-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl">✓ Contabilizar ${d.preLanc.length} nota(s) já enviada(s) como despesa</button>` : ""}
                 <div class="space-y-3">${(cartoes + extras.join("")) || filaVazia}</div>
             </section>`;
 
@@ -424,6 +425,7 @@ export async function renderHomeCliente(opts) {
                     <div class="flex items-center gap-1.5"><h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Itens para resolver</h2>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">${totalPend}</span>` : ""}</div>
                     <span class="text-[10px] text-orange-600 font-bold">Conciliação</span>
                 </div>
+                ${d.preLanc.length > 0 ? `<button data-a="contabilizar-todas" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl">✓ Contabilizar ${d.preLanc.length} nota(s) já enviada(s)</button>` : ""}
                 <div class="space-y-2.5">${(cards + extras.join("")) || `<div class="text-center py-4"><div class="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><i class="fa-solid fa-circle-check"></i></div><p class="text-xs font-bold text-slate-700 mt-1">Tudo em dia!</p></div>`}</div>
             </div>`;
         const kpi = (rot, val, cor) => `<div class="bg-slate-50 p-3 rounded-2xl border border-slate-100"><p class="text-[10px] text-slate-400 font-semibold">${rot}</p><p class="text-base font-black ${cor} leading-none mt-1">${val}</p></div>`;
@@ -568,6 +570,35 @@ export async function renderHomeCliente(opts) {
     }
 
     // ---------- Monta e religa eventos ----------
+    // Converte as notas já enviadas (pré-lançamentos pendentes) em despesas contabilizadas
+    async function contabilizarTodas() {
+        const DIAS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+        const meuNome = localStorage.getItem("oliverNome") || "";
+        let n = 0;
+        try {
+            const s = await getDocs(collection(db, "usuarios", uid, "fluxo_caixa"));
+            const pend = s.docs.filter((x) => x.data().status === "pre_lancamento");
+            for (const docu of pend) {
+                const m = docu.data();
+                const dataStr = m.data || ymdLocal();
+                await updateDoc(doc(db, "usuarios", uid, "fluxo_caixa", docu.id), { status: "pago", data: dataStr });
+                if (opts.orgId) {
+                    try {
+                        const dObj = new Date(dataStr + "T00:00:00");
+                        await addDoc(collection(db, "organizacoes", opts.orgId, "fechamento_despesas"), {
+                            data: dataStr, diaSemana: DIAS[isNaN(dObj) ? new Date().getDay() : dObj.getDay()], origem: "nota",
+                            descricao: "Nota: " + (m.descricao || "fornecedor"), valor: num(m.valor), quemRetirou: meuNome,
+                            criadoEm: new Date().toISOString()
+                        });
+                    } catch (e) { console.error("Falha fechamento_despesas (backfill):", e); }
+                }
+                n++;
+            }
+        } catch (e) { alert("Erro ao contabilizar: " + e.message); return; }
+        await montar();
+        showToast("Notas contabilizadas!", n + " nota(s) viraram despesa" + (opts.orgId ? " e entraram no relatório semanal." : "."));
+    }
+
     async function montar() {
         const d = await carregarDados();
         if (isDesktop) {
@@ -625,6 +656,13 @@ export async function renderHomeCliente(opts) {
     }
 
     function wire(root) {
+        // Contabilizar notas já enviadas (pré-lançamentos pendentes)
+        const btContab = root.querySelector('[data-a="contabilizar-todas"]');
+        if (btContab) btContab.addEventListener("click", async () => {
+            if (!confirm("Contabilizar as notas já enviadas como despesa no caixa" + (opts.orgId ? " e no relatório semanal?" : "?"))) return;
+            btContab.disabled = true; btContab.innerText = "Contabilizando...";
+            await contabilizarTodas();
+        });
         // Envio rápido
         const foto = root.querySelector('[data-el="foto"]');
         if (foto) {
@@ -667,15 +705,15 @@ export async function renderHomeCliente(opts) {
                 btn.disabled = true; btn.innerText = "Enviando...";
                 try {
                     const meuNome = localStorage.getItem("oliverNome") || "";
-                    await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
+                    const notaRef = await addDoc(collection(db, "empresas", empresaId, "notas_fiscais"), {
                         foto: fotoPronta, arquivoTipo, fornecedor, valor, obs: "",
                         clienteNome: meuNome, clienteId: uid, orgId: opts.orgId || "",
                         enviadoPorUid: uid, enviadoPorNome: meuNome,
                         data: ymdLocal(), criadoEm: new Date().toISOString()
                     });
-                    // Nota com valor vira DESPESA automática no fluxo de caixa
+                    // Nota com valor vira DESPESA automática no fluxo de caixa (ligada à nota por notaId)
                     await addDoc(collection(db, "usuarios", uid, "fluxo_caixa"), {
-                        tipo: "saida", status: "pago", origem: "nota",
+                        tipo: "saida", status: "pago", origem: "nota", notaId: notaRef.id,
                         descricao: fornecedor, valor, categoria: "Fornecedor", forma: "",
                         data: ymdLocal(), temFoto: true, criadoEm: new Date().toISOString()
                     });
@@ -685,9 +723,9 @@ export async function renderHomeCliente(opts) {
                             const DIAS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
                             const hojeD = new Date();
                             await addDoc(collection(db, "organizacoes", opts.orgId, "fechamento_despesas"), {
-                                data: ymdLocal(), diaSemana: DIAS[hojeD.getDay()],
+                                data: ymdLocal(), diaSemana: DIAS[hojeD.getDay()], origem: "nota", notaId: notaRef.id,
                                 descricao: "Nota: " + fornecedor, valor, quemRetirou: meuNome,
-                                origem: "nota", criadoEm: new Date().toISOString()
+                                criadoEm: new Date().toISOString()
                             });
                         } catch (e) { console.error("Falha ao gravar despesa da organização:", e); }
                     }
