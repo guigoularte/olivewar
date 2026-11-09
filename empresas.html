@@ -58,6 +58,9 @@
             render();
         }
 
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const categoriaDe = (u) => u.role === "master" ? "Master" : u.role === "empresa_admin" ? "Admin" : ((u.funcionalidades && u.funcionalidades.relatorios) ? "Funcionário" : "Cliente");
+
         // Quantos usuários pertencem a cada empresa + quantos sem empresa.
         function contarPorEmpresa() {
             const cont = {};
@@ -112,10 +115,45 @@
                                 <button onclick="vincularPorCodigo('${e.id}')" class="shrink-0 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg">Vincular</button>
                             </div>
                         </div>
+                        <button onclick="toggleVinculados('${e.id}')" class="w-full mt-2 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-lg">👥 Ver contas vinculadas (${qtd})</button>
+                        <div id="vinc-${e.id}" class="hidden mt-2 space-y-1"></div>
                         <button onclick="atribuirSemEmpresa('${e.id}','${(e.nome||'').replace(/'/g,'')}')" class="w-full mt-2 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-lg">⬇ Trazer usuários sem empresa para esta</button>
                     </div>`;
                 }).join('');
         }
+
+        // Lista (expande/recolhe) as contas vinculadas a uma empresa, com categoria e opção de desvincular.
+        window.toggleVinculados = (empresaId) => {
+            const box = document.getElementById('vinc-' + empresaId);
+            if (!box) return;
+            if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+            const membros = usuarios.filter(u => u.empresaId === empresaId)
+                .sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || "", "pt", { sensitivity: "base" }));
+            if (membros.length === 0) {
+                box.innerHTML = '<p class="text-[11px] text-slate-400 py-1 text-center">Nenhuma conta vinculada ainda.</p>';
+            } else {
+                box.innerHTML = membros.map(u => {
+                    const cat = categoriaDe(u);
+                    const cor = cat === "Cliente" ? "bg-emerald-100 text-emerald-700" : cat === "Funcionário" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700";
+                    const desv = u.role === "master" ? "" : `<button onclick="desvincular('${u.id}','${(u.nome || u.email || "").replace(/'/g, "")}')" class="text-[10px] text-rose-500 hover:text-rose-700 font-semibold">desvincular</button>`;
+                    return `<div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 gap-2">
+                        <div class="min-w-0"><div class="text-xs font-bold text-slate-800 truncate">${esc(u.nome || u.email || "usuário")}</div><div class="text-[10px] text-slate-400 truncate">${esc(u.email || "")}</div></div>
+                        <div class="flex items-center gap-2 shrink-0"><span class="text-[9px] font-bold px-2 py-0.5 rounded-full ${cor}">${cat}</span>${desv}</div>
+                    </div>`;
+                }).join('');
+            }
+            box.classList.remove('hidden');
+        };
+
+        // Desvincula uma conta da empresa (fica "sem empresa").
+        window.desvincular = async (uid, nome) => {
+            if (!confirm(`Desvincular "${nome}" da consultoria? A conta fica sem empresa até ser vinculada de novo.`)) return;
+            try {
+                await updateDoc(doc(db, "usuarios", uid), { empresaId: null });
+                const u = usuarios.find(x => x.id === uid); if (u) u.empresaId = null;
+                render();
+            } catch (e) { alert("Erro ao desvincular: " + e.message); }
+        };
 
         // Cria nova empresa. Por padrão o dono é você (master); ajuste depois se for outra pessoa.
         window.criarEmpresa = async () => {

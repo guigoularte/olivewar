@@ -76,6 +76,7 @@ const MENU = [
     { href: "relatorio_semanal.html", label: "Relatório Semanal", icon: "fa-calendar-week", key: "fechamentoCaixa", padrao: false, sec: "Relatórios" },
     { href: "notas_recebidas.html", label: "Notas Recebidas", icon: "fa-inbox", key: "relatorios", padrao: false, sec: "Relatórios" },
     { href: "admin.html", label: "Painel Master", icon: "fa-shield-halved", master: true, sec: "Sistema" },
+    { href: "empresas.html", label: "Empresas", icon: "fa-building", master: true, sec: "Sistema" },
     { href: "perfil.html", label: "Perfil", icon: "fa-user", always: true, sec: "Sistema" },
     { href: "configuracoes.html", label: "Configurações", icon: "fa-gear", always: true, sec: "Sistema" }
 ];
