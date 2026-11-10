@@ -9,14 +9,14 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, collection, getDocs, getDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        let empresaId = null, podeExcluir = false, notas = [];
+        let empresaId = null, podeExcluir = false, souMaster = false, notas = [];
         const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         const dataBR = (s) => { if (!s) return ""; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
@@ -27,6 +27,7 @@
             const d = snap.exists() ? snap.data() : {};
             const souConsultoria = d.role === "master" || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
             podeExcluir = souConsultoria;
+            souMaster = d.role === "master";
             empresaId = d.empresaId || null;
             if (!souConsultoria) { alert("Área exclusiva da consultoria."); window.location.href = "app.html"; return; }
             if (!empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
@@ -65,6 +66,7 @@
                             <div class="text-slate-500 truncate">${esc(n.fornecedor) || "Nota fiscal"}</div>
                             <div class="text-slate-500">${dataBR(n.data)}${n.valor ? " · " + brl(n.valor) : ""}</div>
                             ${n.obs ? `<div class="text-[11px] text-slate-400 truncate">${esc(n.obs)}</div>` : ""}
+                            ${souMaster ? `<button onclick="editarNota('${n.id}')" class="mt-1 text-[11px] font-bold text-blue-700 hover:text-blue-900">✏️ Editar valor</button>` : ""}
                         </div>
                         ${podeExcluir ? `<button onclick="excluir('${n.id}')" class="text-red-400 hover:text-red-600 text-sm self-start">🗑</button>` : ""}
                     </div>
@@ -80,6 +82,28 @@
             document.getElementById('modal').classList.remove('hidden');
         };
         window.fecharModal = () => document.getElementById('modal').classList.add('hidden');
+
+        // Master edita o valor de uma nota: atualiza a nota + a despesa no caixa do cliente + a do relatório semanal.
+        window.editarNota = async (id) => {
+            const n = notas.find(x => x.id === id); if (!n) return;
+            const novo = prompt("Novo valor desta nota (R$):", Number(n.valor) || 0);
+            if (novo === null) return;
+            const valor = parseFloat(String(novo).replace(",", "."));
+            if (isNaN(valor) || valor <= 0) { alert("Informe um valor maior que zero."); return; }
+            try {
+                await updateDoc(doc(db, "empresas", empresaId, "notas_fiscais", id), { valor });
+                if (n.clienteId) {
+                    const fs = await getDocs(query(collection(db, "usuarios", n.clienteId, "fluxo_caixa"), where("notaId", "==", id)));
+                    for (const dd of fs.docs) await updateDoc(doc(db, "usuarios", n.clienteId, "fluxo_caixa", dd.id), { valor });
+                }
+                if (n.orgId) {
+                    const os = await getDocs(query(collection(db, "organizacoes", n.orgId, "fechamento_despesas"), where("notaId", "==", id)));
+                    for (const dd of os.docs) await updateDoc(doc(db, "organizacoes", n.orgId, "fechamento_despesas", dd.id), { valor });
+                }
+                n.valor = valor; render();
+                alert("Valor atualizado! A despesa no caixa do cliente" + (n.orgId ? " e no relatório semanal" : "") + " foi corrigida.");
+            } catch (e) { alert("Erro ao editar: " + e.message); }
+        };
 
         window.excluir = async (id) => {
             if (!confirm("Excluir esta nota?")) return;
