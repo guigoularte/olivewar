@@ -21,10 +21,13 @@
 
         let basePath = null, nomeAlvo = "", isConsultoria = false, minhaEmpresa = null;
         let fechamentos = [], despesas = [], refData = new Date();
-        let chartDia = null, chartForma = null;
+        let chartDia = null, chartForma = null, chartAnalise = null, porDiaPed = [0, 0, 0, 0, 0, 0, 0];
 
         const brl = (v) => (Number(v) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+        const DIAS_FULL = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+        const pad = (n) => String(n).padStart(2, "0");
+        const ymdL = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
         function segunda(d) { const x = new Date(d); const dia = (x.getDay() + 6) % 7; x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - dia); return x; }
         const ymd = (d) => d.toISOString().slice(0, 10);
         const dMes = (s) => { const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }); };
@@ -120,15 +123,22 @@
             if (varPct === null) { cmp.innerHTML = '<span class="text-slate-400">sem semana anterior</span>'; }
             else { const up = varPct >= 0; cmp.innerHTML = `<span class="${up ? 'text-emerald-600' : 'text-red-600'} font-black">${up ? '▲' : '▼'} ${Math.abs(varPct).toFixed(0)}%</span> <span class="text-slate-400">vs semana anterior (${brl(anterior.faturamento)})</span>`; }
 
-            // por dia
+            // por dia (faturamento + pedidos)
             const porDia = [0, 0, 0, 0, 0, 0, 0];
-            fechamentos.forEach(f => { if (f.data >= iniStr && f.data <= fimStr) { const idx = (new Date(f.data + "T00:00:00").getDay() + 6) % 7; porDia[idx] += Number(f.faturamentoTotal) || 0; } });
+            porDiaPed = [0, 0, 0, 0, 0, 0, 0];
+            fechamentos.forEach(f => { if (f.data >= iniStr && f.data <= fimStr) { const idx = (new Date(f.data + "T00:00:00").getDay() + 6) % 7; porDia[idx] += Number(f.faturamentoTotal) || 0; porDiaPed[idx] += Number(f.quantidadePedidos) || 0; } });
 
             if (window.Chart) {
                 if (chartDia) chartDia.destroy();
                 chartDia = new Chart(document.getElementById('g-dia'), {
                     type: 'bar', data: { labels: DIAS, datasets: [{ data: porDia, backgroundColor: '#10b981', borderRadius: 6 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    options: {
+                        responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: (ctx) => "Faturamento: " + brl(ctx.parsed.y), afterLabel: (ctx) => porDiaPed[ctx.dataIndex] + " pedido(s)" } }
+                        }
+                    }
                 });
                 if (chartForma) chartForma.destroy();
                 const fv = atual.formas;
@@ -138,7 +148,75 @@
                 });
             }
             dadosPDF = { iniStr, fimStr, atual, anterior, varPct, porDia };
+            renderAnalise();
         }
+
+        // ---- Análise: melhor dia da semana por período ----
+        function rangeDe(periodo) {
+            const r = new Date(refData);
+            if (periodo === "semana") { const i = segunda(r); const f = new Date(i); f.setDate(f.getDate() + 6); return [ymdL(i), ymdL(f)]; }
+            if (periodo === "mes") { const y = r.getFullYear(), m = r.getMonth(); return [`${y}-${pad(m + 1)}-01`, `${y}-${pad(m + 1)}-${pad(new Date(y, m + 1, 0).getDate())}`]; }
+            if (periodo === "ano") { const y = r.getFullYear(); return [`${y}-01-01`, `${y}-12-31`]; }
+            return ["0000-01-01", "9999-12-31"]; // tudo
+        }
+        function agregarPorDiaSemana(iniStr, fimStr) {
+            const fat = [0, 0, 0, 0, 0, 0, 0], ped = [0, 0, 0, 0, 0, 0, 0], cnt = [0, 0, 0, 0, 0, 0, 0];
+            fechamentos.forEach(f => {
+                if (f.data >= iniStr && f.data <= fimStr) {
+                    const idx = (new Date(f.data + "T00:00:00").getDay() + 6) % 7;
+                    fat[idx] += Number(f.faturamentoTotal) || 0; ped[idx] += Number(f.quantidadePedidos) || 0; cnt[idx] += 1;
+                }
+            });
+            return { fat, ped, cnt };
+        }
+        window.renderAnalise = () => {
+            const sel = document.getElementById('periodo-analise'); if (!sel) return;
+            const periodo = sel.value;
+            const [ini, fim] = rangeDe(periodo);
+            const { fat, ped, cnt } = agregarPorDiaSemana(ini, fim);
+            const totFat = fat.reduce((s, x) => s + x, 0), totPed = ped.reduce((s, x) => s + x, 0);
+
+            const resumo = document.getElementById('analise-resumo');
+            if (totFat === 0 && totPed === 0) { resumo.innerHTML = '<span class="text-slate-400">Sem dados neste período.</span>'; }
+            else {
+                const bFat = fat.indexOf(Math.max(...fat)), bPed = ped.indexOf(Math.max(...ped));
+                resumo.innerHTML = `💰 Maior faturamento: <b class="text-emerald-700">${DIAS_FULL[bFat]}</b> (${brl(fat[bFat])}) · 📦 Mais pedidos: <b class="text-blue-700">${DIAS_FULL[bPed]}</b> (${ped[bPed]})`;
+            }
+
+            // Tabela por dia (faturamento + pedidos + média/dia)
+            const bFatIdx = fat.indexOf(Math.max(...fat)), bPedIdx = ped.indexOf(Math.max(...ped));
+            const linhas = DIAS_FULL.map((d, i) => {
+                const mediaFat = cnt[i] > 0 ? fat[i] / cnt[i] : 0;
+                const destaque = (totFat > 0 && i === bFatIdx) ? "bg-emerald-50 font-bold" : "";
+                return `<tr class="${destaque} border-b border-slate-100">
+                    <td class="py-1.5 pr-2">${d}</td>
+                    <td class="py-1.5 text-right ${i === bFatIdx && totFat > 0 ? 'text-emerald-700' : 'text-slate-700'}">${brl(fat[i])}</td>
+                    <td class="py-1.5 text-right ${i === bPedIdx && totPed > 0 ? 'text-blue-700 font-bold' : 'text-slate-700'}">${ped[i]}</td>
+                    <td class="py-1.5 text-right text-slate-400">${brl(mediaFat)}</td>
+                </tr>`;
+            }).join('');
+            document.getElementById('analise-tabela').innerHTML = `
+                <table class="w-full text-[11px]">
+                    <thead><tr class="text-slate-400 border-b border-slate-200"><th class="text-left font-semibold pb-1">Dia</th><th class="text-right font-semibold pb-1">Faturamento</th><th class="text-right font-semibold pb-1">Pedidos</th><th class="text-right font-semibold pb-1">Média/dia</th></tr></thead>
+                    <tbody>${linhas}</tbody>
+                </table>`;
+
+            // Gráfico por dia da semana (faturamento; pedidos no tooltip)
+            if (window.Chart) {
+                if (chartAnalise) chartAnalise.destroy();
+                const cores = fat.map((_, i) => i === bFatIdx && totFat > 0 ? '#047857' : '#34d399');
+                chartAnalise = new Chart(document.getElementById('g-analise'), {
+                    type: 'bar', data: { labels: DIAS, datasets: [{ data: fat, backgroundColor: cores, borderRadius: 6 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { callbacks: { label: (ctx) => "Faturamento: " + brl(ctx.parsed.y), afterLabel: (ctx) => ped[ctx.dataIndex] + " pedido(s)" + (cnt[ctx.dataIndex] > 0 ? " · " + cnt[ctx.dataIndex] + " dia(s)" : "") } }
+                        }
+                    }
+                });
+            }
+        };
 
         window.baixarPDF = () => {
             if (!dadosPDF) return;
@@ -200,6 +278,21 @@
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-3">
                     <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-2">Faturamento por dia</p><div style="height:180px"><canvas id="g-dia"></canvas></div></div>
                     <div class="bg-white rounded-xl border border-slate-200 p-3"><p class="text-xs font-bold text-slate-700 mb-2">Por forma de pagamento</p><div style="height:180px"><canvas id="g-forma"></canvas></div></div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 p-3 mb-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-xs font-bold text-slate-700">🏆 Melhor dia da semana</p>
+                        <select id="periodo-analise" onchange="renderAnalise()" class="text-[11px] border rounded-lg p-1.5 outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="semana">Esta semana</option>
+                            <option value="mes">Este mês</option>
+                            <option value="ano" selected>Este ano</option>
+                            <option value="tudo">Tudo</option>
+                        </select>
+                    </div>
+                    <div id="analise-resumo" class="text-[11px] text-slate-600 mb-2">—</div>
+                    <div style="height:170px"><canvas id="g-analise"></canvas></div>
+                    <div id="analise-tabela" class="mt-2 overflow-x-auto"></div>
                 </div>
 
                 <button onclick="baixarPDF()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm">📄 Baixar PDF da semana</button>
