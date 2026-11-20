@@ -27,6 +27,21 @@
         const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         const dataHora = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }); };
         const dataBR = (s) => { if (!s) return "—"; const d = new Date(s + "T00:00:00"); return isNaN(d) ? s : d.toLocaleDateString("pt-BR"); };
+        const hojeStr = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+
+        // ===== Funil comercial (Front 2) =====
+        const ESTAGIOS = ["1. Prospecção", "2. 1ª Visita", "3. Proposta", "4. Negociação", "5. Fechado", "6. Perdido"];
+        const RESPONSAVEIS = ["Guilherme", "Bruno", "Henrique"];
+        const META_VISITAS = 6; // prospects/semana (2 por sócio) — configurável depois
+        let filtroTipo = "todos"; // todos | leads | clientes | followup
+        const tipoDe = (c) => c.tipo_cadastro || (c.usuarioUid ? "Cliente" : "Lead");
+        function visitasDaSemana() {
+            const h = new Date(); const dia = (h.getDay() + 6) % 7; const seg = new Date(h); seg.setDate(h.getDate() - dia); seg.setHours(0, 0, 0, 0);
+            const dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+            const s = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+            const ini = s(seg), fim = s(dom);
+            return compromissos.filter(c => (c.tipo === "visita") && c.data && c.data.slice(0, 10) >= ini && c.data.slice(0, 10) <= fim).length;
+        }
 
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
@@ -94,26 +109,82 @@
 
         function renderContatos() {
             const busca = (document.getElementById('busca-contato').value || "").toLowerCase();
-            const lista = contatos.filter(c => [c.nome, c.telefone, c.negocio, c.cidade, c.email].map(x => (x || "").toLowerCase()).join(" ").includes(busca));
-            document.getElementById('contador-contatos').innerText = contatos.length + " contato(s)";
+            const hoje = hojeStr();
+
+            // Resumo do funil (só Leads; exclui Teste dos KPIs)
+            const leads = contatos.filter(c => tipoDe(c) === "Lead");
+            const porEstagio = {}; ESTAGIOS.forEach(e => porEstagio[e] = 0);
+            leads.forEach(c => { const e = c.estagio_funil || ESTAGIOS[0]; if (e in porEstagio) porEstagio[e]++; });
+            const followAtrasados = leads.filter(c => c.proximo_contato && c.proximo_contato < hoje).length;
+            const visitas = visitasDaSemana();
+            const resumo = document.getElementById('funil-resumo');
+            if (resumo) {
+                const chip = (lbl, n) => `<span class="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">${lbl}: <b>${n}</b></span>`;
+                resumo.innerHTML =
+                    `<div class="flex flex-wrap gap-1 mb-1">${ESTAGIOS.slice(0, 5).map(e => chip(e.replace(/^\d+\.\s/, ""), porEstagio[e])).join("")}</div>` +
+                    `<div class="flex items-center justify-between text-[11px]"><span class="${followAtrasados > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}">⚠ Follow-ups atrasados: ${followAtrasados}</span><span class="${visitas >= META_VISITAS ? 'text-emerald-600 font-bold' : 'text-slate-500'}">Visitas na semana: ${visitas}/${META_VISITAS}</span></div>`;
+            }
+
+            // Lista filtrada (Teste some dos demais filtros)
+            let lista = contatos.filter(c => {
+                const t = tipoDe(c);
+                if (filtroTipo === "teste") return t === "Teste";
+                if (t === "Teste") return false;
+                if (filtroTipo === "leads") return t === "Lead";
+                if (filtroTipo === "clientes") return t === "Cliente";
+                if (filtroTipo === "followup") return t === "Lead" && c.proximo_contato && c.proximo_contato < hoje;
+                return true;
+            }).filter(c => [c.nome, c.telefone, c.negocio, c.cidade, c.email].map(x => (x || "").toLowerCase()).join(" ").includes(busca));
+
+            document.getElementById('contador-contatos').innerText = lista.length + " de " + contatos.length + " contato(s)";
             const cont = document.getElementById('lista-contatos');
-            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum contato. Adicione ou importe.</p>'; return; }
-            cont.innerHTML = lista.map(c => `
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 mb-2 p-3">
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum contato neste filtro.</p>'; return; }
+            cont.innerHTML = lista.map(c => {
+                const t = tipoDe(c);
+                const corTipo = t === "Cliente" ? "bg-emerald-100 text-emerald-700" : t === "Lead" ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-500";
+                const atrasado = t === "Lead" && c.proximo_contato && c.proximo_contato < hoje;
+                const funilUI = t === "Lead" ? `
+                    <div class="grid grid-cols-2 gap-1.5 mt-2">
+                        <select onchange="salvarCampoContato('${c.id}','estagio_funil',this.value)" class="p-1.5 border rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-indigo-400">
+                            ${ESTAGIOS.map(e => `<option ${(c.estagio_funil || ESTAGIOS[0]) === e ? "selected" : ""}>${e}</option>`).join("")}
+                        </select>
+                        <select onchange="salvarCampoContato('${c.id}','responsavel',this.value)" class="p-1.5 border rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-indigo-400">
+                            <option value="">Responsável…</option>
+                            ${RESPONSAVEIS.map(r => `<option ${c.responsavel === r ? "selected" : ""}>${r}</option>`).join("")}
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1.5">
+                        <label class="text-[10px] ${atrasado ? "text-red-600 font-bold" : "text-slate-400"}">${atrasado ? "⚠ Atrasado" : "Próx. contato"}</label>
+                        <input type="date" value="${c.proximo_contato || ""}" onchange="salvarCampoContato('${c.id}','proximo_contato',this.value)" class="flex-1 p-1.5 border ${atrasado ? "border-red-300" : ""} rounded-lg text-[11px] outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>` : "";
+                return `<div class="bg-white rounded-xl shadow-sm border ${atrasado ? "border-red-300" : "border-slate-200"} mb-2 p-3">
                     <div class="flex items-start justify-between">
                         <div class="min-w-0">
-                            <div class="font-bold text-slate-800 text-sm truncate">${esc(c.nome) || "(sem nome)"}</div>
+                            <div class="flex items-center gap-1.5"><div class="font-bold text-slate-800 text-sm truncate">${esc(c.nome) || "(sem nome)"}</div><span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${corTipo}">${t}</span></div>
                             <div class="text-[11px] text-slate-500 truncate">${esc(c.negocio) || ""}${c.negocio && c.cidade ? " · " : ""}${esc(c.cidade) || ""}</div>
                             ${c.telefone ? `<div class="text-[11px] text-blue-700">📞 ${esc(c.telefone)}</div>` : ""}
-                            ${c.email ? `<div class="text-[11px] text-slate-500 truncate">✉ ${esc(c.email)}</div>` : ""}
-                            ${c.usuarioUid ? `<span class="inline-block mt-1 text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">cliente do app</span>` : ""}
+                            ${c.origem_canal ? `<div class="text-[10px] text-slate-400">origem: ${esc(c.origem_canal)}</div>` : ""}
                         </div>
-                        <button onclick="excluirContato('${c.id}')" class="ml-2 shrink-0 text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        <div class="ml-2 shrink-0 flex flex-col items-end gap-1">
+                            <select onchange="salvarCampoContato('${c.id}','tipo_cadastro',this.value)" class="text-[10px] border rounded p-1 outline-none bg-slate-50">
+                                <option value="Lead" ${t === "Lead" ? "selected" : ""}>Lead</option>
+                                <option value="Cliente" ${t === "Cliente" ? "selected" : ""}>Cliente</option>
+                                <option value="Teste" ${t === "Teste" ? "selected" : ""}>Teste</option>
+                            </select>
+                            <button onclick="excluirContato('${c.id}')" class="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        </div>
                     </div>
+                    ${funilUI}
                     <textarea onchange="salvarNota('${c.id}', this.value)" placeholder="Anotações sobre este contato..." class="w-full mt-2 p-2 border rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500" rows="2">${esc(c.notas) || ""}</textarea>
-                </div>`).join('');
+                </div>`;
+            }).join('');
         }
         window.buscarContato = () => renderContatos();
+        window.filtrarTipo = (f) => { filtroTipo = f; renderContatos(); };
+        window.salvarCampoContato = async (id, campo, valor) => {
+            try { await updateDoc(docRef("crm_contatos", id), { [campo]: valor }); const c = contatos.find(x => x.id === id); if (c) c[campo] = valor; renderContatos(); }
+            catch (e) { alert("Erro ao salvar: " + e.message); }
+        };
 
         window.addContato = async () => {
             const nome = document.getElementById('c-nome').value.trim();
@@ -126,12 +197,17 @@
                 cidade: document.getElementById('c-cidade').value.trim(),
                 notas: "",
                 origem: "manual",
+                tipo_cadastro: document.getElementById('c-tipo').value || "Lead",
+                estagio_funil: ESTAGIOS[0],
+                responsavel: document.getElementById('c-responsavel').value || "",
+                proximo_contato: document.getElementById('c-proximo').value || "",
+                origem_canal: document.getElementById('c-origem').value.trim(),
                 criadoPor: meuUid,
                 criadoEm: serverTimestamp()
             };
             try {
                 await addDoc(col("crm_contatos"), novo);
-                ['c-nome', 'c-telefone', 'c-email', 'c-negocio', 'c-cidade'].forEach(id => document.getElementById(id).value = "");
+                ['c-nome', 'c-telefone', 'c-email', 'c-negocio', 'c-cidade', 'c-proximo', 'c-origem'].forEach(id => document.getElementById(id).value = "");
                 document.getElementById('form-contato').style.display = "none";
                 await carregarTudo();
             } catch (e) { alert("Erro ao salvar contato: " + e.message); }
@@ -164,6 +240,7 @@
                         telefone: u.telefone || "", email: u.email || "",
                         negocio: u.segmento || "", cidade: u.cidade || "",
                         notas: "", origem: "cadastro", usuarioUid: d.id,
+                        tipo_cadastro: "Cliente",
                         criadoPor: meuUid, criadoEm: serverTimestamp()
                     });
                     novos++;
@@ -448,9 +525,32 @@
                     </div>
                     <input id="c-email" placeholder="E-mail" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     <input id="c-negocio" placeholder="Negócio / segmento" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    <div class="flex gap-2">
+                        <select id="c-tipo" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="Lead">Lead (prospect)</option>
+                            <option value="Cliente">Cliente</option>
+                            <option value="Teste">Teste</option>
+                        </select>
+                        <select id="c-responsavel" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Responsável…</option>
+                            <option>Guilherme</option><option>Bruno</option><option>Henrique</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <input id="c-origem" placeholder="Canal de origem (ex: indicação)" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <input id="c-proximo" type="date" title="Próximo contato" class="w-36 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
                     <button onclick="addContato()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar contato</button>
                 </div>
 
+                <div id="funil-resumo" class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-2 mb-2"></div>
+                <div class="flex gap-1.5 mb-2 flex-wrap">
+                    <button onclick="filtrarTipo('todos')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Todos</button>
+                    <button onclick="filtrarTipo('leads')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Leads</button>
+                    <button onclick="filtrarTipo('clientes')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Clientes</button>
+                    <button onclick="filtrarTipo('followup')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-red-500 border border-red-200">Follow-up ⚠</button>
+                    <button onclick="filtrarTipo('teste')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-400 border border-slate-200">Teste</button>
+                </div>
                 <input id="busca-contato" oninput="buscarContato()" placeholder="🔍 Buscar contato..." class="w-full p-2.5 border rounded-xl text-sm mb-2 outline-none focus:ring-2 focus:ring-blue-500">
                 <p id="contador-contatos" class="text-[11px] text-slate-500 mb-2">—</p>
                 <div id="lista-contatos"></div>
