@@ -2,7 +2,7 @@
 // Estratégia: arquivos do app = network-first (sempre pega a versão nova; cai no cache offline);
 // CDNs (Tailwind, Font Awesome, Chart.js, SDK do Firebase, fontes) = cache-first;
 // APIs do Firebase (Firestore/Auth) = passam direto, nunca são cacheadas.
-const CACHE = "oliver-v1";
+const CACHE = "oliver-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 
@@ -22,9 +22,10 @@ self.addEventListener("fetch", (e) => {
     if (/googleapis\.com$/.test(url.hostname) || /firebaseio|firebasedatabase|identitytoolkit/.test(url.hostname)) return;
 
     if (url.origin === self.location.origin) {
-        // Arquivos do app: network-first (fresco), cache como fallback offline
+        // Arquivos do app: SEMPRE do servidor (bypass do cache HTTP) = nunca versão antiga;
+        // cache só como fallback offline.
         e.respondWith(
-            fetch(req).then((r) => {
+            fetch(req.url, { cache: "reload" }).then((r) => {
                 if (r && r.ok) { const c = r.clone(); caches.open(CACHE).then((ca) => ca.put(req, c)); }
                 return r;
             }).catch(() => caches.match(req).then((m) => m || caches.match("app.html")))
