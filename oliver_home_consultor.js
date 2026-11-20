@@ -1,7 +1,7 @@
 // Cockpit do CONSULTOR (home desktop da consultoria): KPIs financeiros/comerciais,
 // fila de execução do dia (com conclusão), régua de cobrança e cadência de prospects.
 // Reusa crm_contatos / crm_compromissos / crm_pendencias e a coleção cobrancas.
-import { collection, getDocs, query, where, addDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -110,10 +110,11 @@ export async function renderConsultorHome(opts) {
             return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
                 <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}</strong>
                 <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(venc)} · ${esc(statusTxt)}</div></div>
-                <div class="flex items-center gap-3 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
+                <div class="flex items-center gap-2 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
                 ${c.status === "pago"
-                    ? `<span class="text-[11px] font-bold text-emerald-600">✓ PAGO</span>`
+                    ? `<span class="text-[11px] font-bold text-emerald-600">✓ PAGO</span><button data-reabrir="${c.id}" title="Reabrir cobrança" class="text-slate-400 hover:text-amber-600 text-[12px] px-1"><i class="fa-solid fa-rotate-left"></i></button>`
                     : `<button data-baixa="${c.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition">Dar Baixa</button>`}
+                <button data-edit="${c.id}" title="Editar" class="text-slate-400 hover:text-orange-600 text-[12px] px-1"><i class="fa-solid fa-pen"></i></button>
                 </div></div>`;
         };
         const cobrOrd = cobr.slice().sort((a, b) => (a.status === "pago" ? 1 : 0) - (b.status === "pago" ? 1 : 0) || (a.vencimento || "").localeCompare(b.vencimento || ""));
@@ -135,8 +136,8 @@ export async function renderConsultorHome(opts) {
         <div data-el="modal" class="hidden fixed inset-0 z-[80] flex items-center justify-center p-4">
             <div data-m="backdrop" class="absolute inset-0 bg-black/40"></div>
             <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
-                <div class="flex items-center justify-between"><h3 class="text-base font-extrabold text-slate-800"><i class="fa-solid fa-bolt text-orange-500 mr-1"></i>Nova ação</h3><button data-m="fechar" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-bold">✕</button></div>
-                <div><label class="text-[12px] font-semibold text-slate-500">Tipo</label>
+                <div class="flex items-center justify-between"><h3 class="text-base font-extrabold text-slate-800"><i class="fa-solid fa-bolt text-orange-500 mr-1"></i><span data-m="titulo">Nova ação</span></h3><button data-m="fechar" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-bold">✕</button></div>
+                <div data-m="wraptipo"><label class="text-[12px] font-semibold text-slate-500">Tipo</label>
                     <select data-m="tipo" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300">
                         <option value="cobranca">Cobrança / fatura</option>
                         <option value="tarefa">Tarefa operacional</option>
@@ -151,10 +152,19 @@ export async function renderConsultorHome(opts) {
                     <div><label class="text-[12px] font-semibold text-slate-500">Valor R$</label><input data-m="valor" type="number" step="0.01" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                     <div><label class="text-[12px] font-semibold text-slate-500">Vencimento</label><input data-m="venc" type="date" value="${hoje}" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                 </div>
+                <div data-m="wrapstatus" class="hidden"><label class="text-[12px] font-semibold text-slate-500">Status</label>
+                    <select data-m="status" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300">
+                        <option value="pendente">Em aberto</option>
+                        <option value="enviado_d5">Enviado D-5</option>
+                        <option value="pago">Pago</option>
+                    </select></div>
                 <div><label class="text-[12px] font-semibold text-slate-500">Responsável</label>
                     <input data-m="resp" value="${esc(nome)}" list="resp-cockpit" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300">
                     <datalist id="resp-cockpit">${responsaveis.map(r => `<option>${esc(r)}</option>`).join("")}</datalist></div>
-                <button data-m="salvar" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Salvar</button>
+                <div class="flex gap-2">
+                    <button data-m="excluir" class="hidden px-3 py-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 font-bold text-sm"><i class="fa-solid fa-trash"></i></button>
+                    <button data-m="salvar" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Salvar</button>
+                </div>
                 <p data-m="msg" class="text-[12px] text-center text-slate-500"></p>
             </div>
         </div>`;
@@ -239,6 +249,20 @@ export async function renderConsultorHome(opts) {
             catch (e) { btn.disabled = false; btn.textContent = "Dar Baixa"; alert("Erro ao dar baixa: " + e.message); }
         }));
 
+        // Reabrir cobrança paga
+        mount.querySelectorAll("[data-reabrir]").forEach(btn => btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-reabrir"); btn.disabled = true;
+            try { await updateDoc(doc(db, "empresas", empresaId, "cobrancas", id), { status: "pendente", dataPagamento: null }); await recarregar(); }
+            catch (e) { btn.disabled = false; alert("Erro ao reabrir: " + e.message); }
+        }));
+
+        // Editar cobrança
+        mount.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => {
+            const id = btn.getAttribute("data-edit");
+            const alvo = (dados.cobr || []).find(c => c.id === id);
+            if (alvo) abrirModal("cobranca", alvo);
+        }));
+
         // Sincronizar
         const sync = mount.querySelector('[data-el="sync"]');
         if (sync) sync.addEventListener("click", () => recarregar());
@@ -247,7 +271,7 @@ export async function renderConsultorHome(opts) {
         mount.querySelectorAll("[data-nova]").forEach(btn => btn.addEventListener("click", () => abrirModal(btn.getAttribute("data-nova") || "")));
     }
 
-    function abrirModal(tipoInicial) {
+    function abrirModal(tipoInicial, editCobr) {
         const modal = mount.querySelector('[data-el="modal"]'); if (!modal) return;
         modal.classList.remove("hidden");
         const fechar = () => modal.classList.add("hidden");
@@ -256,18 +280,49 @@ export async function renderConsultorHome(opts) {
         if (tipoInicial) tipo.value = tipoInicial;
         const wrapDesc = modal.querySelector('[data-m="wrapdesc"]');
         const wrapValor = modal.querySelector('[data-m="wrapvalor"]');
+        const wrapStatus = modal.querySelector('[data-m="wrapstatus"]');
+        const wrapTipo = modal.querySelector('[data-m="wraptipo"]');
         const lblCli = modal.querySelector('[data-m="lblcli"]');
+        const btnExcluir = modal.querySelector('[data-m="excluir"]');
+        const titulo = modal.querySelector('[data-m="titulo"]');
         const ajustar = () => {
             const t = tipo.value;
             wrapValor.style.display = t === "cobranca" ? "grid" : "none";
             wrapDesc.style.display = (t === "tarefa") ? "block" : "none";
             lblCli.textContent = t === "lead" ? "Nome do lead" : "Cliente";
         };
-        tipo.onchange = ajustar; ajustar();
+        tipo.onchange = ajustar;
+
+        // Modo edição de cobrança
+        const emEdicao = !!editCobr;
+        titulo.textContent = emEdicao ? "Editar cobrança" : "Nova ação";
+        wrapTipo.style.display = emEdicao ? "none" : "block";
+        wrapStatus.classList.toggle("hidden", !emEdicao);
+        btnExcluir.classList.toggle("hidden", !emEdicao);
+        if (emEdicao) {
+            tipo.value = "cobranca";
+            modal.querySelector('[data-m="cliente"]').value = editCobr.clienteNome || "";
+            modal.querySelector('[data-m="valor"]').value = editCobr.valor != null ? editCobr.valor : "";
+            modal.querySelector('[data-m="venc"]').value = (editCobr.vencimento || "").slice(0, 10);
+            modal.querySelector('[data-m="status"]').value = (editCobr.status === "vencido" || !editCobr.status) ? "pendente" : editCobr.status;
+        } else {
+            modal.querySelector('[data-m="cliente"]').value = "";
+            modal.querySelector('[data-m="desc"]').value = "";
+            modal.querySelector('[data-m="valor"]').value = "";
+        }
+        ajustar();
+
+        btnExcluir.onclick = async () => {
+            if (!emEdicao) return;
+            if (!confirm("Excluir esta cobrança de " + (editCobr.clienteNome || "") + "? Esta ação não pode ser desfeita.")) return;
+            btnExcluir.disabled = true;
+            try { await deleteDoc(doc(db, "empresas", empresaId, "cobrancas", editCobr.id)); modal.classList.add("hidden"); await recarregar(); }
+            catch (e) { btnExcluir.disabled = false; alert("Erro ao excluir: " + e.message); }
+        };
 
         const salvar = modal.querySelector('[data-m="salvar"]');
         salvar.onclick = async () => {
-            const t = tipo.value;
+            const t = emEdicao ? "cobranca" : tipo.value;
             const cliente = modal.querySelector('[data-m="cliente"]').value.trim();
             const desc = modal.querySelector('[data-m="desc"]').value.trim();
             const valor = parseFloat(modal.querySelector('[data-m="valor"]').value || "0");
@@ -279,7 +334,14 @@ export async function renderConsultorHome(opts) {
             salvar.disabled = true; msg.textContent = "Salvando..."; msg.className = "text-[12px] text-center text-slate-500";
             const agora = new Date().toISOString(); const hoje = ymdLocal();
             try {
-                if (t === "cobranca") {
+                if (emEdicao) {
+                    const novoStatus = modal.querySelector('[data-m="status"]').value;
+                    const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
+                    await updateDoc(doc(db, "empresas", empresaId, "cobrancas", editCobr.id), {
+                        clienteNome: cliente, valor, vencimento: venc || hoje, competencia: comp, status: novoStatus,
+                        dataPagamento: novoStatus === "pago" ? (editCobr.dataPagamento || hoje) : null
+                    });
+                } else if (t === "cobranca") {
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
                     await addDoc(collection(db, "empresas", empresaId, "cobrancas"), { clienteNome: cliente, valor, competencia: comp, vencimento: venc || hoje, status: "pendente", dataPagamento: null, criadoEm: agora });
                 } else if (t === "tarefa") {
