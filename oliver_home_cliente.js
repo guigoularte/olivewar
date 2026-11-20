@@ -7,7 +7,7 @@
 // IMPORTANTE: este layout segue o mockup do "cockpit", mas mantém TODAS as funções
 // já criadas no Oliver (envio de nota -> pré-lançamento, conciliação, fluxo de caixa,
 // itens para resolver). Nada de dado inventado: os números vêm do Firestore do cliente.
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -91,7 +91,18 @@ function podeVerMenu(l, p) {
     return true;
 }
 
-// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel, inicialTab })
+// ---- CRM (Modo Campo do consultor) ----
+const META_VISITAS = 6;
+const ESTAGIOS_CAMPO = ["1. Prospecção", "2. 1ª Visita", "3. Proposta", "4. Negociação", "5. Fechado", "6. Perdido"];
+const tipoCadastroDe = (c) => c.tipo_cadastro || (c.usuarioUid ? "Cliente" : "Lead");
+const brDate = (s) => (s || "").slice(0, 10).split("-").reverse().join("/");
+function semanaLocal() {
+    const h = new Date(); const dia = (h.getDay() + 6) % 7; const seg = new Date(h); seg.setDate(h.getDate() - dia); seg.setHours(0, 0, 0, 0);
+    const dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+    return [ymdLocal(seg), ymdLocal(dom)];
+}
+
+// renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel, inicialTab, souConsultoria, isAdmin })
 export async function renderHomeCliente(opts) {
     const { db, uid, empresaId, func, mount, isDesktop } = opts;
     const nome = opts.nome || (localStorage.getItem("oliverNome") || "");
@@ -103,6 +114,56 @@ export async function renderHomeCliente(opts) {
     const temMargem = !!(func && func.calculoMargem);
     let fotoPronta = "";      // dataURL da foto comprimida ou do PDF
     let arquivoTipo = "image"; // "image" | "pdf"
+
+    // Modo Campo (consultor no celular): mostra cockpit comercial/operacional em vez da captura de notas.
+    const ehConsultor = !!opts.souConsultoria && !!empresaId && !isDesktop;
+    let campoData = null;
+
+    // Carrega o CRM da empresa para o Modo Campo (reusa crm_contatos / crm_compromissos / crm_pendencias).
+    async function carregarCampo() {
+        let contatos = [], comps = [], pend = [];
+        const [sc, sco, sp] = await Promise.all([
+            getDocs(collection(db, "empresas", empresaId, "crm_contatos")),
+            opts.isAdmin ? getDocs(collection(db, "empresas", empresaId, "crm_compromissos"))
+                : getDocs(query(collection(db, "empresas", empresaId, "crm_compromissos"), where("funcionarioUid", "==", uid))),
+            getDocs(collection(db, "empresas", empresaId, "crm_pendencias"))
+        ]);
+        contatos = sc.docs.map((d) => ({ id: d.id, ...d.data() }));
+        comps = sco.docs.map((d) => ({ id: d.id, ...d.data() }));
+        pend = sp.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        const hoje = ymdLocal();
+        const [ini, fim] = semanaLocal();
+        const leads = contatos.filter((c) => tipoCadastroDe(c) === "Lead");
+        const visitas = comps.filter((c) => c.tipo === "visita" && c.data && c.data.slice(0, 10) >= ini && c.data.slice(0, 10) <= fim).length;
+        const followAtrasados = leads.filter((c) => c.proximo_contato && c.proximo_contato < hoje)
+            .sort((a, b) => (a.proximo_contato || "").localeCompare(b.proximo_contato || ""));
+        const pendVenc = pend.filter((p) => p.status !== "feito" && p.prazo && p.prazo < hoje)
+            .sort((a, b) => (a.prazo || "").localeCompare(b.prazo || ""));
+        const compsHoje = comps.filter((c) => c.status !== "concluido" && c.data && c.data.slice(0, 10) === hoje)
+            .sort((a, b) => (a.data || "").localeCompare(b.data || ""));
+
+        const fila = [];
+        pendVenc.forEach((p) => fila.push({
+            id: p.id, kind: "pend", tag: "Atrasado", tagCls: "bg-rose-100 text-rose-700", atrasado: true,
+            cliente: p.contatoNome || p.clienteNome || "—", titulo: p.titulo || p.descricao || "Pendência",
+            resp: p.responsavel || p.funcionarioNome || "", when: "Venceu " + brDate(p.prazo)
+        }));
+        compsHoje.forEach((c) => fila.push({
+            id: c.id, kind: "comp", tag: c.tipo === "visita" ? "Visita" : "Hoje",
+            tagCls: c.tipo === "visita" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700", atrasado: false,
+            cliente: c.contatoNome || "—", titulo: c.titulo || "Compromisso",
+            resp: c.funcionarioNome || c.responsavel || "", when: (c.data || "").slice(11, 16) || "Hoje"
+        }));
+        followAtrasados.forEach((c) => fila.push({
+            id: c.id, kind: "follow", tag: "Follow-up", tagCls: "bg-amber-100 text-amber-700", atrasado: true,
+            cliente: c.nome || "—", titulo: "Retomar contato (" + (c.estagio_funil || "Prospecção").replace(/^\d+\.\s/, "") + ")",
+            resp: c.responsavel || "", when: "Previsto " + brDate(c.proximo_contato)
+        }));
+
+        const respSet = [...new Set(contatos.map((c) => c.responsavel).filter(Boolean))];
+        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet };
+    }
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
     async function carregarDados() {
@@ -372,6 +433,107 @@ export async function renderHomeCliente(opts) {
             ${modal}${datalist}`;
     }
 
+    // ======================= MODO CAMPO (consultor no celular) =======================
+    function htmlCampoPane(cd) {
+        const pct = cd.meta > 0 ? Math.min(100, Math.round((cd.visitas / cd.meta) * 100)) : 0;
+        const hojeExt = new Date().toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+        const head = `
+            <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-4 text-white shadow-md relative overflow-hidden">
+                <div class="absolute -right-6 -bottom-6 w-28 h-28 bg-orange-500/10 rounded-full blur-xl pointer-events-none"></div>
+                <div class="relative z-10">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider bg-orange-500 px-2.5 py-1 rounded-full">Modo Campo${consultoriaNome ? " • " + esc(consultoriaNome) : ""}</span>
+                        <span class="text-[11px] text-slate-300 capitalize">${esc(hojeExt)}</span>
+                    </div>
+                    <p class="text-sm font-bold mt-1.5">Fala, ${esc(nome || "consultor")}!</p>
+                    <div class="mt-3 bg-white/10 rounded-2xl p-3 border border-white/10">
+                        <div class="flex justify-between text-[11px] mb-1.5"><span class="text-slate-200 font-semibold">Meta de visitas (semana)</span><span class="font-black">${cd.visitas} / ${cd.meta}</span></div>
+                        <div class="w-full h-2 bg-white/15 rounded-full overflow-hidden"><div class="h-full ${cd.visitas >= cd.meta ? "bg-emerald-400" : "bg-orange-400"}" style="width:${pct}%"></div></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2.5 mt-2.5">
+                        <div class="bg-white/10 rounded-2xl p-3 border border-white/10"><p class="text-[10px] text-slate-300 font-semibold">Pendências vencidas</p><p class="text-xl font-black ${cd.pendVenc > 0 ? "text-rose-300" : "text-white"} mt-0.5">${cd.pendVenc}</p></div>
+                        <div class="bg-white/10 rounded-2xl p-3 border border-white/10"><p class="text-[10px] text-slate-300 font-semibold">Follow-ups atrasados</p><p class="text-xl font-black ${cd.follow > 0 ? "text-amber-300" : "text-white"} mt-0.5">${cd.follow}</p></div>
+                    </div>
+                </div>
+            </div>`;
+
+        const atalho = (href, icon, label) => `<a href="${href}" class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex flex-col items-center gap-1.5 active:scale-95 transition"><div class="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center"><i class="fa-solid ${icon}"></i></div><span class="text-[11px] font-bold text-slate-700">${label}</span></a>`;
+        const atalhos = `<div class="flex gap-2.5">${atalho("relatorios.html", "fa-clipboard-check", "Vistoria")}${atalho("crm.html", "fa-handshake", "1ª Visita")}${atalho("meus_clientes.html", "fa-user-group", "Clientes")}</div>`;
+
+        const linha = (f) => {
+            const checkable = f.kind === "pend" || f.kind === "comp";
+            return `<div class="flex items-start gap-2.5 p-2.5 border ${f.atrasado ? "border-rose-200 bg-rose-50/40" : "border-slate-100"} rounded-2xl" data-fila="${f.id}" data-kind="${f.kind}">
+                ${checkable
+                    ? `<button data-fa="check" class="w-5 h-5 mt-0.5 rounded-md border-2 border-slate-300 bg-white shrink-0 active:bg-emerald-100"></button>`
+                    : `<span class="w-5 h-5 mt-0.5 rounded-md bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 text-[9px]"><i class="fa-solid fa-bell"></i></span>`}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap"><span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${f.tagCls}">${esc(f.tag)}</span><span class="text-[13px] font-bold text-slate-800 truncate">${esc(f.cliente)}</span></div>
+                    <p class="text-[12px] text-slate-600 mt-0.5 truncate">${esc(f.titulo)}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">${esc(f.resp || "")}${f.resp && f.when ? " · " : ""}${esc(f.when || "")}</p>
+                </div>
+                ${f.kind === "follow" ? `<a href="crm.html" class="text-[11px] font-bold text-indigo-600 shrink-0 mt-0.5">abrir</a>` : ""}
+            </div>`;
+        };
+        const filaCard = `
+            <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide">O que fazer hoje</h2>
+                    ${cd.fila.length > 0 ? `<span class="bg-slate-800 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">${cd.fila.length}</span>` : ""}
+                </div>
+                <div class="space-y-2" data-el="fila-campo">
+                    ${cd.fila.length ? cd.fila.map(linha).join("") : `<div class="text-center py-4"><div class="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><i class="fa-solid fa-circle-check"></i></div><p class="text-xs font-bold text-slate-700 mt-1">Fila zerada. Tudo em dia!</p></div>`}
+                </div>
+            </div>`;
+
+        const regua = `
+            <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide"><i class="fa-solid fa-money-bill-wave text-emerald-500 mr-1"></i>Régua de Cobrança</h2>
+                    <span class="bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-full">em breve</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5">Cobrança automática por WhatsApp e Pix chega na Frente Financeira.</p>
+            </div>`;
+
+        return `<div data-pane="cockpit" class="space-y-3.5">${head}${atalhos}${filaCard}${regua}</div>`;
+    }
+
+    // Bottom sheet de registro rápido (Tarefa / Visita / Lead) — grava direto no CRM.
+    function sheetCampoHtml() {
+        return `
+        <div data-el="sheet" class="hidden fixed inset-0 z-[70]">
+            <div data-s="backdrop" class="absolute inset-0 bg-black/40"></div>
+            <div class="absolute left-0 right-0 bottom-0 bg-white rounded-t-3xl p-4 pb-6 shadow-2xl space-y-3 max-w-[430px] mx-auto">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-extrabold text-slate-800"><i class="fa-solid fa-bolt text-orange-500 mr-1"></i>Registro rápido</h3>
+                    <button data-s="fechar" class="text-slate-400 w-8 h-8 rounded-full bg-slate-100 font-bold">✕</button>
+                </div>
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-500">Tipo</label>
+                    <select data-s="tipo" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                        <option value="tarefa">Tarefa operacional</option>
+                        <option value="visita">1ª Visita (conta na meta)</option>
+                        <option value="lead">Novo lead</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-500">Cliente ou prospect</label>
+                    <input data-s="cliente" placeholder="Ex.: Padaria Central" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                </div>
+                <div data-s="descwrap">
+                    <label class="text-[11px] font-semibold text-slate-500">Descrição / próximo passo</label>
+                    <input data-s="desc" placeholder="Ex.: Enviar proposta BPF até terça" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                </div>
+                <div>
+                    <label class="text-[11px] font-semibold text-slate-500">Responsável</label>
+                    <input data-s="resp" value="${esc(nome || "")}" list="resp-campo" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                    <datalist id="resp-campo">${(campoData && campoData.responsaveis || []).map((r) => `<option>${esc(r)}</option>`).join("")}</datalist>
+                </div>
+                <button data-s="salvar" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl text-sm">Salvar agora</button>
+                <p data-s="msg" class="text-[11px] text-center text-slate-500"></p>
+            </div>
+        </div>`;
+    }
+
     // ======================= APP CELULAR (abas: Cockpit / Rotinas / Caixa / Perfil) =======================
     function htmlMobile(d) {
         const codigo = opts.codigo || "";
@@ -440,7 +602,9 @@ export async function renderHomeCliente(opts) {
                     ${kpi("Notas a conciliar", d.preLanc.length + "", "text-orange-600")}
                 </div>
             </div>`;
-        const paneCockpit = `<div data-pane="cockpit" class="space-y-3.5">${banner}${captura}${fila}${saude}</div>`;
+        const paneCockpit = (ehConsultor && campoData)
+            ? htmlCampoPane(campoData)
+            : `<div data-pane="cockpit" class="space-y-3.5">${banner}${captura}${fila}${saude}</div>`;
 
         // --- Aba Menu (todas as funções permitidas) ---
         let perms; try { perms = JSON.parse(localStorage.getItem("oliverPerms")) || { master: false, func: {} }; } catch (e) { perms = { master: false, func: {} }; }
@@ -492,6 +656,16 @@ export async function renderHomeCliente(opts) {
             ${badge ? `<span class="absolute -top-1 right-2 bg-rose-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">${badge}</span>` : ""}
         </button>`;
 
+        const cockBadge = ehConsultor ? ((campoData && campoData.fila.length) || null) : (totalPend || null);
+        const btnCentral = ehConsultor
+            ? `<button data-tab="__add" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-plus text-lg"></i></button>`
+            : `<button data-tab="__cam" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-camera text-lg"></i></button>`;
+        const headerAcoes = ehConsultor
+            ? `<button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>`
+            : `<button data-m="consultor" class="bg-white/15 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5"><i class="fa-solid fa-comment-dots text-orange-200"></i>Consultor</button>
+               <button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>`;
+        const terceiraTab = ehConsultor ? navBtn("agenda-link", "fa-calendar-days", "Agenda", false) : navBtn("caixa", "fa-chart-line", "Caixa", false);
+
         return `
             <header class="bg-orange-600 text-white px-4 py-3 shrink-0 shadow-md">
                 <div class="flex items-center justify-between">
@@ -499,23 +673,83 @@ export async function renderHomeCliente(opts) {
                         <div class="w-9 h-9 rounded-xl bg-white text-orange-600 flex items-center justify-center font-extrabold text-xl">O</div>
                         <div><h1 class="font-bold text-base leading-none">Oliver</h1><p class="text-[10px] text-orange-100 mt-0.5">${esc(consultoriaNome || "Seu negócio")}</p></div>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <button data-m="consultor" class="bg-white/15 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5"><i class="fa-solid fa-comment-dots text-orange-200"></i>Consultor</button>
-                        <button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>
-                    </div>
+                    <div class="flex items-center gap-2">${headerAcoes}</div>
                 </div>
             </header>
             <main data-el="scroll" class="flex-1 overflow-y-auto p-3.5 space-y-4 bg-slate-50" style="-webkit-overflow-scrolling:touch">
                 ${paneCockpit}${paneMenu}${paneCaixa}${panerPerfil}
             </main>
             <nav class="bg-white border-t border-slate-200 px-4 py-2.5 flex items-center justify-around shrink-0 shadow-lg">
-                ${navBtn("cockpit", "fa-compass", "Cockpit", true, totalPend || null)}
+                ${navBtn("cockpit", "fa-compass", "Cockpit", true, cockBadge)}
                 ${navBtn("menu", "fa-table-cells-large", "Menu", false)}
-                <button data-tab="__cam" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-camera text-lg"></i></button>
-                ${navBtn("caixa", "fa-chart-line", "Caixa", false)}
+                ${btnCentral}
+                ${terceiraTab}
                 ${navBtn("perfil", "fa-user", "Perfil", false)}
             </nav>
+            ${ehConsultor ? sheetCampoHtml() : ""}
             ${datalist}`;
+    }
+
+    // ---------- Modo Campo: concluir item da fila + registro rápido ----------
+    function wireCampo(root) {
+        // Concluir tarefa/compromisso em 1 toque
+        root.querySelectorAll('[data-fila] [data-fa="check"]').forEach((btn) => btn.addEventListener("click", async () => {
+            const row = btn.closest("[data-fila]");
+            const id = row.getAttribute("data-fila"); const kind = row.getAttribute("data-kind");
+            btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-check text-emerald-600 text-xs"></i>';
+            try {
+                if (kind === "pend") await updateDoc(doc(db, "empresas", empresaId, "crm_pendencias", id), { status: "feito", concluidoEm: new Date().toISOString() });
+                else if (kind === "comp") await updateDoc(doc(db, "empresas", empresaId, "crm_compromissos", id), { status: "concluido", concluidoEm: new Date().toISOString() });
+                row.style.transition = "opacity .2s"; row.style.opacity = "0.4";
+                showToast("Concluído!", "Item marcado como feito.");
+                setTimeout(() => montar(), 500);
+            } catch (e) { btn.disabled = false; btn.innerHTML = ""; alert("Não foi possível concluir: " + e.message); }
+        }));
+    }
+
+    function abrirSheetCampo(root) {
+        const sheet = root.querySelector('[data-el="sheet"]'); if (!sheet) return;
+        sheet.classList.remove("hidden");
+        const fechar = () => sheet.classList.add("hidden");
+        sheet.querySelectorAll('[data-s="fechar"], [data-s="backdrop"]').forEach((b) => b.onclick = fechar);
+        const tipoSel = sheet.querySelector('[data-s="tipo"]');
+        const descWrap = sheet.querySelector('[data-s="descwrap"]');
+        const ajustar = () => { descWrap.style.display = (tipoSel.value === "lead") ? "none" : "block"; };
+        tipoSel.onchange = ajustar; ajustar();
+        const salvar = sheet.querySelector('[data-s="salvar"]');
+        salvar.onclick = async () => {
+            const tipo = tipoSel.value;
+            const cliente = sheet.querySelector('[data-s="cliente"]').value.trim();
+            const desc = sheet.querySelector('[data-s="desc"]').value.trim();
+            const resp = sheet.querySelector('[data-s="resp"]').value.trim();
+            const msg = sheet.querySelector('[data-s="msg"]');
+            if (!cliente) { msg.textContent = "Informe o cliente ou prospect."; msg.className = "text-[11px] text-center text-rose-600"; return; }
+            salvar.disabled = true; msg.textContent = "Salvando..."; msg.className = "text-[11px] text-center text-slate-500";
+            const hoje = ymdLocal(); const agora = new Date().toISOString();
+            try {
+                if (tipo === "tarefa") {
+                    await addDoc(collection(db, "empresas", empresaId, "crm_pendencias"), {
+                        titulo: desc || ("Tarefa — " + cliente), contatoNome: cliente, responsavel: resp || nome,
+                        origem: "avulsa", status: "aberto", prazo: hoje, criadoEm: agora, criadoPor: uid
+                    });
+                } else if (tipo === "visita") {
+                    await addDoc(collection(db, "empresas", empresaId, "crm_compromissos"), {
+                        titulo: desc || ("1ª Visita — " + cliente), contatoNome: cliente, tipo: "visita",
+                        data: hoje + "T09:00", funcionarioUid: uid, funcionarioNome: resp || nome,
+                        status: "aberto", criadoEm: agora
+                    });
+                } else {
+                    await addDoc(collection(db, "empresas", empresaId, "crm_contatos"), {
+                        nome: cliente, tipo_cadastro: "Lead", estagio_funil: "1. Prospecção",
+                        responsavel: resp || nome, proximo_contato: hoje, origem_canal: "app",
+                        observacao: desc || "", criadoEm: agora
+                    });
+                }
+                showToast("Registrado!", tipo === "visita" ? "Visita lançada (conta na meta)." : tipo === "lead" ? "Novo lead no funil." : "Tarefa na fila.");
+                sheet.classList.add("hidden");
+                setTimeout(() => montar(), 400);
+            } catch (e) { salvar.disabled = false; msg.textContent = "Erro: " + e.message; msg.className = "text-[11px] text-center text-rose-600"; }
+        };
     }
 
     // ---------- Mascote Oliver (ajudante flutuante — só desktop) ----------
@@ -602,6 +836,7 @@ export async function renderHomeCliente(opts) {
 
     async function montar() {
         const d = await carregarDados();
+        if (ehConsultor) { try { campoData = await carregarCampo(); } catch (e) { console.error("Modo Campo:", e); campoData = null; } }
         if (isDesktop) {
             mount.innerHTML = htmlDesktop(d);
             wire(mount);
@@ -640,8 +875,12 @@ export async function renderHomeCliente(opts) {
         root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
             const t = b.getAttribute("data-tab");
             if (t === "__cam") { switchTab("cockpit"); const f = root.querySelector('[data-el="foto"]'); if (f) f.click(); return; }
+            if (t === "__add") { abrirSheetCampo(root); return; }
+            if (t === "agenda-link") { location.href = "agenda.html"; return; }
             switchTab(t);
         }));
+
+        if (ehConsultor) wireCampo(root);
         root.querySelectorAll('[data-m="consultor"]').forEach((b) => b.addEventListener("click", () => {
             window.open(waLink(consultoriaTel, `Olá! Sou ${nome || "cliente do Oliver"} e gostaria de falar com a consultoria.`), "_blank", "noopener");
         }));

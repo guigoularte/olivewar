@@ -14,7 +14,7 @@
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { renderDashboard } from "./oliver_dashboard.js";
-        import { renderHomeCliente } from "./oliver_home_cliente.js?v=8";
+        import { renderHomeCliente } from "./oliver_home_cliente.js?v=9";
         import { montarCockpit } from "./oliver_cockpit.js?v=8";
         import { renderConsultorHome } from "./oliver_home_consultor.js?v=2";
 
@@ -236,8 +236,9 @@
                     const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel, codigo: dados.codigoAcesso || "", orientacao: dados.orientacao || null };
                     const consultorComNotas = souConsultoria && !!(func && func.notasFiscais);
                     if (!isDesktop) {
-                        // Celular: app em abas para TODOS. Consultor que envia notas abre no Cockpit; demais consultoria no Menu.
-                        try { await renderHomeCliente({ ...baseHome, mount: document.getElementById('home-cliente') || document.body, isDesktop: false, inicialTab: (souConsultoria && !consultorComNotas) ? 'menu' : 'cockpit' }); }
+                        // Celular: app em abas para TODOS. Consultoria abre no Cockpit "Modo Campo"; cliente no Cockpit de notas.
+                        const ehAdminGeral = ehMaster || dados.role === 'empresa_admin';
+                        try { await renderHomeCliente({ ...baseHome, mount: document.getElementById('home-cliente') || document.body, isDesktop: false, inicialTab: 'cockpit', souConsultoria, isAdmin: ehAdminGeral }); }
                         catch (e) { console.error("Falha ao montar app mobile:", e); }
                     } else if (!souConsultoria) {
                         // Desktop (cliente): cockpit (sidebar escura + topo), cobrindo a sidebar padrão.
