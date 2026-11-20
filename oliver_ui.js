@@ -2,6 +2,9 @@
 // Roda em todas as telas internas; os links e as permissões (podeVer) valem para
 // todos os perfis (master, consultoria, cliente). Visual alinhado ao cockpit.
 (function () {
+    // PWA (manifesto + ícones + service worker) em todas as telas internas.
+    try { var _pwa = document.createElement("script"); _pwa.src = "oliver_pwa.js"; (document.head || document.documentElement).appendChild(_pwa); } catch (e) {}
+
     // ---- Estilos do modo desktop (>=1024px) ----
     var css = `
     .oliver-sidebar{display:none;}
