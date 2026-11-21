@@ -282,6 +282,8 @@
                 console.error("Erro ao buscar nome:", error);
                 document.getElementById('nome-usuario').innerText = "Olá, Usuário";
             }
+            // App terminou de carregar as funções: libera o splash de abertura.
+            if (window.__oliverReady) window.__oliverReady();
         });
 
         window.fazerLogout = async () => {
@@ -291,6 +293,43 @@
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
+
+    <!-- Splash de abertura (vídeo enquanto o app carrega) -->
+    <div id="oliver-splash" style="position:fixed;inset:0;z-index:9999;background:#0f172a;display:flex;align-items:center;justify-content:center;transition:opacity .5s ease;">
+        <video id="oliver-splash-video" src="splash/intro.mp4" autoplay muted playsinline preload="auto"
+               style="width:100%;height:100%;object-fit:cover;"></video>
+        <button id="oliver-splash-skip" style="position:absolute;bottom:22px;right:22px;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:7px 16px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer;backdrop-filter:blur(4px);">Pular ›</button>
+    </div>
+    <script>
+        (function () {
+            var splash = document.getElementById("oliver-splash");
+            if (!splash) return;
+            var video = document.getElementById("oliver-splash-video");
+            var inicio = Date.now();
+            var MIN_MS = 1200;   // tempo mínimo na tela (evita "piscar")
+            var CAP_MS = 8000;   // trava de segurança: nunca prende o usuário
+            var pronto = false, escondido = false;
+            function esconder() {
+                if (escondido) return; escondido = true;
+                splash.style.opacity = "0";
+                setTimeout(function () { if (splash && splash.parentNode) splash.parentNode.removeChild(splash); }, 500);
+            }
+            function tentar() {
+                if (!pronto) return;
+                var resta = MIN_MS - (Date.now() - inicio);
+                setTimeout(esconder, resta > 0 ? resta : 0);
+            }
+            // O app avisa quando terminou de carregar as funções:
+            window.__oliverReady = function () { pronto = true; tentar(); };
+            // Se o vídeo acabar antes do app, já pode sair:
+            if (video) video.addEventListener("ended", esconder);
+            // Pular manualmente:
+            var skip = document.getElementById("oliver-splash-skip");
+            if (skip) skip.addEventListener("click", esconder);
+            // Trava de segurança: some mesmo se algo travar o carregamento.
+            setTimeout(esconder, CAP_MS);
+        })();
+    </script>
 
     <!-- Moldura Estilo Celular -->
     <div class="w-full max-w-none sm:max-w-sm bg-[#FCFAF4] min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col justify-between overflow-hidden relative">
