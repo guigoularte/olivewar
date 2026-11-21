@@ -94,14 +94,13 @@
 
         function render() {
             document.getElementById('tab-contatos').className = tabCls(aba === "contatos");
-            document.getElementById('tab-agenda').className = tabCls(aba === "agenda");
             document.getElementById('tab-pendencias').className = tabCls(aba === "pendencias");
-            document.getElementById('tab-financeiro').className = tabCls(aba === "financeiro");
             document.getElementById('painel-contatos').style.display = aba === "contatos" ? "block" : "none";
-            document.getElementById('painel-agenda').style.display = aba === "agenda" ? "block" : "none";
             document.getElementById('painel-pendencias').style.display = aba === "pendencias" ? "block" : "none";
-            document.getElementById('painel-financeiro').style.display = aba === "financeiro" ? "block" : "none";
-            renderContatos(); renderAgenda(); renderFinanceiro(); renderPendencias(); preencherSelectContatos();
+            // Agenda e Financeiro foram aposentados do CRM (ver agenda.html e a Régua de Cobrança do cockpit).
+            const pa = document.getElementById('painel-agenda'); if (pa) pa.style.display = "none";
+            const pf = document.getElementById('painel-financeiro'); if (pf) pf.style.display = "none";
+            renderContatos(); renderPendencias(); preencherSelectContatos();
         }
 
         // ===== CONTATOS =====
@@ -499,12 +498,11 @@
                 <div class="w-8"></div>
             </div>
 
-            <!-- Abas -->
-            <div class="flex gap-1.5 mb-3">
+            <!-- Abas (Agenda vive em agenda.html; cobrança vive na Régua do cockpit) -->
+            <div class="flex gap-1.5 mb-3 items-center">
                 <button id="tab-contatos" onclick="trocarAba('contatos')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">Contatos</button>
-                <button id="tab-agenda" onclick="trocarAba('agenda')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Agenda</button>
-                <button id="tab-pendencias" onclick="trocarAba('pendencias')" class="flex-1 py-2 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Pendências</button>
-                <button id="tab-financeiro" onclick="trocarAba('financeiro')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Financeiro</button>
+                <button id="tab-pendencias" onclick="trocarAba('pendencias')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Pendências</button>
+                <a href="agenda.html" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200 text-center hover:text-blue-600">Agenda →</a>
             </div>
 
             <!-- ===== PAINEL CONTATOS ===== -->

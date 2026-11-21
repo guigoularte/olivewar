@@ -102,15 +102,24 @@
         try { marcaNome = (JSON.parse(localStorage.getItem("oliverBranding") || "{}").nome) || ""; } catch (e) {}
 
         var visiveis = LINKS.filter(function (l) { return podeVer(l, p); });
+        var navSt; try { navSt = JSON.parse(localStorage.getItem("oliverNavOpen") || "{}"); } catch (e) { navSt = {}; }
+        function secAberta(sec, temAtivo) { return (sec in navSt) ? !!navSt[sec] : (temAtivo || sec === "Gestão"); }
         var nav = "";
         // Topo (sem seção)
         visiveis.filter(function (l) { return !l.sec; }).forEach(function (l) { nav += linkHTML(l, atual, pendItens); });
-        // Seções
-        SECOES.forEach(function (sec) {
+        // Seções (recolhíveis)
+        SECOES.forEach(function (sec, i) {
             var itens = visiveis.filter(function (l) { return l.sec === sec; });
             if (!itens.length) return;
-            nav += '<div style="padding:14px 12px 4px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em">' + sec + '</div>';
+            var temAtivo = itens.some(function (l) { return l.href === atual; });
+            var aberto = secAberta(sec, temAtivo);
+            var secId = "oliver-sec-" + i;
+            nav += '<button type="button" class="oliver-sec-tog" data-sec="' + sec + '" data-target="' + secId + '"' +
+                ' style="width:100%;display:flex;align-items:center;justify-content:space-between;background:none;border:0;cursor:pointer;padding:14px 12px 4px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em">' +
+                '<span>' + sec + '</span><i class="fa-solid fa-chevron-' + (aberto ? "down" : "right") + '" style="font-size:9px"></i></button>';
+            nav += '<div id="' + secId + '" style="display:' + (aberto ? "block" : "none") + '">';
             itens.forEach(function (l) { nav += linkHTML(l, atual, pendItens); });
+            nav += '</div>';
         });
 
         var seletor = marcaNome ? (
@@ -143,6 +152,21 @@
             '</div>';
 
         document.body.insertBefore(aside, document.body.firstChild);
+
+        // Recolher/expandir seções da sidebar (lembra a escolha)
+        aside.querySelectorAll(".oliver-sec-tog").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var alvo = document.getElementById(btn.getAttribute("data-target"));
+                if (!alvo) return;
+                var abrir = alvo.style.display === "none";
+                alvo.style.display = abrir ? "block" : "none";
+                var ic = btn.querySelector("i");
+                if (ic) ic.className = "fa-solid fa-chevron-" + (abrir ? "down" : "right") + "";
+                var st; try { st = JSON.parse(localStorage.getItem("oliverNavOpen") || "{}"); } catch (e) { st = {}; }
+                st[btn.getAttribute("data-sec")] = abrir;
+                try { localStorage.setItem("oliverNavOpen", JSON.stringify(st)); } catch (e) {}
+            });
+        });
 
         var sair = document.getElementById("oliver-sair");
         if (sair) sair.addEventListener("click", async function (e) {
