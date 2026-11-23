@@ -14,7 +14,7 @@
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { renderDashboard } from "./oliver_dashboard.js";
-        import { renderHomeCliente } from "./oliver_home_cliente.js?v=9";
+        import { renderHomeCliente } from "./oliver_home_cliente.js?v=10";
         import { montarCockpit } from "./oliver_cockpit.js?v=8";
         import { renderConsultorHome } from "./oliver_home_consultor.js?v=4";
 
@@ -154,10 +154,10 @@
                 const elInd = document.getElementById('menu-indicadores');
                 if (elInd) elInd.style.display = souConsultoria ? 'none' : 'flex';
 
-                // No desktop (onde já existe a sidebar) a HOME vira o dashboard.
-                // Exceção: consultor/master que TAMBÉM envia notas (notasFiscais) recebe o
-                // painel de envio (tratado no bloco da home abaixo), então aqui pulamos o dashboard.
-                if (window.innerWidth >= 1024 && souConsultoria && dados.empresaId && !(func && func.notasFiscais)) {
+                // No desktop (onde já existe a sidebar) a HOME da consultoria vira o cockpit + dashboard.
+                // Vale mesmo se a conta também envia notas (notas ficam no menu Notas), para que
+                // mobile e desktop mostrem a MESMA coisa (cockpit com a Régua de Cobrança).
+                if (window.innerWidth >= 1024 && souConsultoria && dados.empresaId) {
                     const cards = document.getElementById('home-cards');
                     if (cards) cards.style.setProperty('display', 'none', 'important');
                     const dash = document.getElementById('home-dashboard');
@@ -234,7 +234,6 @@
                     try { const b = JSON.parse(localStorage.getItem('oliverBranding') || '{}'); consultoriaNome = b.nome || ""; consultoriaTel = b.telefone || ""; } catch (e) {}
                     const nome = localStorage.getItem('oliverNome') || "";
                     const baseHome = { db, uid: user.uid, empresaId: dados.empresaId || null, orgId: dados.orgId || null, func, nome, consultoriaNome, consultoriaTel, codigo: dados.codigoAcesso || "", orientacao: dados.orientacao || null };
-                    const consultorComNotas = souConsultoria && !!(func && func.notasFiscais);
                     if (!isDesktop) {
                         // Celular: app em abas para TODOS. Consultoria abre no Cockpit "Modo Campo"; cliente no Cockpit de notas.
                         const ehAdminGeral = ehMaster || dados.role === 'empresa_admin';
@@ -246,18 +245,9 @@
                             const mount = montarCockpit({ nome, negocioNome: consultoriaNome, consultoriaNome, codigo: dados.codigoAcesso || "", func, itensPend: parseInt(localStorage.getItem('oliverItensPendentes') || '0', 10) || 0, consultoriaTel });
                             await renderHomeCliente({ ...baseHome, mount, isDesktop: true });
                         } catch (e) { console.error("Falha ao montar cockpit:", e); }
-                    } else if (consultorComNotas) {
-                        // Desktop (consultor/master que também envia notas): painel de envio no conteúdo,
-                        // mantendo a sidebar completa da consultoria (oliver_ui.js).
-                        const cards = document.getElementById('home-cards'); if (cards) cards.style.setProperty('display', 'none', 'important');
-                        const dash = document.getElementById('home-dashboard');
-                        if (dash) {
-                            dash.classList.remove('hidden');
-                            try { await renderHomeCliente({ ...baseHome, mount: dash, isDesktop: true }); }
-                            catch (e) { console.error("Falha ao montar envio no home do consultor:", e); }
-                        }
                     }
-                    // Desktop (consultoria sem notas): dashboard + sidebar escura, já tratados acima.
+                    // Desktop (consultoria): cockpit do consultor + dashboard já montados acima.
+                    // Envio de notas da consultoria fica no menu "Notas", para mobile e desktop baterem.
                 }
 
                 // Cliente ainda não vinculado a uma empresa: mostra o código de acesso para ele informar à consultoria

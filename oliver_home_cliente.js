@@ -121,16 +121,18 @@ export async function renderHomeCliente(opts) {
 
     // Carrega o CRM da empresa para o Modo Campo (reusa crm_contatos / crm_compromissos / crm_pendencias).
     async function carregarCampo() {
-        let contatos = [], comps = [], pend = [];
-        const [sc, sco, sp] = await Promise.all([
+        let contatos = [], comps = [], pend = [], cobr = [];
+        const [sc, sco, sp, scb] = await Promise.all([
             getDocs(collection(db, "empresas", empresaId, "crm_contatos")),
             opts.isAdmin ? getDocs(collection(db, "empresas", empresaId, "crm_compromissos"))
                 : getDocs(query(collection(db, "empresas", empresaId, "crm_compromissos"), where("funcionarioUid", "==", uid))),
-            getDocs(collection(db, "empresas", empresaId, "crm_pendencias"))
+            getDocs(collection(db, "empresas", empresaId, "crm_pendencias")),
+            getDocs(collection(db, "empresas", empresaId, "cobrancas"))
         ]);
         contatos = sc.docs.map((d) => ({ id: d.id, ...d.data() }));
         comps = sco.docs.map((d) => ({ id: d.id, ...d.data() }));
         pend = sp.docs.map((d) => ({ id: d.id, ...d.data() }));
+        cobr = scb.docs.map((d) => ({ id: d.id, ...d.data() }));
 
         const hoje = ymdLocal();
         const [ini, fim] = semanaLocal();
@@ -161,8 +163,13 @@ export async function renderHomeCliente(opts) {
             resp: c.responsavel || "", when: "Previsto " + brDate(c.proximo_contato)
         }));
 
+        // Cobranças em aberto (não pagas), vencidas primeiro
+        const cobrAbertas = cobr.filter((c) => c.status !== "pago")
+            .sort((a, b) => (a.vencimento || "").localeCompare(b.vencimento || ""));
+        const aReceber = cobrAbertas.reduce((s, c) => s + Number(c.valor || 0), 0);
+
         const respSet = [...new Set(contatos.map((c) => c.responsavel).filter(Boolean))];
-        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet };
+        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet, cobr: cobrAbertas, aReceber, hoje };
     }
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
@@ -485,13 +492,24 @@ export async function renderHomeCliente(opts) {
                 </div>
             </div>`;
 
+        const cobr = cd.cobr || [];
+        const linhaCobr = (c) => {
+            const atras = c.vencimento && c.vencimento < cd.hoje;
+            return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0" data-cobr="${c.id}">
+                <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}</strong>
+                <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(c.vencimento)}${atras ? " · vencida" : ""}</div></div>
+                <div class="flex items-center gap-2 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
+                <button data-baixa="${c.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-emerald-500 text-emerald-600 bg-emerald-50 active:bg-emerald-500 active:text-white">Baixar</button></div>
+            </div>`;
+        };
         const regua = `
             <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between mb-1">
                     <h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide"><i class="fa-solid fa-money-bill-wave text-emerald-500 mr-1"></i>Régua de Cobrança</h2>
-                    <span class="bg-slate-100 text-slate-500 text-[9px] font-bold px-2 py-0.5 rounded-full">em breve</span>
+                    <span class="text-[11px] font-bold text-slate-700">${brl(cd.aReceber || 0)}</span>
                 </div>
-                <p class="text-[11px] text-slate-400 mt-1.5">Cobrança automática por WhatsApp e Pix chega na Frente Financeira.</p>
+                <p class="text-[10px] text-slate-400 mb-1.5">A receber em aberto · automação WhatsApp/Pix em breve</p>
+                <div data-el="regua-lista">${cobr.length ? cobr.slice(0, 6).map(linhaCobr).join("") : `<p class="py-3 text-center text-[12px] text-slate-400">Nenhuma fatura em aberto. Toque em <b>+</b> para lançar.</p>`}</div>
             </div>`;
 
         return `<div data-pane="cockpit" class="space-y-3.5">${head}${atalhos}${filaCard}${regua}</div>`;
@@ -513,15 +531,22 @@ export async function renderHomeCliente(opts) {
                         <option value="tarefa">Tarefa operacional</option>
                         <option value="visita">1ª Visita (conta na meta)</option>
                         <option value="lead">Novo lead</option>
+                        <option value="cobranca">Cobrança / fatura</option>
                     </select>
                 </div>
                 <div>
-                    <label class="text-[11px] font-semibold text-slate-500">Cliente ou prospect</label>
+                    <label class="text-[11px] font-semibold text-slate-500" data-s="lblcli">Cliente ou prospect</label>
                     <input data-s="cliente" placeholder="Ex.: Padaria Central" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
                 </div>
                 <div data-s="descwrap">
                     <label class="text-[11px] font-semibold text-slate-500">Descrição / próximo passo</label>
                     <input data-s="desc" placeholder="Ex.: Enviar proposta BPF até terça" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                </div>
+                <div data-s="valorwrap" class="hidden grid grid-cols-2 gap-2">
+                    <div><label class="text-[11px] font-semibold text-slate-500">Valor R$</label>
+                        <input data-s="valor" type="number" step="0.01" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1"></div>
+                    <div><label class="text-[11px] font-semibold text-slate-500">Vencimento</label>
+                        <input data-s="venc" type="date" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1"></div>
                 </div>
                 <div>
                     <label class="text-[11px] font-semibold text-slate-500">Responsável</label>
@@ -705,6 +730,16 @@ export async function renderHomeCliente(opts) {
                 setTimeout(() => montar(), 500);
             } catch (e) { btn.disabled = false; btn.innerHTML = ""; alert("Não foi possível concluir: " + e.message); }
         }));
+
+        // Dar baixa em cobrança (Régua)
+        root.querySelectorAll("[data-baixa]").forEach((btn) => btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-baixa"); btn.disabled = true; btn.textContent = "...";
+            try {
+                await updateDoc(doc(db, "empresas", empresaId, "cobrancas", id), { status: "pago", dataPagamento: ymdLocal() });
+                showToast("Baixa registrada!", "Fatura marcada como paga.");
+                setTimeout(() => montar(), 400);
+            } catch (e) { btn.disabled = false; btn.textContent = "Baixar"; alert("Erro ao dar baixa: " + e.message); }
+        }));
     }
 
     function abrirSheetCampo(root) {
@@ -714,7 +749,14 @@ export async function renderHomeCliente(opts) {
         sheet.querySelectorAll('[data-s="fechar"], [data-s="backdrop"]').forEach((b) => b.onclick = fechar);
         const tipoSel = sheet.querySelector('[data-s="tipo"]');
         const descWrap = sheet.querySelector('[data-s="descwrap"]');
-        const ajustar = () => { descWrap.style.display = (tipoSel.value === "lead") ? "none" : "block"; };
+        const valorWrap = sheet.querySelector('[data-s="valorwrap"]');
+        const lblCli = sheet.querySelector('[data-s="lblcli"]');
+        const ajustar = () => {
+            const t = tipoSel.value;
+            descWrap.style.display = (t === "tarefa") ? "block" : "none";
+            valorWrap.style.display = (t === "cobranca") ? "grid" : "none";
+            lblCli.textContent = t === "lead" ? "Nome do lead" : "Cliente";
+        };
         tipoSel.onchange = ajustar; ajustar();
         const salvar = sheet.querySelector('[data-s="salvar"]');
         salvar.onclick = async () => {
@@ -722,12 +764,21 @@ export async function renderHomeCliente(opts) {
             const cliente = sheet.querySelector('[data-s="cliente"]').value.trim();
             const desc = sheet.querySelector('[data-s="desc"]').value.trim();
             const resp = sheet.querySelector('[data-s="resp"]').value.trim();
+            const valor = parseFloat(sheet.querySelector('[data-s="valor"]').value || "0");
+            const venc = sheet.querySelector('[data-s="venc"]').value;
             const msg = sheet.querySelector('[data-s="msg"]');
             if (!cliente) { msg.textContent = "Informe o cliente ou prospect."; msg.className = "text-[11px] text-center text-rose-600"; return; }
+            if (tipo === "cobranca" && !(valor > 0)) { msg.textContent = "Informe o valor da cobrança."; msg.className = "text-[11px] text-center text-rose-600"; return; }
             salvar.disabled = true; msg.textContent = "Salvando..."; msg.className = "text-[11px] text-center text-slate-500";
             const hoje = ymdLocal(); const agora = new Date().toISOString();
             try {
-                if (tipo === "tarefa") {
+                if (tipo === "cobranca") {
+                    const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
+                    await addDoc(collection(db, "empresas", empresaId, "cobrancas"), {
+                        clienteNome: cliente, valor, competencia: comp, vencimento: venc || hoje,
+                        status: "pendente", dataPagamento: null, criadoEm: agora
+                    });
+                } else if (tipo === "tarefa") {
                     await addDoc(collection(db, "empresas", empresaId, "crm_pendencias"), {
                         titulo: desc || ("Tarefa — " + cliente), contatoNome: cliente, responsavel: resp || nome,
                         origem: "avulsa", status: "aberto", prazo: hoje, criadoEm: agora, criadoPor: uid
@@ -745,7 +796,7 @@ export async function renderHomeCliente(opts) {
                         observacao: desc || "", criadoEm: agora
                     });
                 }
-                showToast("Registrado!", tipo === "visita" ? "Visita lançada (conta na meta)." : tipo === "lead" ? "Novo lead no funil." : "Tarefa na fila.");
+                showToast("Registrado!", tipo === "cobranca" ? "Fatura lançada na Régua." : tipo === "visita" ? "Visita lançada (conta na meta)." : tipo === "lead" ? "Novo lead no funil." : "Tarefa na fila.");
                 sheet.classList.add("hidden");
                 setTimeout(() => montar(), 400);
             } catch (e) { salvar.disabled = false; msg.textContent = "Erro: " + e.message; msg.className = "text-[11px] text-center text-rose-600"; }
