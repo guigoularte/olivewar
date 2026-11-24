@@ -7,7 +7,7 @@
 // IMPORTANTE: este layout segue o mockup do "cockpit", mas mantém TODAS as funções
 // já criadas no Oliver (envio de nota -> pré-lançamento, conciliação, fluxo de caixa,
 // itens para resolver). Nada de dado inventado: os números vêm do Firestore do cliente.
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -103,6 +103,31 @@ function semanaLocal() {
     return [ymdLocal(seg), ymdLocal(dom)];
 }
 
+// Régua de cobrança (Modo Campo lê a config; edição fica no desktop)
+const REGUA_PADRAO = { ativa: true, dias: [10, 5, 2, 0], mensagem: "Olá {cliente}! 😊 Passando para lembrar do seu boleto de {valor}, com vencimento em {vencimento} ({quando}). Qualquer dúvida, estou à disposição!" };
+function diasAteVenc(venc) {
+    if (!venc) return null;
+    const a = new Date(venc.slice(0, 10) + "T00:00:00"); const b = new Date(ymdLocal() + "T00:00:00");
+    return Math.round((a - b) / 86400000);
+}
+function quandoTxt(d) {
+    if (d == null) return "";
+    if (d > 0) return "daqui a " + d + (d > 1 ? " dias" : " dia");
+    if (d === 0) return "hoje";
+    return "que venceu há " + (-d) + (-d > 1 ? " dias" : " dia");
+}
+function msgCobr(c, cfg) {
+    return (cfg && cfg.mensagem || REGUA_PADRAO.mensagem)
+        .replace(/{cliente}/g, c.clienteNome || "").replace(/{valor}/g, brl(c.valor))
+        .replace(/{vencimento}/g, brDate(c.vencimento)).replace(/{quando}/g, quandoTxt(diasAteVenc(c.vencimento)));
+}
+function waTel(tel, msg) {
+    let dig = String(tel || "").replace(/\D/g, "");
+    if (dig.length < 10) return "";
+    if (dig.length <= 11) dig = "55" + dig;
+    return "https://wa.me/" + dig + (msg ? "?text=" + encodeURIComponent(msg) : "");
+}
+
 // renderHomeCliente({ db, uid, empresaId, orgId, func, mount, isDesktop, nome, consultoriaNome, consultoriaTel, inicialTab, souConsultoria, isAdmin })
 export async function renderHomeCliente(opts) {
     const { db, uid, empresaId, func, mount, isDesktop } = opts;
@@ -122,18 +147,20 @@ export async function renderHomeCliente(opts) {
 
     // Carrega o CRM da empresa para o Modo Campo (reusa crm_contatos / crm_compromissos / crm_pendencias).
     async function carregarCampo() {
-        let contatos = [], comps = [], pend = [], cobr = [];
-        const [sc, sco, sp, scb] = await Promise.all([
+        let contatos = [], comps = [], pend = [], cobr = [], cfg = { ...REGUA_PADRAO };
+        const [sc, sco, sp, scb, scfg] = await Promise.all([
             getDocs(collection(db, "empresas", empresaId, "crm_contatos")),
             opts.isAdmin ? getDocs(collection(db, "empresas", empresaId, "crm_compromissos"))
                 : getDocs(query(collection(db, "empresas", empresaId, "crm_compromissos"), where("funcionarioUid", "==", uid))),
             getDocs(collection(db, "empresas", empresaId, "crm_pendencias")),
-            getDocs(collection(db, "empresas", empresaId, "cobrancas"))
+            getDocs(collection(db, "empresas", empresaId, "cobrancas")),
+            getDoc(doc(db, "empresas", empresaId, "config", "regua")).catch(() => null)
         ]);
         contatos = sc.docs.map((d) => ({ id: d.id, ...d.data() }));
         comps = sco.docs.map((d) => ({ id: d.id, ...d.data() }));
         pend = sp.docs.map((d) => ({ id: d.id, ...d.data() }));
         cobr = scb.docs.map((d) => ({ id: d.id, ...d.data() }));
+        if (scfg && scfg.exists()) cfg = { ...REGUA_PADRAO, ...scfg.data() };
 
         const hoje = ymdLocal();
         const [ini, fim] = semanaLocal();
@@ -170,7 +197,7 @@ export async function renderHomeCliente(opts) {
         const aReceber = cobrAbertas.reduce((s, c) => s + Number(c.valor || 0), 0);
 
         const respSet = [...new Set(contatos.map((c) => c.responsavel).filter(Boolean))];
-        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet, cobr: cobrAbertas, aReceber, hoje };
+        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet, cobr: cobrAbertas, aReceber, hoje, cfg };
     }
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
@@ -494,13 +521,21 @@ export async function renderHomeCliente(opts) {
             </div>`;
 
         const cobr = cd.cobr || [];
+        const cfg = cd.cfg || { ...REGUA_PADRAO };
         const linhaCobr = (c) => {
             const atras = c.vencimento && c.vencimento < cd.hoje;
-            return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0" data-cobr="${c.id}">
-                <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}</strong>
-                <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(c.vencimento)}${atras ? " · vencida" : ""}</div></div>
-                <div class="flex items-center gap-2 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
-                <button data-baixa="${c.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-lg border border-emerald-500 text-emerald-600 bg-emerald-50 active:bg-emerald-500 active:text-white">Baixar</button></div>
+            const d = diasAteVenc(c.vencimento);
+            const enviarHoje = cfg.ativa && Array.isArray(cfg.dias) && cfg.dias.includes(d);
+            const wa = c.clienteTel ? waTel(c.clienteTel, msgCobr(c, cfg)) : "";
+            const btnWa = wa
+                ? `<a href="${wa}" target="_blank" rel="noopener" class="text-[11px] font-bold px-2 py-1 rounded-lg border ${enviarHoje ? "border-green-500 bg-green-500 text-white" : "border-green-500 text-green-600 bg-green-50"} active:bg-green-600 active:text-white flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i>${enviarHoje ? "Cobrar" : ""}</a>`
+                : `<button data-el="add-tel" data-cid="${c.id}" class="text-[11px] font-semibold px-2 py-1 rounded-lg border border-slate-200 text-slate-400"><i class="fa-brands fa-whatsapp"></i>+tel</button>`;
+            return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 ${enviarHoje ? "bg-green-50/50 -mx-2 px-2 rounded-lg" : ""}" data-cobr="${c.id}">
+                <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}${enviarHoje ? ` <span class="text-[8px] font-bold uppercase bg-green-100 text-green-700 px-1 py-0.5 rounded">hoje</span>` : ""}</strong>
+                <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(c.vencimento)}${d != null ? " · " + quandoTxt(d) : ""}</div></div>
+                <div class="flex items-center gap-1.5 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
+                ${btnWa}
+                <button data-baixa="${c.id}" class="text-[11px] font-bold px-2 py-1 rounded-lg border border-emerald-500 text-emerald-600 bg-emerald-50 active:bg-emerald-500 active:text-white">Baixar</button></div>
             </div>`;
         };
         const regua = `
@@ -509,7 +544,7 @@ export async function renderHomeCliente(opts) {
                     <h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide"><i class="fa-solid fa-money-bill-wave text-emerald-500 mr-1"></i>Régua de Cobrança</h2>
                     <span class="text-[11px] font-bold text-slate-700">${brl(cd.aReceber || 0)}</span>
                 </div>
-                <p class="text-[10px] text-slate-400 mb-1.5">A receber em aberto · automação WhatsApp/Pix em breve</p>
+                <p class="text-[10px] text-slate-400 mb-1.5">A receber em aberto · toque no <i class="fa-brands fa-whatsapp text-green-600"></i> para cobrar</p>
                 <div data-el="regua-lista">${cobr.length ? cobr.slice(0, 6).map(linhaCobr).join("") : `<p class="py-3 text-center text-[12px] text-slate-400">Nenhuma fatura em aberto. Toque em <b>+</b> para lançar.</p>`}</div>
             </div>`;
 
@@ -549,6 +584,8 @@ export async function renderHomeCliente(opts) {
                     <div><label class="text-[11px] font-semibold text-slate-500">Vencimento</label>
                         <input data-s="venc" type="date" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1"></div>
                 </div>
+                <div data-s="telwrap" class="hidden"><label class="text-[11px] font-semibold text-slate-500"><i class="fa-brands fa-whatsapp text-green-600"></i> WhatsApp do cliente</label>
+                    <input data-s="tel" placeholder="Ex.: 47 99999-9999" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1"></div>
                 <div>
                     <label class="text-[11px] font-semibold text-slate-500">Responsável</label>
                     <input data-s="resp" value="${esc(nome || "")}" list="resp-campo" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
@@ -741,6 +778,15 @@ export async function renderHomeCliente(opts) {
                 setTimeout(() => montar(), 400);
             } catch (e) { btn.disabled = false; btn.textContent = "Baixar"; alert("Erro ao dar baixa: " + e.message); }
         }));
+
+        // Adicionar WhatsApp do cliente numa cobrança sem telefone
+        root.querySelectorAll('[data-el="add-tel"]').forEach((btn) => btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-cid");
+            const tel = prompt("WhatsApp do cliente (com DDD):", "");
+            if (tel == null || !tel.trim()) return;
+            try { await updateDoc(doc(db, "empresas", empresaId, "cobrancas", id), { clienteTel: tel.trim() }); showToast("WhatsApp salvo!", "Agora dá pra cobrar com 1 toque."); setTimeout(() => montar(), 300); }
+            catch (e) { alert("Erro ao salvar: " + e.message); }
+        }));
     }
 
     function abrirSheetCampo(root) {
@@ -751,11 +797,13 @@ export async function renderHomeCliente(opts) {
         const tipoSel = sheet.querySelector('[data-s="tipo"]');
         const descWrap = sheet.querySelector('[data-s="descwrap"]');
         const valorWrap = sheet.querySelector('[data-s="valorwrap"]');
+        const telWrap = sheet.querySelector('[data-s="telwrap"]');
         const lblCli = sheet.querySelector('[data-s="lblcli"]');
         const ajustar = () => {
             const t = tipoSel.value;
             descWrap.style.display = (t === "tarefa") ? "block" : "none";
             valorWrap.style.display = (t === "cobranca") ? "grid" : "none";
+            telWrap.style.display = (t === "cobranca") ? "block" : "none";
             lblCli.textContent = t === "lead" ? "Nome do lead" : "Cliente";
         };
         tipoSel.onchange = ajustar; ajustar();
@@ -775,8 +823,9 @@ export async function renderHomeCliente(opts) {
             try {
                 if (tipo === "cobranca") {
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
+                    const tel = (sheet.querySelector('[data-s="tel"]').value || "").trim();
                     await addDoc(collection(db, "empresas", empresaId, "cobrancas"), {
-                        clienteNome: cliente, valor, competencia: comp, vencimento: venc || hoje,
+                        clienteNome: cliente, clienteTel: tel, valor, competencia: comp, vencimento: venc || hoje,
                         status: "pendente", dataPagamento: null, criadoEm: agora
                     });
                 } else if (tipo === "tarefa") {

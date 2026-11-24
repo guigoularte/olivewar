@@ -1,12 +1,40 @@
 // Cockpit do CONSULTOR (home desktop da consultoria): KPIs financeiros/comerciais,
 // fila de execução do dia (com conclusão), régua de cobrança e cadência de prospects.
 // Reusa crm_contatos / crm_compromissos / crm_pendencias e a coleção cobrancas.
-import { collection, getDocs, query, where, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, getDocs, getDoc, setDoc, query, where, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const ymdLocal = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const brDate = (s) => (s || "").slice(0, 10).split("-").reverse().join("/");
+
+// Régua de cobrança — configuração padrão (editável pela consultoria, salva em empresas/{id}/config/regua)
+const REGUA_PADRAO = { ativa: true, dias: [10, 5, 2, 0], mensagem: "Olá {cliente}! 😊 Passando para lembrar do seu boleto de {valor}, com vencimento em {vencimento} ({quando}). Qualquer dúvida, estou à disposição!" };
+function diasAte(venc) {
+    if (!venc) return null;
+    const a = new Date(venc.slice(0, 10) + "T00:00:00");
+    const b = new Date(ymdLocal() + "T00:00:00");
+    return Math.round((a - b) / 86400000);
+}
+function textoQuando(d) {
+    if (d == null) return "";
+    if (d > 0) return "daqui a " + d + (d > 1 ? " dias" : " dia");
+    if (d === 0) return "hoje";
+    return "que venceu há " + (-d) + (-d > 1 ? " dias" : " dia");
+}
+function msgCobranca(c, cfg) {
+    return (cfg && cfg.mensagem || REGUA_PADRAO.mensagem)
+        .replace(/{cliente}/g, c.clienteNome || "")
+        .replace(/{valor}/g, brl(c.valor))
+        .replace(/{vencimento}/g, brDate(c.vencimento))
+        .replace(/{quando}/g, textoQuando(diasAte(c.vencimento)));
+}
+function waLinkTel(tel, msg) {
+    let dig = String(tel || "").replace(/\D/g, "");
+    if (dig.length < 10) return "";
+    if (dig.length <= 11) dig = "55" + dig;
+    return "https://wa.me/" + dig + (msg ? "?text=" + encodeURIComponent(msg) : "");
+}
 const META_VISITAS = 6;
 const ESTAGIOS = ["1. Prospecção", "2. 1ª Visita", "3. Proposta", "4. Negociação", "5. Fechado", "6. Perdido"];
 const tipoDe = (c) => c.tipo_cadastro || (c.usuarioUid ? "Cliente" : "Lead");
@@ -28,23 +56,26 @@ export async function renderConsultorHome(opts) {
     const nome = opts.nome || "";
 
     async function carregar() {
-        let contatos = [], comps = [], pend = [], cobr = [];
-        const [sc, sco, sp, scb] = await Promise.all([
+        let contatos = [], comps = [], pend = [], cobr = [], cfg = { ...REGUA_PADRAO };
+        const [sc, sco, sp, scb, scfg] = await Promise.all([
             getDocs(collection(db, "empresas", empresaId, "crm_contatos")),
             isAdmin ? getDocs(collection(db, "empresas", empresaId, "crm_compromissos"))
                 : getDocs(query(collection(db, "empresas", empresaId, "crm_compromissos"), where("funcionarioUid", "==", uid))),
             getDocs(collection(db, "empresas", empresaId, "crm_pendencias")),
-            getDocs(collection(db, "empresas", empresaId, "cobrancas"))
+            getDocs(collection(db, "empresas", empresaId, "cobrancas")),
+            getDoc(doc(db, "empresas", empresaId, "config", "regua")).catch(() => null)
         ]);
         contatos = sc.docs.map(d => ({ id: d.id, ...d.data() }));
         comps = sco.docs.map(d => ({ id: d.id, ...d.data() }));
         pend = sp.docs.map(d => ({ id: d.id, ...d.data() }));
         cobr = scb.docs.map(d => ({ id: d.id, ...d.data() }));
-        return { contatos, comps, pend, cobr };
+        if (scfg && scfg.exists()) cfg = { ...REGUA_PADRAO, ...scfg.data() };
+        return { contatos, comps, pend, cobr, cfg };
     }
 
     function montar(dados) {
         const { contatos, comps, pend, cobr } = dados;
+        const cfg = dados.cfg || { ...REGUA_PADRAO };
         const hoje = ymdLocal();
         const [ini, fim] = semanaStr();
         const mesAtual = hoje.slice(0, 7).split("-").reverse().join("/"); // MM/AAAA
@@ -105,20 +136,31 @@ export async function renderConsultorHome(opts) {
         // Régua de cobrança
         const linhaCobr = (c) => {
             const venc = c.vencimento || "";
-            const atras = c.status !== "pago" && venc && venc < hoje;
-            const statusTxt = c.status === "pago" ? "Pago" : atras ? "Vencida" : (c.status === "enviado_d5" ? "Enviado D-5" : "Em aberto");
-            return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
-                <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}</strong>
-                <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(venc)} · ${esc(statusTxt)}</div></div>
-                <div class="flex items-center gap-2 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
-                ${c.status === "pago"
+            const pago = c.status === "pago";
+            const atras = !pago && venc && venc < hoje;
+            const d = diasAte(venc);
+            const enviarHoje = cfg.ativa && !pago && Array.isArray(cfg.dias) && cfg.dias.includes(d);
+            const statusTxt = pago ? "Pago" : atras ? "Vencida" : "Em aberto";
+            const wa = (!pago && c.clienteTel) ? waLinkTel(c.clienteTel, msgCobranca(c, cfg)) : "";
+            const btnWa = (!pago)
+                ? (wa
+                    ? `<a href="${wa}" target="_blank" rel="noopener" title="Cobrar no WhatsApp" class="text-[11px] font-bold px-2 py-1 rounded-md border ${enviarHoje ? "border-green-500 bg-green-500 text-white" : "border-green-500 text-green-600 bg-green-50"} hover:bg-green-600 hover:text-white transition flex items-center gap-1"><i class="fa-brands fa-whatsapp"></i>${enviarHoje ? "Cobrar" : ""}</a>`
+                    : `<button data-edit="${c.id}" title="Adicionar WhatsApp do cliente" class="text-[11px] font-semibold px-2 py-1 rounded-md border border-slate-200 text-slate-400 hover:text-green-600"><i class="fa-brands fa-whatsapp"></i>+tel</button>`)
+                : "";
+            return `<div class="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0 ${enviarHoje ? "bg-green-50/40 -mx-2 px-2 rounded-lg" : ""}">
+                <div class="min-w-0"><strong class="text-[13px] text-slate-800 block truncate">${esc(c.clienteNome || "—")}${enviarHoje ? ` <span class="text-[9px] font-bold uppercase bg-green-100 text-green-700 px-1.5 py-0.5 rounded">enviar hoje</span>` : ""}</strong>
+                <div class="text-[11px] ${atras ? "text-rose-600" : "text-slate-500"}">Venc. ${brDate(venc)} · ${esc(statusTxt)}${!pago && d != null ? " · " + textoQuando(d) : ""}</div></div>
+                <div class="flex items-center gap-1.5 shrink-0"><strong class="text-[13px] text-slate-800">${brl(c.valor)}</strong>
+                ${btnWa}
+                ${pago
                     ? `<span class="text-[11px] font-bold text-emerald-600">✓ PAGO</span><button data-reabrir="${c.id}" title="Reabrir cobrança" class="text-slate-400 hover:text-amber-600 text-[12px] px-1"><i class="fa-solid fa-rotate-left"></i></button>`
-                    : `<button data-baixa="${c.id}" class="text-[11px] font-bold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition">Dar Baixa</button>`}
+                    : `<button data-baixa="${c.id}" class="text-[11px] font-bold px-2 py-1 rounded-md border border-emerald-500 text-emerald-600 bg-emerald-50 hover:bg-emerald-500 hover:text-white transition">Baixa</button>`}
                 <button data-edit="${c.id}" title="Editar" class="text-slate-400 hover:text-orange-600 text-[12px] px-1"><i class="fa-solid fa-pen"></i></button>
                 </div></div>`;
         };
         const cobrOrd = cobr.slice().sort((a, b) => (a.status === "pago" ? 1 : 0) - (b.status === "pago" ? 1 : 0) || (a.vencimento || "").localeCompare(b.vencimento || ""));
-        const cobrHtml = cobrOrd.length ? cobrOrd.slice(0, 8).map(linhaCobr).join("")
+        const aEnviarHoje = cobr.filter(c => c.status !== "pago" && cfg.ativa && Array.isArray(cfg.dias) && cfg.dias.includes(diasAte(c.vencimento))).length;
+        const cobrHtml = cobrOrd.length ? cobrOrd.slice(0, 10).map(linhaCobr).join("")
             : `<div class="py-6 text-center text-sm text-slate-400">Nenhuma fatura lançada.<br><button data-nova="cobranca" class="mt-2 text-[12px] font-bold text-orange-600">+ Lançar cobrança</button></div>`;
 
         // Cadência
@@ -152,6 +194,8 @@ export async function renderConsultorHome(opts) {
                     <div><label class="text-[12px] font-semibold text-slate-500">Valor R$</label><input data-m="valor" type="number" step="0.01" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                     <div><label class="text-[12px] font-semibold text-slate-500">Vencimento</label><input data-m="venc" type="date" value="${hoje}" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                 </div>
+                <div data-m="wraptel"><label class="text-[12px] font-semibold text-slate-500"><i class="fa-brands fa-whatsapp text-green-600"></i> WhatsApp do cliente (p/ cobrança)</label>
+                    <input data-m="tel" placeholder="Ex.: 47 99999-9999" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                 <div data-m="wrapstatus" class="hidden"><label class="text-[12px] font-semibold text-slate-500">Status</label>
                     <select data-m="status" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300">
                         <option value="pendente">Em aberto</option>
@@ -166,6 +210,25 @@ export async function renderConsultorHome(opts) {
                     <button data-m="salvar" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm">Salvar</button>
                 </div>
                 <p data-m="msg" class="text-[12px] text-center text-slate-500"></p>
+            </div>
+        </div>`;
+
+        // Modal de configuração da Régua de Cobrança
+        const cfgModal = `
+        <div data-el="cfgmodal" class="hidden fixed inset-0 z-[80] flex items-center justify-center p-4">
+            <div data-cm="backdrop" class="absolute inset-0 bg-black/40"></div>
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3">
+                <div class="flex items-center justify-between"><h3 class="text-base font-extrabold text-slate-800"><i class="fa-brands fa-whatsapp text-green-600 mr-1"></i>Régua de Cobrança</h3><button data-cm="fechar" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-bold">✕</button></div>
+                <label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input data-cm="ativa" type="checkbox" class="w-4 h-4"> Régua ativa (mostra quem cobrar hoje)</label>
+                <div><label class="text-[12px] font-semibold text-slate-500">Avisar quantos dias antes do vencimento</label>
+                    <input data-cm="dias" placeholder="10, 5, 2, 0" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-green-300">
+                    <p class="text-[10px] text-slate-400 mt-1">Separe por vírgula. Use <b>0</b> para o dia do vencimento (ex.: 10, 5, 2, 0).</p></div>
+                <div><label class="text-[12px] font-semibold text-slate-500">Mensagem enviada ao cliente</label>
+                    <textarea data-cm="mensagem" rows="4" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-green-300 resize-none"></textarea>
+                    <p class="text-[10px] text-slate-400 mt-1">Use: <b>{cliente}</b>, <b>{valor}</b>, <b>{vencimento}</b>, <b>{quando}</b> (ex.: "daqui a 5 dias").</p></div>
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5"><p class="text-[10px] text-slate-400 mb-0.5">Prévia:</p><p data-cm="previa" class="text-[12px] text-slate-700 whitespace-pre-wrap"></p></div>
+                <button data-cm="salvar" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-sm">Salvar configuração</button>
+                <p data-cm="msg" class="text-[12px] text-center text-slate-500"></p>
             </div>
         </div>`;
 
@@ -200,9 +263,14 @@ export async function renderConsultorHome(opts) {
                 <div class="bg-white border border-slate-200 rounded-xl p-5">
                     <div class="flex items-center justify-between mb-2">
                         <p class="text-[15px] font-bold text-slate-800">Régua de Cobrança</p>
-                        <button data-nova="cobranca" class="text-[12px] font-bold text-orange-600 hover:text-orange-700">+ Lançar</button>
+                        <div class="flex items-center gap-3">
+                            <button data-el="cfg-regua" class="text-[12px] font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"><i class="fa-solid fa-gear"></i>Configurar</button>
+                            <button data-nova="cobranca" class="text-[12px] font-bold text-orange-600 hover:text-orange-700">+ Lançar</button>
+                        </div>
                     </div>
-                    <p class="text-[11px] text-slate-400 mb-1">Cobrança manual · automação WhatsApp/Pix em breve</p>
+                    <p class="text-[11px] mb-1 ${aEnviarHoje > 0 ? "text-green-600 font-semibold" : "text-slate-400"}">
+                        ${cfg.ativa ? (aEnviarHoje > 0 ? `<i class="fa-brands fa-whatsapp"></i> ${aEnviarHoje} cobrança(s) para enviar hoje · avisar ${(cfg.dias || []).join(", ")} dias antes` : `Régua ativa · avisar ${(cfg.dias || []).join(", ")} dias antes do vencimento`) : "Régua desligada — ligue em Configurar"}
+                    </p>
                     <div>${cobrHtml}</div>
                 </div>
                 <div class="bg-white border border-slate-200 rounded-xl p-5">
@@ -213,7 +281,7 @@ export async function renderConsultorHome(opts) {
                     <div>${cadHtml}</div>
                 </div>
             </div>
-            ${modal}`;
+            ${modal}${cfgModal}`;
 
         wire(dados);
     }
@@ -269,6 +337,39 @@ export async function renderConsultorHome(opts) {
 
         // Abrir modal Nova Ação
         mount.querySelectorAll("[data-nova]").forEach(btn => btn.addEventListener("click", () => abrirModal(btn.getAttribute("data-nova") || "")));
+
+        // Configurar a Régua de Cobrança
+        const cfgBtn = mount.querySelector('[data-el="cfg-regua"]');
+        if (cfgBtn) cfgBtn.addEventListener("click", () => abrirCfgModal(dados.cfg || { ...REGUA_PADRAO }));
+    }
+
+    function abrirCfgModal(cfg) {
+        const modal = mount.querySelector('[data-el="cfgmodal"]'); if (!modal) return;
+        modal.classList.remove("hidden");
+        modal.querySelectorAll('[data-cm="fechar"], [data-cm="backdrop"]').forEach(b => b.onclick = () => modal.classList.add("hidden"));
+        const ativa = modal.querySelector('[data-cm="ativa"]');
+        const dias = modal.querySelector('[data-cm="dias"]');
+        const mensagem = modal.querySelector('[data-cm="mensagem"]');
+        const previa = modal.querySelector('[data-cm="previa"]');
+        ativa.checked = cfg.ativa !== false;
+        dias.value = (cfg.dias || REGUA_PADRAO.dias).join(", ");
+        mensagem.value = cfg.mensagem || REGUA_PADRAO.mensagem;
+        const exemplo = { clienteNome: "João", valor: 250, vencimento: ymdLocal(new Date(Date.now() + 5 * 86400000)) };
+        const atualizarPrevia = () => { previa.textContent = msgCobranca(exemplo, { mensagem: mensagem.value }); };
+        mensagem.oninput = atualizarPrevia; atualizarPrevia();
+        const salvar = modal.querySelector('[data-cm="salvar"]');
+        const msg = modal.querySelector('[data-cm="msg"]');
+        salvar.onclick = async () => {
+            const arr = dias.value.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+            salvar.disabled = true; msg.textContent = "Salvando..."; msg.className = "text-[12px] text-center text-slate-500";
+            try {
+                await setDoc(doc(db, "empresas", empresaId, "config", "regua"), {
+                    ativa: ativa.checked, dias: arr.length ? arr : REGUA_PADRAO.dias, mensagem: mensagem.value, atualizadoEm: new Date().toISOString()
+                }, { merge: true });
+                modal.classList.add("hidden");
+                await recarregar();
+            } catch (e) { salvar.disabled = false; msg.textContent = "Erro: " + e.message; msg.className = "text-[12px] text-center text-rose-600"; }
+        };
     }
 
     function abrirModal(tipoInicial, editCobr) {
@@ -280,6 +381,7 @@ export async function renderConsultorHome(opts) {
         if (tipoInicial) tipo.value = tipoInicial;
         const wrapDesc = modal.querySelector('[data-m="wrapdesc"]');
         const wrapValor = modal.querySelector('[data-m="wrapvalor"]');
+        const wrapTel = modal.querySelector('[data-m="wraptel"]');
         const wrapStatus = modal.querySelector('[data-m="wrapstatus"]');
         const wrapTipo = modal.querySelector('[data-m="wraptipo"]');
         const lblCli = modal.querySelector('[data-m="lblcli"]');
@@ -288,6 +390,7 @@ export async function renderConsultorHome(opts) {
         const ajustar = () => {
             const t = tipo.value;
             wrapValor.style.display = t === "cobranca" ? "grid" : "none";
+            wrapTel.style.display = t === "cobranca" ? "block" : "none";
             wrapDesc.style.display = (t === "tarefa") ? "block" : "none";
             lblCli.textContent = t === "lead" ? "Nome do lead" : "Cliente";
         };
@@ -304,11 +407,13 @@ export async function renderConsultorHome(opts) {
             modal.querySelector('[data-m="cliente"]').value = editCobr.clienteNome || "";
             modal.querySelector('[data-m="valor"]').value = editCobr.valor != null ? editCobr.valor : "";
             modal.querySelector('[data-m="venc"]').value = (editCobr.vencimento || "").slice(0, 10);
+            modal.querySelector('[data-m="tel"]').value = editCobr.clienteTel || "";
             modal.querySelector('[data-m="status"]').value = (editCobr.status === "vencido" || !editCobr.status) ? "pendente" : editCobr.status;
         } else {
             modal.querySelector('[data-m="cliente"]').value = "";
             modal.querySelector('[data-m="desc"]').value = "";
             modal.querySelector('[data-m="valor"]').value = "";
+            modal.querySelector('[data-m="tel"]').value = "";
         }
         ajustar();
 
@@ -327,6 +432,7 @@ export async function renderConsultorHome(opts) {
             const desc = modal.querySelector('[data-m="desc"]').value.trim();
             const valor = parseFloat(modal.querySelector('[data-m="valor"]').value || "0");
             const venc = modal.querySelector('[data-m="venc"]').value;
+            const tel = modal.querySelector('[data-m="tel"]').value.trim();
             const resp = modal.querySelector('[data-m="resp"]').value.trim();
             const msg = modal.querySelector('[data-m="msg"]');
             if (!cliente) { msg.textContent = "Informe o cliente."; msg.className = "text-[12px] text-center text-rose-600"; return; }
@@ -338,12 +444,12 @@ export async function renderConsultorHome(opts) {
                     const novoStatus = modal.querySelector('[data-m="status"]').value;
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
                     await updateDoc(doc(db, "empresas", empresaId, "cobrancas", editCobr.id), {
-                        clienteNome: cliente, valor, vencimento: venc || hoje, competencia: comp, status: novoStatus,
+                        clienteNome: cliente, clienteTel: tel, valor, vencimento: venc || hoje, competencia: comp, status: novoStatus,
                         dataPagamento: novoStatus === "pago" ? (editCobr.dataPagamento || hoje) : null
                     });
                 } else if (t === "cobranca") {
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
-                    await addDoc(collection(db, "empresas", empresaId, "cobrancas"), { clienteNome: cliente, valor, competencia: comp, vencimento: venc || hoje, status: "pendente", dataPagamento: null, criadoEm: agora });
+                    await addDoc(collection(db, "empresas", empresaId, "cobrancas"), { clienteNome: cliente, clienteTel: tel, valor, competencia: comp, vencimento: venc || hoje, status: "pendente", dataPagamento: null, criadoEm: agora });
                 } else if (t === "tarefa") {
                     await addDoc(collection(db, "empresas", empresaId, "crm_pendencias"), { titulo: desc || ("Tarefa — " + cliente), contatoNome: cliente, responsavel: resp || nome, origem: "avulsa", status: "aberto", prazo: hoje, criadoEm: agora });
                 } else if (t === "visita") {
