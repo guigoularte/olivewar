@@ -7,7 +7,7 @@
 // IMPORTANTE: este layout segue o mockup do "cockpit", mas mantém TODAS as funções
 // já criadas no Oliver (envio de nota -> pré-lançamento, conciliação, fluxo de caixa,
 // itens para resolver). Nada de dado inventado: os números vêm do Firestore do cliente.
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const brl = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -144,6 +144,14 @@ export async function renderHomeCliente(opts) {
     // Modo Campo (consultor no celular): mostra cockpit comercial/operacional em vez da captura de notas.
     const ehConsultor = !!opts.souConsultoria && !!empresaId && !isDesktop;
     let campoData = null;
+    let notifs = []; // central do sino (usuarios/{uid}/notificacoes)
+
+    async function carregarNotifs() {
+        try {
+            const s = await getDocs(query(collection(db, "usuarios", uid, "notificacoes"), orderBy("criadoEm", "desc"), limit(30)));
+            return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+        } catch (e) { console.error("notificacoes:", e); return []; }
+    }
 
     // Carrega o CRM da empresa para o Modo Campo (reusa crm_contatos / crm_compromissos / crm_pendencias).
     async function carregarCampo() {
@@ -725,11 +733,39 @@ export async function renderHomeCliente(opts) {
         const btnCentral = ehConsultor
             ? `<button data-tab="__add" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-plus text-lg"></i></button>`
             : `<button data-tab="__cam" class="-mt-5 bg-gradient-to-tr from-orange-600 to-orange-500 active:scale-90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center border-4 border-slate-50"><i class="fa-solid fa-camera text-lg"></i></button>`;
+        const naoLidas = notifs.filter((n) => !n.lida).length;
+        const bellBtn = `<button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i>${naoLidas > 0 ? `<span class="absolute -top-0.5 -right-0.5 bg-rose-500 text-white text-[9px] min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center font-bold">${naoLidas > 9 ? "9+" : naoLidas}</span>` : ""}</button>`;
         const headerAcoes = ehConsultor
-            ? `<button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>`
-            : `<button data-m="consultor" class="bg-white/15 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5"><i class="fa-solid fa-comment-dots text-orange-200"></i>Consultor</button>
-               <button data-m="bell" class="relative p-2 rounded-xl bg-white/10 text-white"><i class="fa-regular fa-bell text-sm"></i></button>`;
+            ? bellBtn
+            : `<button data-m="consultor" class="bg-white/15 text-white text-[11px] font-semibold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5"><i class="fa-solid fa-comment-dots text-orange-200"></i>Consultor</button>${bellBtn}`;
         const terceiraTab = ehConsultor ? navBtn("agenda-link", "fa-calendar-days", "Agenda", false) : navBtn("caixa", "fa-chart-line", "Caixa", false);
+
+        // Painel do sino (central de notificações)
+        const notifItem = (n) => {
+            const quando = (() => { try { const dt = new Date(n.criadoEm); const hoje = new Date(); const sameDay = dt.toDateString() === hoje.toDateString(); return sameDay ? dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : dt.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }); } catch (e) { return ""; } })();
+            return `<button data-notif="${n.id}" data-url="${esc(n.url || "")}" class="w-full text-left flex items-start gap-3 p-3 rounded-2xl border ${n.lida ? "border-slate-100 bg-white" : "border-orange-200 bg-orange-50/60"} active:scale-[.99]">
+                <div class="w-8 h-8 rounded-xl ${n.lida ? "bg-slate-100 text-slate-400" : "bg-orange-100 text-orange-600"} flex items-center justify-center shrink-0 mt-0.5"><i class="fa-regular ${n.lida ? "fa-bell" : "fa-bell"} text-xs"></i></div>
+                <div class="flex-1 min-w-0"><p class="text-[13px] font-bold text-slate-800">${esc(n.titulo || "Oliver")}</p>
+                <p class="text-[12px] text-slate-600 leading-snug">${esc(n.corpo || "")}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">${quando}</p></div>
+                ${n.lida ? "" : `<span class="w-2 h-2 rounded-full bg-orange-500 shrink-0 mt-1.5"></span>`}
+            </button>`;
+        };
+        const painelNotif = `
+            <div data-el="notif-panel" class="hidden absolute inset-0 z-[60] bg-black/40 flex flex-col" data-m="notif-close-bg">
+                <div class="bg-white rounded-b-3xl shadow-xl max-h-[80%] flex flex-col mt-0">
+                    <div class="flex items-center justify-between p-4 border-b border-slate-100">
+                        <h2 class="font-extrabold text-slate-800 text-sm"><i class="fa-regular fa-bell text-orange-500 mr-1"></i>Notificações</h2>
+                        <div class="flex items-center gap-2">
+                            ${naoLidas > 0 ? `<button data-m="notif-todas" class="text-[11px] font-bold text-orange-600">Marcar todas</button>` : ""}
+                            <button data-m="notif-close" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-bold">✕</button>
+                        </div>
+                    </div>
+                    <div class="overflow-y-auto p-3 space-y-2">
+                        ${notifs.length ? notifs.map(notifItem).join("") : `<div class="text-center py-10 text-slate-400 text-sm"><i class="fa-regular fa-bell-slash text-2xl mb-2 block"></i>Nenhuma notificação ainda.</div>`}
+                    </div>
+                </div>
+            </div>`;
 
         return `
             <header class="bg-orange-600 text-white px-4 py-3 shrink-0 shadow-md">
@@ -752,6 +788,7 @@ export async function renderHomeCliente(opts) {
                 ${navBtn("perfil", "fa-user", "Perfil", false)}
             </nav>
             ${ehConsultor ? sheetCampoHtml() : ""}
+            ${painelNotif}
             ${datalist}`;
     }
 
@@ -949,6 +986,7 @@ export async function renderHomeCliente(opts) {
     async function montar() {
         const d = await carregarDados();
         if (ehConsultor) { try { campoData = await carregarCampo(); } catch (e) { console.error("Modo Campo:", e); campoData = null; } }
+        if (!isDesktop) { try { notifs = await carregarNotifs(); } catch (e) { notifs = []; } }
         if (isDesktop) {
             mount.innerHTML = htmlDesktop(d);
             wire(mount);
@@ -996,7 +1034,26 @@ export async function renderHomeCliente(opts) {
         root.querySelectorAll('[data-m="consultor"]').forEach((b) => b.addEventListener("click", () => {
             window.open(waLink(consultoriaTel, `Olá! Sou ${nome || "cliente do Oliver"} e gostaria de falar com a consultoria.`), "_blank", "noopener");
         }));
-        const bell = root.querySelector('[data-m="bell"]'); if (bell) bell.addEventListener("click", () => showToast("Avisos", "Você está em dia — sem novas notificações."));
+        // Sino: central de notificações
+        const painel = root.querySelector('[data-el="notif-panel"]');
+        const abrirPainel = () => { if (painel) painel.classList.remove("hidden"); };
+        const fecharPainel = () => { if (painel) painel.classList.add("hidden"); };
+        const bell = root.querySelector('[data-m="bell"]'); if (bell) bell.addEventListener("click", abrirPainel);
+        root.querySelectorAll('[data-m="notif-close"]').forEach((b) => b.addEventListener("click", fecharPainel));
+        if (painel) painel.addEventListener("click", (e) => { if (e.target === painel) fecharPainel(); });
+        // Clicar numa notificação: marca como lida e vai para a tela
+        root.querySelectorAll("[data-notif]").forEach((b) => b.addEventListener("click", async () => {
+            const id = b.getAttribute("data-notif"); const url = b.getAttribute("data-url") || "";
+            try { await updateDoc(doc(db, "usuarios", uid, "notificacoes", id), { lida: true }); } catch (e) {}
+            if (url) location.href = url; else { fecharPainel(); montar(); }
+        }));
+        // Marcar todas como lidas
+        const todas = root.querySelector('[data-m="notif-todas"]');
+        if (todas) todas.addEventListener("click", async () => {
+            const naoLidas = notifs.filter((n) => !n.lida);
+            try { await Promise.all(naoLidas.map((n) => updateDoc(doc(db, "usuarios", uid, "notificacoes", n.id), { lida: true }))); } catch (e) {}
+            montar();
+        });
         const sair = root.querySelector('[data-m="sair"]'); if (sair) sair.addEventListener("click", async (e) => {
             e.preventDefault();
             try { const m = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"); await m.signOut(m.getAuth()); } catch (err) {}
