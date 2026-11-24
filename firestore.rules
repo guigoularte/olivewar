@@ -82,8 +82,17 @@ service cloud.firestore {
       match /crm_pendencias/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
+      // Prospecção: andamento do funil por empresa do mapa (doc id = CNPJ só com dígitos/letras).
+      // Só a equipe da consultoria (admin/funcionários da mesma empresa) e o master.
+      match /prospeccao/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
       // Régua de cobrança / mensalidades (faturas a receber da consultoria).
       match /cobrancas/{doc} {
+        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+      }
+      // Chat interno da equipe (consultores da mesma empresa + master).
+      match /mensagens/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
       // Log de relatórios gerados (alimenta o Dashboard)
