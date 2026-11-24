@@ -6,7 +6,7 @@ import { doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.
 
 // 👉 COLE AQUI a CHAVE PÚBLICA VAPID:
 //    Firebase Console → Configurações do projeto → Cloud Messaging → "Certificados push da Web" → Gerar par de chaves.
-export const VAPID_PUBLIC_KEY = "";
+export const VAPID_PUBLIC_KEY = "BES-h0gnZk16hJLoQFY-PcA4uz0JaG_pG0aMVr9TjY2KuDRAI9fZZ1nlzPHuaxaHUd7swPO0W61SP4NEHZQgpCI";
 
 // Estado atual: "nao-suportado" | "default" (ainda não pediu) | "granted" | "denied"
 export function estadoPush() {
