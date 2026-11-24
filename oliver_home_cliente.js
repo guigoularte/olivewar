@@ -1020,6 +1020,15 @@ export async function renderHomeCliente(opts) {
                             });
                         } catch (e) { console.error("Falha ao gravar despesa da organização:", e); }
                     }
+                    // Avisa a consultoria por push (best-effort — não bloqueia nem falha o envio)
+                    try {
+                        const authMod = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js");
+                        const usr = authMod.getAuth().currentUser;
+                        if (usr) {
+                            const tk = await usr.getIdToken();
+                            fetch("/api/notificar-nota", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json" }, body: JSON.stringify({ valor }) }).catch(() => {});
+                        }
+                    } catch (e) {}
                     fotoPronta = ""; arquivoTipo = "image";
                     await montar();
                     showToast("Nota enviada!", "Lançada como despesa no caixa" + (opts.orgId ? " e no relatório semanal." : "."));

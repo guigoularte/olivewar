@@ -2,9 +2,39 @@
 // Estratégia: arquivos do app = network-first (sempre pega a versão nova; cai no cache offline);
 // CDNs (Tailwind, Font Awesome, Chart.js, SDK do Firebase, fontes) = cache-first;
 // APIs do Firebase (Firestore/Auth) = passam direto, nunca são cacheadas.
-const CACHE = "oliver-v3";
+const CACHE = "oliver-v4";
 
 self.addEventListener("install", () => self.skipWaiting());
+
+// ---- Notificações push (FCM manda mensagens "data"; nós exibimos) ----
+self.addEventListener("push", (e) => {
+    let payload = {};
+    try { payload = e.data ? e.data.json() : {}; } catch (_) { try { payload = { body: e.data && e.data.text() }; } catch (_2) { payload = {}; } }
+    const d = payload.data || payload;  // aceita {data:{...}} (FCM) ou objeto plano
+    const title = d.title || "Oliver";
+    const opts = {
+        body: d.body || "",
+        icon: "icons/icon-192.png",
+        badge: "icons/icon-192.png",
+        tag: d.tag || undefined,
+        renotify: !!d.tag,
+        data: { url: d.url || "app.html" }
+    };
+    e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener("notificationclick", (e) => {
+    e.notification.close();
+    const url = (e.notification.data && e.notification.data.url) || "app.html";
+    e.waitUntil(
+        self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+            for (const w of wins) {
+                if ("focus" in w) { try { if (w.navigate) w.navigate(url); } catch (_) {} return w.focus(); }
+            }
+            return self.clients.openWindow ? self.clients.openWindow(url) : null;
+        })
+    );
+});
 
 self.addEventListener("activate", (e) => {
     e.waitUntil(

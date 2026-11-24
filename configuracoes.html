@@ -10,6 +10,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, updateDoc, collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { ativarPush, desativarPush, estadoPush } from "./oliver_push.js?v=1";
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
@@ -20,9 +21,44 @@
 
         window.fazerLogout = async () => { await signOut(auth); window.location.href = "login.html"; };
 
+        function montarCardNotificacoes(uid) {
+            const btn = document.getElementById("btn-notif");
+            const est = document.getElementById("notif-estado");
+            if (!btn) return;
+            function refletir() {
+                const s = estadoPush();
+                if (s === "nao-suportado") {
+                    btn.disabled = true; btn.textContent = "Não suportado neste dispositivo";
+                    btn.className = "w-full bg-slate-200 text-slate-500 font-bold py-2.5 rounded-lg text-sm";
+                    est.textContent = "No iPhone, instale o app na tela inicial (iOS 16.4+) para receber notificações.";
+                } else if (s === "granted") {
+                    btn.disabled = false; btn.textContent = "Notificações ativas ✓ — toque para desativar";
+                    btn.className = "w-full bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold py-2.5 rounded-lg text-sm";
+                    est.textContent = "Você está recebendo notificações neste aparelho.";
+                } else if (s === "denied") {
+                    btn.disabled = true; btn.textContent = "Bloqueado no navegador";
+                    btn.className = "w-full bg-rose-50 text-rose-600 border border-rose-200 font-bold py-2.5 rounded-lg text-sm";
+                    est.textContent = "As notificações estão bloqueadas. Libere nas configurações do navegador/app e recarregue.";
+                } else {
+                    btn.disabled = false; btn.textContent = "Ativar notificações";
+                    btn.className = "w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-lg text-sm transition";
+                }
+            }
+            refletir();
+            btn.onclick = async () => {
+                const s = estadoPush();
+                btn.disabled = true;
+                try {
+                    if (s === "granted") await desativarPush({ db, uid });
+                    else await ativarPush({ db, uid });
+                } finally { refletir(); }
+            };
+        }
+
         onAuthStateChanged(auth, async (user) => {
             if (!user) { window.location.href = "login.html"; return; }
             meuUid = user.uid;
+            montarCardNotificacoes(user.uid);
             try {
                 const uSnap = await getDoc(doc(db, "usuarios", user.uid));
                 const dados = uSnap.exists() ? uSnap.data() : {};
@@ -138,6 +174,14 @@
 
             <div class="space-y-3">
                 <a href="perfil.html" class="block p-4 bg-white rounded-2xl shadow-sm border border-slate-200 font-bold text-slate-800 text-sm hover:border-blue-500">👤 Editar Perfil / Nome</a>
+
+                <!-- Notificações push -->
+                <div id="card-notif" class="p-4 bg-white rounded-2xl shadow-sm border border-slate-200">
+                    <p class="font-black text-slate-800 text-sm mb-1">🔔 Notificações</p>
+                    <p id="notif-estado" class="text-[11px] text-slate-400 mb-2">Receba avisos de tarefas, pendências, notas e cobranças direto no celular.</p>
+                    <button id="btn-notif" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-lg text-sm transition">Ativar notificações</button>
+                    <p class="text-[10px] text-slate-400 mt-2">No iPhone, instale o app na tela inicial primeiro (iOS 16.4+).</p>
+                </div>
 
                 <!-- Organização (entrar por código / ver / sair) -->
                 <div id="card-org" class="hidden p-4 bg-white rounded-2xl shadow-sm border border-slate-200">
