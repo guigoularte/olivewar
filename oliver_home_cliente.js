@@ -197,7 +197,8 @@ export async function renderHomeCliente(opts) {
         const aReceber = cobrAbertas.reduce((s, c) => s + Number(c.valor || 0), 0);
 
         const respSet = [...new Set(contatos.map((c) => c.responsavel).filter(Boolean))];
-        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet, cobr: cobrAbertas, aReceber, hoje, cfg };
+        const clientes = contatos.filter((c) => c.nome).map((c) => ({ nome: c.nome, tel: c.telefone || "", id: c.usuarioUid || c.id || "" }));
+        return { visitas, meta: META_VISITAS, pendVenc: pendVenc.length, follow: followAtrasados.length, fila, responsaveis: respSet, clientes, cobr: cobrAbertas, aReceber, hoje, cfg };
     }
 
     // ---------- Dados do Fluxo de Caixa do próprio cliente ----------
@@ -572,7 +573,8 @@ export async function renderHomeCliente(opts) {
                 </div>
                 <div>
                     <label class="text-[11px] font-semibold text-slate-500" data-s="lblcli">Cliente ou prospect</label>
-                    <input data-s="cliente" placeholder="Ex.: Padaria Central" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                    <input data-s="cliente" list="campo-clientes" placeholder="Ex.: Padaria Central" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 mt-1">
+                    <datalist id="campo-clientes">${(campoData && campoData.clientes || []).map((c) => `<option value="${esc(c.nome)}">`).join("")}</datalist>
                 </div>
                 <div data-s="descwrap">
                     <label class="text-[11px] font-semibold text-slate-500">Descrição / próximo passo</label>
@@ -807,6 +809,15 @@ export async function renderHomeCliente(opts) {
             lblCli.textContent = t === "lead" ? "Nome do lead" : "Cliente";
         };
         tipoSel.onchange = ajustar; ajustar();
+
+        // Escolheu cliente cadastrado → puxa o WhatsApp automaticamente
+        const cliInput = sheet.querySelector('[data-s="cliente"]');
+        const telInput = sheet.querySelector('[data-s="tel"]');
+        let clienteIdSel = "";
+        cliInput.oninput = () => {
+            const match = (campoData && campoData.clientes || []).find((c) => (c.nome || "").toLowerCase() === cliInput.value.trim().toLowerCase());
+            if (match) { clienteIdSel = match.id || ""; if (match.tel) telInput.value = match.tel; } else { clienteIdSel = ""; }
+        };
         const salvar = sheet.querySelector('[data-s="salvar"]');
         salvar.onclick = async () => {
             const tipo = tipoSel.value;
@@ -825,7 +836,7 @@ export async function renderHomeCliente(opts) {
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
                     const tel = (sheet.querySelector('[data-s="tel"]').value || "").trim();
                     await addDoc(collection(db, "empresas", empresaId, "cobrancas"), {
-                        clienteNome: cliente, clienteTel: tel, valor, competencia: comp, vencimento: venc || hoje,
+                        clienteNome: cliente, clienteTel: tel, clienteId: clienteIdSel || "", valor, competencia: comp, vencimento: venc || hoje,
                         status: "pendente", dataPagamento: null, criadoEm: agora
                     });
                 } else if (tipo === "tarefa") {

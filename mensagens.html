@@ -11,7 +11,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
-        import { getFirestore, doc, getDoc, collection, addDoc, query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, getDocs, collection, addDoc, query, where, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -39,7 +39,35 @@
                 return;
             }
             iniciarChat();
+            carregarMembros();
         });
+
+        // Lista os membros da equipe que recebem as mensagens (consultores da empresa).
+        async function carregarMembros() {
+            try {
+                const snap = await getDocs(query(collection(db, "usuarios"), where("empresaId", "==", empresaId)));
+                const membros = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                    .filter(m => m.role === "master" || m.role === "empresa_admin" || (m.funcionalidades && m.funcionalidades.relatorios === true))
+                    .sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+                const sub = document.getElementById("sub");
+                if (sub) sub.textContent = membros.length + " participante" + (membros.length === 1 ? "" : "s") + " · toque para ver";
+                const lista = document.getElementById("membros-lista");
+                if (lista) lista.innerHTML = membros.map(m => {
+                    const papel = m.role === "master" ? "Master" : m.role === "empresa_admin" ? "Administrador" : "Consultor";
+                    const sou = m.id === meuUid;
+                    return `<div class="flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0">
+                        <div class="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0" style="background:${corDe(m.nome)}">${esc((m.nome || "?")[0].toUpperCase())}</div>
+                        <div class="flex-1 min-w-0"><p class="text-sm font-bold text-slate-800 truncate">${esc(m.nome || "(sem nome)")}${sou ? ' <span class="text-[10px] text-slate-400 font-normal">(você)</span>' : ""}</p>
+                        <p class="text-[11px] text-slate-500">${papel}${m.email ? " · " + esc(m.email) : ""}</p></div>
+                    </div>`;
+                }).join("") || `<p class="text-center text-slate-400 text-sm py-6">Nenhum outro membro ainda.</p>`;
+            } catch (e) { console.error("membros:", e); }
+        }
+
+        window.toggleMembros = () => {
+            const p = document.getElementById("membros-panel");
+            if (p) p.classList.toggle("hidden");
+        };
 
         function iniciarChat() {
             const lista = document.getElementById("lista");
@@ -98,16 +126,28 @@
     </script>
 </head>
 <body class="bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400 flex items-center justify-center min-h-screen">
-    <div class="w-full max-w-none sm:max-w-sm bg-slate-50 min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col overflow-hidden">
+    <div class="relative w-full max-w-none sm:max-w-sm bg-slate-50 min-h-[100dvh] sm:min-h-[700px] sm:rounded-[40px] shadow-2xl sm:border-4 border-blue-950 flex flex-col overflow-hidden">
         <!-- Cabeçalho -->
         <header class="bg-orange-600 text-white px-4 py-3 shrink-0 shadow-md flex items-center gap-3">
             <a href="app.html" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/15"><i class="fa-solid fa-arrow-left"></i></a>
-            <div class="flex-1">
+            <button onclick="toggleMembros()" class="flex-1 text-left">
                 <h1 class="font-bold text-base leading-none">Mensagens da equipe</h1>
-                <p class="text-[11px] text-orange-100 mt-0.5">Conversa interna da consultoria</p>
-            </div>
-            <i class="fa-solid fa-users text-orange-200"></i>
+                <p id="sub" class="text-[11px] text-orange-100 mt-0.5">Conversa interna da consultoria</p>
+            </button>
+            <button onclick="toggleMembros()" class="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25"><i class="fa-solid fa-users"></i></button>
         </header>
+
+        <!-- Painel de membros (quem recebe as mensagens) -->
+        <div id="membros-panel" class="hidden absolute inset-0 z-20 bg-black/40 flex items-end sm:items-center justify-center" onclick="if(event.target===this)toggleMembros()">
+            <div class="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-4 max-h-[75%] overflow-y-auto">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="font-extrabold text-slate-800 text-sm"><i class="fa-solid fa-users text-orange-500 mr-1"></i>Quem recebe as mensagens</h2>
+                    <button onclick="toggleMembros()" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 font-bold">✕</button>
+                </div>
+                <p class="text-[11px] text-slate-400 mb-2">Todos os consultores da sua empresa participam do grupo.</p>
+                <div id="membros-lista"></div>
+            </div>
+        </div>
 
         <!-- Lista de mensagens -->
         <main id="lista" class="flex-1 overflow-y-auto p-3.5" style="-webkit-overflow-scrolling:touch">

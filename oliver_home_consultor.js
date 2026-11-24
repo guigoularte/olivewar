@@ -54,6 +54,7 @@ function semanaStr() {
 export async function renderConsultorHome(opts) {
     const { db, empresaId, uid, isAdmin, mount } = opts;
     const nome = opts.nome || "";
+    let dadosAtuais = null;
 
     async function carregar() {
         let contatos = [], comps = [], pend = [], cobr = [], cfg = { ...REGUA_PADRAO };
@@ -74,6 +75,7 @@ export async function renderConsultorHome(opts) {
     }
 
     function montar(dados) {
+        dadosAtuais = dados;
         const { contatos, comps, pend, cobr } = dados;
         const cfg = dados.cfg || { ...REGUA_PADRAO };
         const hoje = ymdLocal();
@@ -187,7 +189,8 @@ export async function renderConsultorHome(opts) {
                         <option value="lead">Novo lead</option>
                     </select></div>
                 <div><label class="text-[12px] font-semibold text-slate-500" data-m="lblcli">Cliente</label>
-                    <input data-m="cliente" placeholder="Nome do cliente / prospect" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
+                    <input data-m="cliente" list="cobr-clientes" placeholder="Nome do cliente / prospect" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300">
+                    <datalist id="cobr-clientes">${contatos.filter(c => c.nome).map(c => `<option value="${esc(c.nome)}">`).join("")}</datalist></div>
                 <div data-m="wrapdesc"><label class="text-[12px] font-semibold text-slate-500">Descrição / próximo passo</label>
                     <input data-m="desc" placeholder="Ex.: Enviar proposta BPF" class="w-full p-2.5 border border-slate-200 rounded-xl text-sm mt-1 outline-none focus:ring-2 focus:ring-orange-300"></div>
                 <div data-m="wrapvalor" class="grid grid-cols-2 gap-2">
@@ -396,6 +399,18 @@ export async function renderConsultorHome(opts) {
         };
         tipo.onchange = ajustar;
 
+        // Ao escolher um cliente já cadastrado, puxa o WhatsApp automaticamente.
+        const cliInput = modal.querySelector('[data-m="cliente"]');
+        const telInput = modal.querySelector('[data-m="tel"]');
+        let clienteIdSel = "";
+        cliInput.oninput = () => {
+            const match = (dadosAtuais && dadosAtuais.contatos || []).find(c => (c.nome || "").toLowerCase() === cliInput.value.trim().toLowerCase());
+            if (match) {
+                clienteIdSel = match.usuarioUid || match.id || "";
+                if (match.telefone) { telInput.value = match.telefone; telInput.classList.add("ring-2", "ring-green-200"); setTimeout(() => telInput.classList.remove("ring-2", "ring-green-200"), 1200); }
+            } else { clienteIdSel = ""; }
+        };
+
         // Modo edição de cobrança
         const emEdicao = !!editCobr;
         titulo.textContent = emEdicao ? "Editar cobrança" : "Nova ação";
@@ -444,12 +459,12 @@ export async function renderConsultorHome(opts) {
                     const novoStatus = modal.querySelector('[data-m="status"]').value;
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
                     await updateDoc(doc(db, "empresas", empresaId, "cobrancas", editCobr.id), {
-                        clienteNome: cliente, clienteTel: tel, valor, vencimento: venc || hoje, competencia: comp, status: novoStatus,
+                        clienteNome: cliente, clienteTel: tel, clienteId: clienteIdSel || editCobr.clienteId || "", valor, vencimento: venc || hoje, competencia: comp, status: novoStatus,
                         dataPagamento: novoStatus === "pago" ? (editCobr.dataPagamento || hoje) : null
                     });
                 } else if (t === "cobranca") {
                     const comp = (venc || hoje).slice(0, 7).split("-").reverse().join("/");
-                    await addDoc(collection(db, "empresas", empresaId, "cobrancas"), { clienteNome: cliente, clienteTel: tel, valor, competencia: comp, vencimento: venc || hoje, status: "pendente", dataPagamento: null, criadoEm: agora });
+                    await addDoc(collection(db, "empresas", empresaId, "cobrancas"), { clienteNome: cliente, clienteTel: tel, clienteId: clienteIdSel || "", valor, competencia: comp, vencimento: venc || hoje, status: "pendente", dataPagamento: null, criadoEm: agora });
                 } else if (t === "tarefa") {
                     await addDoc(collection(db, "empresas", empresaId, "crm_pendencias"), { titulo: desc || ("Tarefa — " + cliente), contatoNome: cliente, responsavel: resp || nome, origem: "avulsa", status: "aberto", prazo: hoje, criadoEm: agora });
                 } else if (t === "visita") {
