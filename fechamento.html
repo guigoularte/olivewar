@@ -105,6 +105,13 @@
                     criadoEm: new Date().toISOString()
                 });
                 msg("✅ Caixa fechado com sucesso!", true);
+                // Avisa a consultoria por push/sino (só quando o próprio cliente fecha; best-effort)
+                if (!uidParam) {
+                    try {
+                        const tk = await auth.currentUser.getIdToken();
+                        fetch("/api/notificar-fechamento", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json" }, body: JSON.stringify({ total, pedidos: qtd }) }).catch(() => {});
+                    } catch (e) {}
+                }
                 limparFechamento();
                 await carregar();
             } catch (e) { msg("Erro ao salvar: " + e.message, false); }
