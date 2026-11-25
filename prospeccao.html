@@ -108,6 +108,9 @@
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dados: Receita Federal' }).addTo(mapa);
             camada = L.layerGroup().addTo(mapa);
             L.circleMarker(CENTRO, { radius: 6, color: "#0f172a", weight: 2, fillColor: "#fff", fillOpacity: 1 }).addTo(mapa).bindTooltip("Santo Antônio da Patrulha");
+            // No celular o container ganha tamanho depois de aparecer: força o mapa a recalcular.
+            setTimeout(() => { try { mapa.invalidateSize(); } catch (e) {} }, 250);
+            window.addEventListener("resize", () => { try { mapa.invalidateSize(); } catch (e) {} });
         }
 
         function montarFiltros() {
