@@ -10,6 +10,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, getDocs, getDoc, doc, addDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { avisarConsultoria } from "./oliver_notificar.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -146,6 +147,7 @@
                     criadoEm: new Date().toISOString()
                 });
                 msg("✅ Despesa registrada!", true);
+                if (!uidParam) avisarConsultoria("registrou uma despesa de R$ " + valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) + (descricao ? " (" + descricao + ")" : ""), "relatorio_semanal.html");
                 ['despesaDescricao', 'despesaValor', 'despesaQuem'].forEach(id => document.getElementById(id).value = "");
                 await carregar();
             } catch (e) { msg("Erro ao salvar: " + e.message, false); }

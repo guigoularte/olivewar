@@ -12,6 +12,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, getDoc, deleteDoc, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { avisarConsultoria } from "./oliver_notificar.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -111,6 +112,7 @@
             if (contaPagar && !document.getElementById('vencimento').value) { alert("Informe a data de vencimento da conta a pagar."); return; }
             try {
                 await addDoc(collection(db, "usuarios", alvoUid, "fluxo_caixa"), mov);
+                avisarConsultoria((contaPagar ? "lançou uma conta a pagar de R$ " : (mov.tipo === "entrada" ? "lançou uma entrada de R$ " : "lançou uma saída de R$ ")) + mov.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) + " (" + mov.descricao + ")", "fluxo_caixa.html");
                 document.getElementById('form').reset();
                 document.getElementById('data').value = new Date().toISOString().slice(0, 10);
                 document.getElementById('tipo').disabled = false;

@@ -1,7 +1,7 @@
 // Push em tempo real: quando um cliente envia uma nota, avisa os membros da consultoria.
 // Chamado pelo app (POST) com o ID token do Firebase no header Authorization.
 const admin = require('firebase-admin');
-const { enviarPushUsuario, pushConfigurado } = require('../lib/push');
+const { notificarResponsaveis, pushConfigurado } = require('../lib/push');
 
 if (!admin.apps.length) {
   try { admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}')) }); } catch (e) { console.error(e.message); }
@@ -37,16 +37,7 @@ module.exports = async (req, res) => {
       if (b && b.valor) valorTxt = ' (R$ ' + Number(b.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ')';
     } catch (e) {}
 
-    const membros = await db.collection('usuarios').where('empresaId', '==', empresaId).get();
-    let enviados = 0;
-    for (const m of membros.docs) {
-      if (m.id === uid) continue;
-      const md = m.data();
-      const ehMembro = md.role === 'empresa_admin' || md.role === 'master' || (md.funcionalidades && md.funcionalidades.relatorios === true);
-      if (!ehMembro) continue;
-      try { const r = await enviarPushUsuario(db, m.id, { title: 'Nova nota recebida', body: nomeCliente + ' enviou uma nota' + valorTxt + '.', url: 'notas_recebidas.html', tag: 'nota-' + uid }); enviados += (r.enviados || 0); }
-      catch (e) { console.error('push nota ' + m.id + ':', e.message); }
-    }
-    return res.status(200).json({ ok: true, enviados });
+    const r = await notificarResponsaveis(db, empresaId, uid, { title: 'Nova nota recebida', body: nomeCliente + ' enviou uma nota' + valorTxt + '.', url: 'notas_recebidas.html', tag: 'nota-' + uid });
+    return res.status(200).json({ ok: true, enviados: r.enviados });
   } catch (e) { console.error(e); return res.status(500).json({ error: e.message }); }
 };

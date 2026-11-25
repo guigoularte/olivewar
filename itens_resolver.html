@@ -10,6 +10,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, getDocs, getDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { avisarConsultoria } from "./oliver_notificar.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -105,6 +106,7 @@
             try {
                 const foto = await comprimirImagem(arquivo);
                 await updateDoc(doc(itensCol, id), { fotoDepois: foto, resolvidoEm: new Date().toISOString() });
+                avisarConsultoria("anexou a foto de um item para resolver", "admin_atividades.html");
                 carregarItens();
             } catch (e) {
                 alert("Erro ao enviar foto: " + e.message);
@@ -113,6 +115,7 @@
 
         window.marcarConcluido = async (id) => {
             await updateDoc(doc(itensCol, id), { status: "concluido", resolvidoEm: new Date().toISOString() });
+            avisarConsultoria("concluiu um item do acompanhamento", "admin_atividades.html");
             carregarItens();
         };
     </script>

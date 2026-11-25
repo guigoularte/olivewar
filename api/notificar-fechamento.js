@@ -1,7 +1,7 @@
 // Push + sino: quando um cliente fecha o caixa, avisa os membros da consultoria.
 // Chamado pelo app (POST) com o ID token do Firebase no header Authorization.
 const admin = require('firebase-admin');
-const { enviarPushUsuario, pushConfigurado } = require('../lib/push');
+const { notificarResponsaveis, pushConfigurado } = require('../lib/push');
 
 if (!admin.apps.length) {
   try { admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}')) }); } catch (e) { console.error(e.message); }
@@ -47,16 +47,7 @@ module.exports = async (req, res) => {
       resumo = brl(total) + (pedidos ? ' · ' + pedidos + ' pedido' + (pedidos > 1 ? 's' : '') : '');
     } catch (e) {}
 
-    const membros = await db.collection('usuarios').where('empresaId', '==', empresaId).get();
-    let enviados = 0;
-    for (const m of membros.docs) {
-      if (m.id === uid) continue;
-      const md = m.data();
-      const ehMembro = md.role === 'master' || md.role === 'empresa_admin' || (md.funcionalidades && md.funcionalidades.relatorios === true);
-      if (!ehMembro) continue;
-      try { const r = await enviarPushUsuario(db, m.id, { title: 'Caixa fechado', body: nomeLoja + ' fechou o caixa' + (resumo ? ': ' + resumo : '') + '.', url: 'relatorio_semanal.html', tag: 'fechamento-' + uid }); enviados += (r.enviados || 0); }
-      catch (e) { console.error('push fechamento ' + m.id + ':', e.message); }
-    }
-    return res.status(200).json({ ok: true, enviados });
+    const r = await notificarResponsaveis(db, empresaId, uid, { title: 'Caixa fechado', body: nomeLoja + ' fechou o caixa' + (resumo ? ': ' + resumo : '') + '.', url: 'relatorio_semanal.html', tag: 'fechamento-' + uid });
+    return res.status(200).json({ ok: true, enviados: r.enviados });
   } catch (e) { console.error(e); return res.status(500).json({ error: e.message }); }
 };

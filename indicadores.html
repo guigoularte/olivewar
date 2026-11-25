@@ -11,6 +11,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, collection, getDocs, getDoc, doc, addDoc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { avisarConsultoria } from "./oliver_notificar.js";
 
         const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
         const app = initializeApp(firebaseConfig);
@@ -99,6 +100,7 @@
             try {
                 // id determinístico: um valor por indicador por período (regrava se já existe)
                 await setDoc(dref("indicadores_valores", defId + "_" + periodo), { defId, periodo, valor, criadoEm: new Date().toISOString() });
+                if (!uidParam) avisarConsultoria("atualizou um indicador", "indicadores.html");
                 await carregar();
             } catch (e) { alert("Erro ao salvar valor: " + e.message); }
         };
