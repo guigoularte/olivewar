@@ -227,11 +227,51 @@
         document.body.appendChild(el);
         var btn = el.querySelector(".oliver-mascote-btn");
         var balao = el.querySelector(".oliver-balao");
-        btn.addEventListener("click", function () { balao.style.display = (balao.style.display === "none" ? "block" : "none"); });
         el.querySelector(".oliver-balao-x").addEventListener("click", function () { balao.style.display = "none"; });
         var hw = el.querySelector(".oliver-hw-btn");
         if (hw) hw.addEventListener("click", abrirHalloween);
         try { if (!sessionStorage.getItem("oliverBalaoVisto")) { balao.style.display = "block"; sessionStorage.setItem("oliverBalaoVisto", "1"); } } catch (e) {}
+
+        // ---- Arrastar o mascote para qualquer parte da tela (lembra a posição) ----
+        (function () {
+            var dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0;
+            function clamp(v, max) { return Math.max(4, Math.min(v, max - 4)); }
+            function posicionar(left, top) {
+                var w = el.offsetWidth || 90, h = el.offsetHeight || 90;
+                el.style.left = clamp(left, window.innerWidth - w) + "px";
+                el.style.top = clamp(top, window.innerHeight - h) + "px";
+                el.style.right = "auto"; el.style.bottom = "auto"; el.style.alignItems = "flex-start";
+            }
+            try {
+                var p = JSON.parse(localStorage.getItem("oliverMascotePos") || "null");
+                if (p && typeof p.left === "number") posicionar(p.left, p.top);
+            } catch (e) {}
+            btn.style.touchAction = "none";
+            btn.addEventListener("pointerdown", function (e) {
+                dragging = true; moved = false;
+                var r = el.getBoundingClientRect(); ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+                el.style.right = "auto"; el.style.bottom = "auto";
+                try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+            });
+            btn.addEventListener("pointermove", function (e) {
+                if (!dragging) return;
+                var dx = e.clientX - sx, dy = e.clientY - sy;
+                if (Math.abs(dx) + Math.abs(dy) > 5) moved = true;
+                posicionar(ox + dx, oy + dy);
+            });
+            function fim(e) {
+                if (!dragging) return; dragging = false;
+                try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
+                if (moved) {
+                    var r = el.getBoundingClientRect();
+                    try { localStorage.setItem("oliverMascotePos", JSON.stringify({ left: r.left, top: r.top })); } catch (_) {}
+                } else {
+                    balao.style.display = (balao.style.display === "none" ? "block" : "none");
+                }
+            }
+            btn.addEventListener("pointerup", fim);
+            btn.addEventListener("pointercancel", fim);
+        })();
     }
 
     function aplicarModo() {
