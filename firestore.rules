@@ -63,9 +63,13 @@ service cloud.firestore {
       allow read: if request.auth != null;
       // Cadastro de empresa: o próprio usuário cria a empresa da qual é dono.
       allow create: if request.auth != null
-                    && request.resource.data.ownerUid == request.auth.uid;
-      // Dono edita/exclui a sua empresa; master pode tudo.
-      allow update, delete: if ehMaster()
+                    && request.resource.data.ownerUid == request.auth.uid
+                    && !('modulos' in request.resource.data);
+      // Dono edita/exclui a sua empresa (sem mexer nos módulos liberados); master pode tudo.
+      allow update: if ehMaster()
+                    || (request.auth != null && resource.data.ownerUid == request.auth.uid
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['modulos']));
+      allow delete: if ehMaster()
                     || (request.auth != null && resource.data.ownerUid == request.auth.uid);
 
       // CRM da empresa (contatos, agenda/compromissos, financeiro a pagar/receber).
@@ -84,8 +88,11 @@ service cloud.firestore {
       }
       // Prospecção: andamento do funil por empresa do mapa (doc id = CNPJ só com dígitos/letras).
       // Só a equipe da consultoria (admin/funcionários da mesma empresa) e o master.
+      // Exige o módulo ligado na empresa (empresas/{id}.modulos.prospeccao == true, ligado pelo master).
       match /prospeccao/{doc} {
-        allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
+        allow read, write: if ehMaster()
+          || (membroDaEmpresa(empresaId)
+              && get(/databases/$(database)/documents/empresas/$(empresaId)).data.get('modulos', {}).get('prospeccao', false) == true);
       }
       // Régua de cobrança / mensalidades (faturas a receber da consultoria).
       match /cobrancas/{doc} {

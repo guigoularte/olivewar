@@ -36,7 +36,9 @@
         { href: "dashboard.html", label: "Dashboard", icon: "fa-chart-pie", key: "relatorios", padrao: false, sec: "Gestão" },
         { href: "meus_clientes.html", label: "Meus Clientes", icon: "fa-user-group", consultoria: true, sec: "Gestão" },
         { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "mensagens.html", label: "Mensagens", icon: "fa-comments", consultoria: true, sec: "Gestão" },
         { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "prospeccao.html", label: "Prospecção", icon: "fa-map-location-dot", prosp: true, sec: "Gestão" },
         { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
         { href: "rotinas.html", label: "Rotinas de Gestão", icon: "fa-clipboard-check", orgLink: true, sec: "Gestão" },
         { href: "itens_resolver.html", label: "Itens para Resolver", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
@@ -70,6 +72,7 @@
         if (l.always) return true;
         if (l.master) return !!p.master;
         if (l.orgLink) return !!(p.master || (p.func && p.func.relatorios) || p.org);
+        if (l.prosp) return !!(p.prosp && (p.master || (p.func && p.func.relatorios)));
         if (l.consultoria) return !!(p.master || (p.func && p.func.relatorios));
         if (l.clienteOnly) return !(p.master || (p.func && p.func.relatorios));
         if (l.key) return p.master || ((l.key in (p.func || {})) ? p.func[l.key] : l.padrao);

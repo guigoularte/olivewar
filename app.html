@@ -14,9 +14,9 @@
         import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
         import { renderDashboard } from "./oliver_dashboard.js";
-        import { renderHomeCliente } from "./oliver_home_cliente.js?v=10";
+        import { renderHomeCliente } from "./oliver_home_cliente.js?v=14";
         import { montarCockpit } from "./oliver_cockpit.js?v=8";
-        import { renderConsultorHome } from "./oliver_home_consultor.js?v=4";
+        import { renderConsultorHome } from "./oliver_home_consultor.js?v=6";
 
         // Código de acesso pessoal (6 caracteres, sem 0/O/1/I).
         function gerarCodigoAcesso() {
@@ -89,6 +89,8 @@
                 localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func, org: !!dados.orgId }));
                 localStorage.setItem('oliverNome', (dados.nome || "Usuário").trim().split(" ")[0]);
 
+                // Módulos liberados por empresa (ligados pelo master em empresas.html), ex.: Prospecção.
+                let prospLiberada = false;
                 // Carrega a "marca" da empresa (nome/e-mail/telefone/cor) para os PDFs.
                 // Fica cacheada em localStorage; o oliver_pdf.js lê dali em qualquer tela.
                 try {
@@ -96,6 +98,8 @@
                         const empSnap = await getDoc(doc(db, "empresas", dados.empresaId));
                         if (empSnap.exists()) {
                             const e = empSnap.data();
+                            prospLiberada = !!(e.modulos && e.modulos.prospeccao);
+                            localStorage.setItem('oliverPerms', JSON.stringify({ master: ehMaster, func: func, org: !!dados.orgId, prosp: prospLiberada }));
                             const marca = {
                                 nome: e.nome || "Oliver",
                                 email: e.emailRelatorio || "",
@@ -150,6 +154,9 @@
                 // Agenda / Tarefas da equipe (consultoria)
                 const elAgenda = document.getElementById('menu-agenda');
                 if (elAgenda) elAgenda.style.display = souConsultoria ? 'flex' : 'none';
+                // Prospecção (mapa + funil): só consultores de empresa com o módulo liberado
+                const elProsp = document.getElementById('menu-prospeccao');
+                if (elProsp) elProsp.style.display = (souConsultoria && prospLiberada) ? 'flex' : 'none';
                 // "Meus Indicadores": para clientes (quem não é consultoria)
                 const elInd = document.getElementById('menu-indicadores');
                 if (elInd) elInd.style.display = souConsultoria ? 'none' : 'flex';
@@ -483,6 +490,14 @@
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                     </div>
                     <span class="ml-4 font-bold text-slate-800 text-base">Agenda / Tarefas</span>
+                </a>
+
+                <!-- Prospecção: mapa de empresas + funil (só consultores) -->
+                <a id="menu-prospeccao" href="prospeccao.html" class="hidden items-center p-4 bg-white rounded-2xl shadow-sm border border-orange-300/80 hover:border-orange-500 transition group">
+                    <div class="p-3 bg-orange-50 text-orange-700 rounded-xl group-hover:bg-orange-600 group-hover:text-white transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                    </div>
+                    <span class="ml-4 font-bold text-slate-800 text-base">Prospecção</span>
                 </a>
 
                 <!-- CRM (empresas, funcionários e master) -->

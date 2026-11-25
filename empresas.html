@@ -115,6 +115,10 @@
                                 <button onclick="vincularPorCodigo('${e.id}')" class="shrink-0 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg">Vincular</button>
                             </div>
                         </div>
+                        <div class="mt-2 flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                            <div><div class="text-xs font-bold text-slate-700">Prospecção (mapa + funil)</div><div class="text-[10px] text-slate-400">${(e.modulos && e.modulos.prospeccao) ? "Liberada para os consultores desta empresa" : "Bloqueada"}</div></div>
+                            <button onclick="toggleProspeccao('${e.id}', ${!!(e.modulos && e.modulos.prospeccao)})" class="text-xs font-bold px-3 py-1.5 rounded-lg ${(e.modulos && e.modulos.prospeccao) ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"}">${(e.modulos && e.modulos.prospeccao) ? "Ligada" : "Desligada"}</button>
+                        </div>
                         <button onclick="toggleVinculados('${e.id}')" class="w-full mt-2 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-1.5 rounded-lg">👥 Ver contas vinculadas (${qtd})</button>
                         <div id="vinc-${e.id}" class="hidden mt-2 space-y-1"></div>
                         <button onclick="atribuirSemEmpresa('${e.id}','${(e.nome||'').replace(/'/g,'')}')" class="w-full mt-2 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 py-1.5 rounded-lg">⬇ Trazer usuários sem empresa para esta</button>
@@ -176,6 +180,14 @@
             } finally {
                 btn.disabled = false; btn.innerText = "Criar empresa";
             }
+        };
+
+        // Liga/desliga o módulo Prospecção para a empresa (só o master; regra impede o dono de mudar `modulos`).
+        window.toggleProspeccao = async (empresaId, ligada) => {
+            try {
+                await updateDoc(doc(db, "empresas", empresaId), { "modulos.prospeccao": !ligada });
+                await carregar();
+            } catch (err) { alert("Erro ao alterar a Prospecção: " + err.message); }
         };
 
         // Gera um novo código de convite para a empresa (invalida o anterior).

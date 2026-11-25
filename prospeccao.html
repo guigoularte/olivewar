@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oliver - Prospecção</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="oliver_ui.js"></script>
+    <style>
+        #mapa { height: 100%; min-height: 320px; }
+        .leaflet-container { font: inherit; }
+        .etapa-btn[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 1px; }
+        .ponto-prec { border: 1px dashed #94a3b8; }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, getDocs, getDoc, doc, addDoc, setDoc, query, where, onSnapshot, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAa24q8CNHHtVZxX7_ooVtCmvxGu2IGykY", authDomain: "olivewar-1e5e2.firebaseapp.com", projectId: "olivewar-1e5e2", storageBucket: "olivewar-1e5e2.firebasestorage.app", messagingSenderId: "437889793363", appId: "1:437889793363:web:508e445177eb06f6e435a6", measurementId: "G-GGB4C2X6TL" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // ===== Prospecção: mapa de empresas de alimentos (CNPJ/Receita) + funil por empresa =====
+        // Dados das empresas: prospeccao_data.json (estático, gerado dos Dados Abertos do CNPJ).
+        // Andamento do funil: empresas/{empresaId}/prospeccao/{cnpj} (compartilhado pela equipe da consultoria).
+        const ETAPAS = [
+            { k: "nao_contatado", l: "Não contatado", cor: "#94a3b8" },
+            { k: "contatado", l: "Contatado", cor: "#0ea5e9" },
+            { k: "retorno", l: "Deu retorno", cor: "#6366f1" },
+            { k: "visita", l: "Visita agendada", cor: "#f59e0b" },
+            { k: "proposta", l: "Proposta enviada", cor: "#ea580c" },
+            { k: "fechou", l: "Fechou (cliente)", cor: "#16a34a" },
+            { k: "sem_interesse", l: "Sem interesse", cor: "#e11d48" }
+        ];
+        const ETAPA = Object.fromEntries(ETAPAS.map(e => [e.k, e]));
+        const CATS = {
+            industria: { l: "Indústria de alimentos e bebidas", cor: "#c2410c", prio: 1, svc: "BPF e POPs (RDC 275/2002), APPCC, rotulagem geral e nutricional (RDC 727/2022, RDC 429/2020, IN 75/2020), registro SIM/SIE/SIF ou MAPA (bebidas), treinamento de manipuladores, controle de qualidade." },
+            restaurante: { l: "Restaurante", cor: "#1f5f8b", prio: 2, svc: "Manual de Boas Práticas e POPs (RDC 216/2004), Portaria SES/RS 78/2009, curso de manipuladores, controle de temperatura, fichas técnicas, preparo para a Vigilância Sanitária." },
+            coletiva: { l: "Refeições coletivas, buffet e cantina", cor: "#0f766e", prio: 2, svc: "Boas Práticas e POPs (RDC 216/2004, Portaria SES/RS 78/2009), controle de tempo e temperatura no transporte e na distribuição, amostras de referência, fichas técnicas." },
+            padaria: { l: "Padaria e confeitaria", cor: "#a16207", prio: 2, svc: "Boas Práticas (RDC 216/2004, Portaria SES/RS 78/2009), rotulagem de produção própria (RDC 727/2022 e 429/2020), alergênicos, validade." },
+            acougue: { l: "Açougue, peixaria e frios", cor: "#be123c", prio: 2, svc: "Boas Práticas e POPs, cadeia fria, rastreabilidade, rotulagem de fracionados, higienização de equipamentos." },
+            lanchonete: { l: "Lanchonete e ambulante", cor: "#7c3aed", prio: 3, svc: "Manual de Boas Práticas e POPs (RDC 216/2004), Portaria SES/RS 78/2009, curso de manipuladores, validade e etiquetagem." },
+            mercado: { l: "Mercado e supermercado", cor: "#4d7c0f", prio: 3, svc: "Boas Práticas nos setores de açougue, padaria e rotisseria, controle de temperatura, POPs de higienização, rotulagem de fracionados." },
+            bar: { l: "Bar", cor: "#6b7280", prio: 3, svc: "Boas Práticas (RDC 216/2004), curso de manipuladores, controle de gelo e água, POPs de higienização." },
+            comercio: { l: "Outro comércio de alimentos", cor: "#64748b", prio: 3, svc: "Boas Práticas e rotulagem conforme o produto, treinamento de manipuladores." }
+        };
+        const PREC = { r: "na rua", b: "no bairro (aprox.)", c: "na cidade (aprox.)" };
+        const CENTRO = [-29.8268, -50.5175];
+
+        let empresaId = null, meuUid = null, meuNome = "";
+        let empresas = [], towns = [], status = {}, equipe = [];
+        let filtroEtapa = null, corPor = "etapa", mostrados = 150, selecionada = null;
+        let mapa, camada, marcadores = new Map();
+
+        const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+        const idDe = (p) => p.j.replace(/[^0-9A-Za-z]/g, "");
+        const etapaDe = (p) => (status[idDe(p)] && status[idDe(p)].etapa) || "nao_contatado";
+        const $ = (id) => document.getElementById(id);
+        const dataHora = (iso) => { if (!iso) return ""; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }); };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) { window.location.href = "login.html"; return; }
+            meuUid = user.uid;
+            const meu = await getDoc(doc(db, "usuarios", user.uid));
+            const d = meu.exists() ? meu.data() : {};
+            meuNome = (d.nome || user.email || "").trim();
+            const souConsultoria = d.role === "master" || d.role === "empresa_admin" || (d.funcionalidades && d.funcionalidades.relatorios === true);
+            empresaId = d.empresaId || null;
+            if (!souConsultoria) { alert("A Prospecção é exclusiva da equipe de consultores."); window.location.href = "app.html"; return; }
+            if (!empresaId) { alert("Sua conta não está vinculada a uma empresa."); window.location.href = "app.html"; return; }
+            const emp = await getDoc(doc(db, "empresas", empresaId));
+            const modulos = (emp.exists() && emp.data().modulos) || {};
+            if (!modulos.prospeccao) { alert("A Prospecção ainda não está liberada para a sua empresa."); window.location.href = "app.html"; return; }
+            $("conteudo").classList.remove("hidden");
+            iniciarMapa();
+            try {
+                const r = await fetch("prospeccao_data.json");
+                const j = await r.json();
+                empresas = j.p; towns = j.towns;
+                empresas.forEach(p => { p.s = norm([p.n, p.r, p.j, p.j.replace(/\D/g, ""), p.a, p.cd, p.cn, p.ci].join(" ")); });
+            } catch (e) { alert("Não foi possível carregar a lista de empresas: " + e.message); return; }
+            montarFiltros();
+            carregarEquipe();
+            // Andamento em tempo real: o que um consultor marca aparece para os outros na hora.
+            onSnapshot(collection(db, "empresas", empresaId, "prospeccao"), (snap) => {
+                status = {}; snap.forEach(x => { status[x.id] = x.data(); });
+                render(true);
+                if (selecionada) abrirDetalhe(selecionada, true);
+            }, (e) => alert("Erro ao carregar o funil: " + e.message + "\nAs regras do Firestore foram republicadas?"));
+        });
+
+        async function carregarEquipe() {
+            try {
+                const us = await getDocs(query(collection(db, "usuarios"), where("empresaId", "==", empresaId)));
+                equipe = us.docs.map(x => ({ id: x.id, ...x.data() }))
+                    .filter(u => u.role === "master" || u.role === "empresa_admin" || (u.funcionalidades && u.funcionalidades.relatorios === true))
+                    .sort((a, b) => (a.nome || "").localeCompare(b.nome || "", "pt"));
+            } catch (e) { equipe = [{ id: meuUid, nome: meuNome }]; }
+        }
+
+        function iniciarMapa() {
+            mapa = L.map("mapa", { preferCanvas: true }).setView(CENTRO, 10);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · dados: Receita Federal' }).addTo(mapa);
+            camada = L.layerGroup().addTo(mapa);
+            L.circleMarker(CENTRO, { radius: 6, color: "#0f172a", weight: 2, fillColor: "#fff", fillOpacity: 1 }).addTo(mapa).bindTooltip("Santo Antônio da Patrulha");
+        }
+
+        function montarFiltros() {
+            const cidades = [...new Set(empresas.map(p => p.ci))].sort((a, b) => empresas.filter(p => p.ci === b).length - empresas.filter(p => p.ci === a).length);
+            $("f-cidade").innerHTML = `<option value="">Todas as cidades</option>` + cidades.map(c => `<option value="${esc(c)}">${esc(c)} (${empresas.filter(p => p.ci === c).length})</option>`).join("");
+            $("f-tipo").innerHTML = `<option value="">Todos os tipos</option>` + Object.entries(CATS).map(([k, c]) => `<option value="${k}">${esc(c.l)} (${empresas.filter(p => p.c === k).length})</option>`).join("");
+            ["f-cidade", "f-tipo", "f-busca", "f-mei", "f-minhas", "f-rua"].forEach(id => $(id).addEventListener("input", () => render()));
+            $("f-cidade").addEventListener("change", () => {
+                const t = towns.find(t => t[0] === $("f-cidade").value);
+                mapa.flyTo(t ? [t[1], t[2]] : CENTRO, t ? 13 : 10, { duration: 0.6 });
+            });
+            $("f-cor").addEventListener("input", (e) => { corPor = e.target.value; marcadores.clear(); render(true); });
+        }
+
+        function filtradas() {
+            const ci = $("f-cidade").value, tp = $("f-tipo").value, q = norm($("f-busca").value.trim());
+            const semMei = $("f-mei").checked, minhas = $("f-minhas").checked, soRua = $("f-rua").checked;
+            return empresas.filter(p => {
+                if (ci && p.ci !== ci) return false;
+                if (tp && p.c !== tp) return false;
+                if (semMei && p.m) return false;
+                if (soRua && p.p !== "r") return false;
+                if (q && !p.s.includes(q)) return false;
+                const st = status[idDe(p)];
+                if (minhas && !(st && st.responsavelUid === meuUid)) return false;
+                if (filtroEtapa && etapaDe(p) !== filtroEtapa) return false;
+                return true;
+            });
+        }
+
+        function corDe(p) { return corPor === "etapa" ? ETAPA[etapaDe(p)].cor : CATS[p.c].cor; }
+        function marcador(p) {
+            let m = marcadores.get(p);
+            if (m) return m;
+            const trabalhada = etapaDe(p) !== "nao_contatado";
+            m = L.circleMarker([p.la, p.lo], {
+                radius: trabalhada ? 7 : (p.c === "industria" ? 6 : 4.5),
+                weight: trabalhada ? 2 : 1, color: trabalhada ? "#0f172a" : "#fff",
+                dashArray: p.p === "r" ? null : "2 2",
+                fillColor: corDe(p), fillOpacity: p.p === "r" ? 0.95 : 0.65
+            });
+            m.on("click", () => abrirDetalhe(p));
+            m.bindTooltip(esc(p.n), { direction: "top" });
+            marcadores.set(p, m);
+            return m;
+        }
+
+        function render(manterLista) {
+            if (!manterLista) mostrados = 150;
+            const lista = filtradas();
+            // Resumo do funil (sobre o recorte de cidade/tipo/busca, sem o filtro de etapa)
+            const etapaAntes = filtroEtapa; filtroEtapa = null; const base = filtradas(); filtroEtapa = etapaAntes;
+            const cont = Object.fromEntries(ETAPAS.map(e => [e.k, 0]));
+            base.forEach(p => cont[etapaDe(p)]++);
+            $("funil").innerHTML = ETAPAS.map(e => `
+                <button type="button" class="etapa-btn flex-1 min-w-[110px] text-left px-3 py-2 rounded-xl border bg-white hover:bg-slate-50" style="color:${e.cor}" aria-pressed="${filtroEtapa === e.k}" onclick="filtrarEtapa('${e.k}')">
+                    <div class="text-[11px] font-semibold uppercase tracking-wide">${e.l}</div>
+                    <div class="text-xl font-extrabold text-slate-800 tabular-nums">${cont[e.k].toLocaleString("pt-BR")}</div>
+                </button>`).join("");
+            const trab = base.length - cont.nao_contatado;
+            $("conversao").textContent = trab ? `${trab} empresas trabalhadas · ${cont.fechou} fecharam (${Math.round(100 * cont.fechou / trab)}% das trabalhadas)` : "Nenhuma empresa trabalhada ainda neste recorte.";
+
+            // Ordem: etapa mais avançada primeiro (exceto sem interesse), depois prioridade do tipo, depois distância
+            const ordem = { visita: 0, proposta: 1, retorno: 2, contatado: 3, nao_contatado: 4, fechou: 5, sem_interesse: 6 };
+            lista.sort((a, b) => ordem[etapaDe(a)] - ordem[etapaDe(b)] || CATS[a.c].prio - CATS[b.c].prio || a.km - b.km);
+
+            camada.clearLayers();
+            [...lista].reverse().forEach(p => camada.addLayer(marcador(p)));
+            $("contagem").textContent = `${lista.length.toLocaleString("pt-BR")} empresas`;
+
+            $("lista").innerHTML = lista.slice(0, mostrados).map((p, i) => {
+                const e = ETAPA[etapaDe(p)], st = status[idDe(p)] || {};
+                return `<button type="button" onclick="abrirPorIndice(${i})" class="w-full text-left px-4 py-3 border-b border-slate-100 hover:bg-orange-50 flex gap-3">
+                    <span class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0" style="background:${CATS[p.c].cor}"></span>
+                    <span class="min-w-0 flex-1">
+                        <span class="flex items-start justify-between gap-2"><span class="font-semibold text-slate-800 text-sm break-words">${esc(p.n)}</span><span class="text-[11px] text-slate-400 tabular-nums shrink-0">${p.km.toFixed(1)} km</span></span>
+                        <span class="block text-[11px] text-slate-500">${esc(p.cd)} · ${esc(p.ci)}${p.m ? " · MEI" : ""}</span>
+                        <span class="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" style="background:${e.cor}1a;color:${e.cor}">${e.l}${st.responsavelNome ? " · " + esc(st.responsavelNome.split(" ")[0]) : ""}</span>
+                    </span></button>`;
+            }).join("") + (lista.length > mostrados ? `<button type="button" onclick="mostrarMais()" class="m-4 w-[calc(100%-2rem)] py-2 rounded-xl border border-orange-500 text-orange-600 text-sm font-semibold">Mostrar mais (${(lista.length - mostrados).toLocaleString("pt-BR")} restantes)</button>` : "");
+            window.__lista = lista;
+        }
+        window.filtrarEtapa = (k) => { filtroEtapa = filtroEtapa === k ? null : k; render(); };
+        window.mostrarMais = () => { mostrados += 150; render(true); };
+        window.abrirPorIndice = (i) => { const p = window.__lista[i]; mapa.flyTo([p.la, p.lo], Math.max(mapa.getZoom(), 15), { duration: 0.6 }); abrirDetalhe(p); };
+
+        function abrirDetalhe(p, soAtualizarHistorico) {
+            selecionada = p;
+            const st = status[idDe(p)] || {};
+            const etapa = st.etapa || "nao_contatado";
+            const c = CATS[p.c];
+            const g = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((p.a || p.n) + ", " + p.ci + ", RS");
+            const hist = (st.historico || []).slice().sort((a, b) => (b.em || "").localeCompare(a.em || ""));
+            const htmlHist = hist.length ? hist.map(h => `<li class="py-2 border-b border-slate-100 text-xs"><span class="font-semibold" style="color:${(ETAPA[h.etapa] || ETAPA.nao_contatado).cor}">${esc((ETAPA[h.etapa] || {}).l || h.etapa)}</span> · ${esc(h.porNome)} · ${dataHora(h.em)}${h.visitaEm ? `<br>Visita: ${dataHora(h.visitaEm)}` : ""}${h.obs ? `<br><span class="text-slate-600">${esc(h.obs)}</span>` : ""}</li>`).join("") : `<li class="text-xs text-slate-400 py-2">Nenhum registro ainda.</li>`;
+            if (soAtualizarHistorico && !$("painel").classList.contains("hidden")) {
+                $("d-hist").innerHTML = htmlHist;
+                $("d-crm").innerHTML = botaoCrm(st);
+                return;
+            }
+            $("painel").innerHTML = `
+                <div class="flex items-start justify-between gap-3 p-5 border-b border-slate-100">
+                    <div class="min-w-0">
+                        <div class="text-[11px] font-semibold uppercase tracking-wide" style="color:${c.cor}">${esc(c.l)} · ${esc(p.ci)}</div>
+                        <h2 class="text-lg font-extrabold text-slate-800 break-words">${esc(p.n)}</h2>
+                        ${p.r && p.r !== p.n ? `<div class="text-xs text-slate-500 break-words">${esc(p.r)}</div>` : ""}
+                    </div>
+                    <button type="button" onclick="fecharDetalhe()" class="text-slate-400 hover:text-slate-700 text-2xl leading-none" aria-label="Fechar">&times;</button>
+                </div>
+                <div class="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+                    <dl class="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-sm">
+                        <dt class="text-slate-400">CNPJ</dt><dd class="select-all">${esc(p.j)}</dd>
+                        <dt class="text-slate-400">Atividade</dt><dd>${esc(p.cn)} ${esc(p.cd)}${p.v ? " <i class='text-slate-400'>(secundária)</i>" : ""}</dd>
+                        <dt class="text-slate-400">Endereço</dt><dd>${esc(p.a)}${p.cp ? " · CEP " + esc(p.cp) : ""}</dd>
+                        ${p.t ? `<dt class="text-slate-400">Telefone</dt><dd class="select-all">${esc(p.t)}</dd>` : ""}
+                        ${p.e ? `<dt class="text-slate-400">E-mail</dt><dd class="select-all break-all">${esc(p.e)}</dd>` : ""}
+                        <dt class="text-slate-400">Aberta em</dt><dd>${esc(p.i)}${p.po ? " · " + esc(p.po) : ""}${p.m ? " · MEI" : ""}</dd>
+                        <dt class="text-slate-400">No mapa</dt><dd>${PREC[p.p]} · <a class="text-orange-600 underline" href="${g}" target="_blank" rel="noopener">Google Maps</a></dd>
+                    </dl>
+                    <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600"><b class="block text-[10px] uppercase tracking-wide text-slate-400 mb-1">Serviços que se aplicam</b>${esc(c.svc)}</div>
+
+                    <div class="border border-orange-200 rounded-2xl p-4 space-y-3">
+                        <div class="text-sm font-bold text-slate-800">Andamento</div>
+                        <div class="flex flex-wrap gap-1.5" id="d-etapas">
+                            ${ETAPAS.map(e => `<button type="button" data-etapa="${e.k}" onclick="escolherEtapa('${e.k}')" class="px-2.5 py-1 rounded-full text-xs font-semibold border" style="border-color:${e.cor};color:${e.k === etapa ? "#fff" : e.cor};background:${e.k === etapa ? e.cor : "transparent"}">${e.l}</button>`).join("")}
+                        </div>
+                        <input type="hidden" id="d-etapa" value="${etapa}">
+                        <div id="d-visita" class="${etapa === "visita" ? "" : "hidden"} space-y-1">
+                            <label class="text-xs text-slate-500" for="d-visita-em">Data e hora da visita</label>
+                            <input type="datetime-local" id="d-visita-em" value="${esc(st.visitaEm || "")}" class="w-full p-2 border rounded-lg text-sm">
+                            <label class="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" id="d-agenda" checked> Colocar na Agenda do responsável</label>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500" for="d-resp">Consultor responsável</label>
+                            <select id="d-resp" class="w-full p-2 border rounded-lg text-sm">
+                                <option value="">Ninguém (lista da equipe)</option>
+                                ${equipe.map(u => `<option value="${u.id}" ${u.id === (st.responsavelUid || "") ? "selected" : ""}>${esc(u.nome || u.email || u.id)}${u.id === meuUid ? " (eu)" : ""}</option>`).join("")}
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs text-slate-500" for="d-obs">Observação deste contato</label>
+                            <textarea id="d-obs" rows="2" class="w-full p-2 border rounded-lg text-sm" placeholder="Ex.: falar com a nutricionista na segunda de manhã"></textarea>
+                        </div>
+                        <button type="button" id="d-salvar" onclick="salvarAndamento()" class="w-full py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-sm">Salvar andamento</button>
+                        <div id="d-crm">${botaoCrm(st)}</div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm font-bold text-slate-800 mb-1">Histórico</div>
+                        <ul id="d-hist">${htmlHist}</ul>
+                    </div>
+                </div>`;
+            $("painel").classList.remove("hidden");
+        }
+        function botaoCrm(st) {
+            return st.contatoId
+                ? `<div class="text-xs text-emerald-700 text-center">✓ Já está no CRM como contato.</div>`
+                : `<button type="button" onclick="levarCrm()" class="w-full py-2 rounded-xl border border-indigo-400 text-indigo-700 text-sm font-semibold hover:bg-indigo-50">Levar para o CRM como lead</button>`;
+        }
+        window.fecharDetalhe = () => { selecionada = null; $("painel").classList.add("hidden"); };
+        window.escolherEtapa = (k) => {
+            $("d-etapa").value = k;
+            document.querySelectorAll("#d-etapas button").forEach(b => {
+                const e = ETAPA[b.dataset.etapa], on = b.dataset.etapa === k;
+                b.style.background = on ? e.cor : "transparent"; b.style.color = on ? "#fff" : e.cor;
+            });
+            $("d-visita").classList.toggle("hidden", k !== "visita");
+        };
+
+        async function criarContatoCrm(p, estagio) {
+            const r = await addDoc(collection(db, "empresas", empresaId, "crm_contatos"), {
+                nome: p.n, telefone: p.t || "", email: p.e || "", negocio: CATS[p.c].l, cidade: p.ci,
+                notas: `CNPJ ${p.j}${p.r && p.r !== p.n ? " · " + p.r : ""} · ${p.a}${p.cp ? " · CEP " + p.cp : ""}`,
+                origem: "prospeccao", origem_canal: "Prospecção (mapa CNPJ)", tipo_cadastro: "Lead",
+                estagio_funil: estagio, responsavel: "", proximo_contato: "",
+                cnpj: p.j, criadoPor: meuUid, criadoEm: serverTimestamp()
+            });
+            return r.id;
+        }
+
+        window.salvarAndamento = async () => {
+            const p = selecionada; if (!p) return;
+            const id = idDe(p), st = status[id] || {};
+            const etapa = $("d-etapa").value, obs = $("d-obs").value.trim();
+            const respUid = $("d-resp").value, resp = equipe.find(u => u.id === respUid);
+            const respNome = resp ? (resp.nome || resp.email || "") : "";
+            const visitaEm = etapa === "visita" ? $("d-visita-em").value : (st.visitaEm || "");
+            if (etapa === "visita" && !visitaEm) { alert("Informe a data e a hora da visita."); return; }
+            const btn = $("d-salvar"); btn.disabled = true; btn.textContent = "Salvando…";
+            try {
+                const evento = { etapa, obs, porUid: meuUid, porNome: meuNome, em: new Date().toISOString() };
+                const extra = {};
+                if (etapa === "visita") {
+                    evento.visitaEm = visitaEm;
+                    if ($("d-agenda").checked && visitaEm !== st.visitaEm) {
+                        const quem = respUid || meuUid, quemNome = respUid ? respNome : meuNome;
+                        await addDoc(collection(db, "empresas", empresaId, "crm_compromissos"), {
+                            titulo: "Visita: " + p.n, data: visitaEm, tipo: "visita",
+                            descricao: `${p.a}, ${p.ci}${p.t ? " · Tel. " + p.t : ""}${obs ? " · " + obs : ""}`,
+                            contatoId: st.contatoId || null, contatoNome: p.n,
+                            responsavelUid: quem, responsavelNome: quemNome,
+                            funcionarioUid: quem, funcionarioNome: quemNome,
+                            criadoPorUid: meuUid, criadoPorNome: meuNome,
+                            origem: "prospeccao", status: "pendente", criadoEm: serverTimestamp()
+                        });
+                    }
+                }
+                if (etapa === "fechou" && !st.contatoId) extra.contatoId = await criarContatoCrm(p, "5. Fechado");
+                await setDoc(doc(db, "empresas", empresaId, "prospeccao", id), {
+                    cnpj: p.j, nome: p.n, cidade: p.ci, categoria: p.c,
+                    etapa, visitaEm, ultimaObs: obs || st.ultimaObs || "",
+                    responsavelUid: respUid, responsavelNome: respNome,
+                    atualizadoEm: serverTimestamp(), atualizadoPorUid: meuUid, atualizadoPorNome: meuNome,
+                    historico: arrayUnion(evento), ...extra
+                }, { merge: true });
+                $("d-obs").value = "";
+                btn.textContent = "Salvo ✓";
+                setTimeout(() => { if ($("d-salvar")) { btn.disabled = false; btn.textContent = "Salvar andamento"; } }, 1500);
+            } catch (e) {
+                btn.disabled = false; btn.textContent = "Salvar andamento";
+                alert("Erro ao salvar: " + e.message);
+            }
+        };
+
+        window.levarCrm = async () => {
+            const p = selecionada; if (!p) return;
+            const id = idDe(p), st = status[id] || {};
+            if (st.contatoId) return;
+            try {
+                const contatoId = await criarContatoCrm(p, "1. Prospecção");
+                await setDoc(doc(db, "empresas", empresaId, "prospeccao", id), {
+                    cnpj: p.j, nome: p.n, cidade: p.ci, categoria: p.c, etapa: st.etapa || "nao_contatado", contatoId,
+                    atualizadoEm: serverTimestamp(), atualizadoPorUid: meuUid, atualizadoPorNome: meuNome
+                }, { merge: true });
+            } catch (e) { alert("Erro ao criar contato no CRM: " + e.message); }
+        };
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    <div id="conteudo" class="hidden lg:h-screen flex flex-col">
+        <header class="px-4 sm:px-6 pt-5 pb-3 space-y-3 bg-white border-b border-slate-200">
+            <div class="flex items-center gap-3">
+                <a href="app.html" class="text-slate-400 hover:text-slate-700 text-sm">← Voltar</a>
+                <div>
+                    <h1 class="text-xl font-extrabold">Prospecção</h1>
+                    <p class="text-xs text-slate-500">Empresas de alimentos ativas na Receita Federal (out/2026) em 11 municípios da região de Santo Antônio da Patrulha.</p>
+                </div>
+            </div>
+            <div id="funil" class="flex gap-2 overflow-x-auto pb-1"></div>
+            <div id="conversao" class="text-xs text-slate-500"></div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <input type="search" id="f-busca" placeholder="Nome, CNPJ, rua, bairro, atividade…" class="p-2 border rounded-lg text-sm">
+                <select id="f-cidade" class="p-2 border rounded-lg text-sm"></select>
+                <select id="f-tipo" class="p-2 border rounded-lg text-sm"></select>
+                <select id="f-cor" class="p-2 border rounded-lg text-sm">
+                    <option value="etapa">Cor dos pontos: etapa do funil</option>
+                    <option value="tipo">Cor dos pontos: tipo de empresa</option>
+                </select>
+            </div>
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-600">
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="f-minhas"> só as minhas</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="f-mei"> ocultar MEI</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="f-rua"> só endereço localizado na rua</label>
+                <span id="contagem" class="ml-auto font-semibold text-slate-500"></span>
+            </div>
+        </header>
+        <main class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[400px,1fr]">
+            <div class="order-2 lg:order-1 bg-white lg:border-r border-slate-200 lg:overflow-y-auto" id="lista"></div>
+            <div class="order-1 lg:order-2 relative h-[50vh] lg:h-auto">
+                <div id="mapa"></div>
+            </div>
+        </main>
+        <p class="px-4 sm:px-6 py-2 text-[11px] text-slate-400 bg-white border-t border-slate-200">Pontos com borda tracejada têm posição aproximada (bairro ou cidade); o endereço completo está no detalhe. Contatos são os declarados à Receita e podem estar desatualizados.</p>
+    </div>
+    <aside id="painel" class="hidden fixed z-[1000] bg-white shadow-2xl flex flex-col inset-x-0 bottom-0 max-h-[85vh] rounded-t-3xl lg:inset-x-auto lg:right-0 lg:top-0 lg:bottom-0 lg:max-h-none lg:w-[440px] lg:rounded-none"></aside>
+</body>
+</html>
