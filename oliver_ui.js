@@ -37,6 +37,7 @@
         { href: "meus_clientes.html", label: "Meus Clientes", icon: "fa-user-group", consultoria: true, sec: "Gestão" },
         { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
         { href: "mensagens.html", label: "Mensagens", icon: "fa-comments", consultoria: true, sec: "Gestão" },
+        { href: "recados.html", label: "Recados dos clientes", icon: "fa-comment-dots", consultoria: true, sec: "Gestão" },
         { href: "agenda.html", label: "Agenda", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
         { href: "prospeccao.html", label: "Prospecção", icon: "fa-map-location-dot", prosp: true, sec: "Gestão" },
         { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },

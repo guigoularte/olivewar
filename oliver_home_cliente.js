@@ -60,6 +60,7 @@ const MENU = [
     { href: "meus_clientes.html", label: "Meus Clientes", icon: "fa-user-group", consultoria: true, sec: "Gestão" },
     { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "mensagens.html", label: "Mensagens", icon: "fa-comments", consultoria: true, sec: "Gestão" },
+    { href: "recados.html", label: "Recados dos clientes", icon: "fa-comment-dots", consultoria: true, sec: "Gestão" },
     { href: "prospeccao.html", label: "Prospecção", icon: "fa-map-location-dot", consultoria: true, sec: "Gestão" },
     { href: "agenda.html", label: "Agenda", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
@@ -286,6 +287,22 @@ export async function renderHomeCliente(opts) {
 
     const datalist = `<datalist id="cats-pre"><option>Fornecedor</option><option>Aluguel</option><option>Salários</option><option>Impostos</option><option>Energia/Água</option><option>Serviços</option><option>Outros</option></datalist>`;
 
+    // Caixa "Fale com a consultoria" (só para o cliente vinculado a uma empresa).
+    function recadoBoxHtml() {
+        if (opts.souConsultoria || !empresaId) return "";
+        return `
+        <div class="bg-white rounded-3xl p-4 border border-orange-200/80 shadow-sm">
+            <div class="flex items-center gap-2">
+                <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0"><i class="fa-solid fa-comment-dots"></i></div>
+                <div><h2 class="text-sm font-extrabold text-slate-800 leading-tight">Fale com a consultoria</h2>
+                <p class="text-[11px] text-slate-400">Conte como foi o dia, dúvidas ou o que deseja para o negócio.</p></div>
+            </div>
+            <textarea data-el="recado-txt" rows="2" placeholder="Escreva aqui…" class="w-full mt-2.5 p-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-300 resize-none"></textarea>
+            <button data-el="recado-enviar" class="w-full mt-2 bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2"><i class="fa-solid fa-paper-plane"></i>Enviar à consultoria</button>
+            <p data-el="recado-status" class="text-[11px] text-center text-slate-500 mt-1.5"></p>
+        </div>`;
+    }
+
     // ======================= LAYOUT DESKTOP (cockpit) =======================
     function htmlDesktop(d) {
         const trend = d.trend === null ? "" :
@@ -471,6 +488,7 @@ export async function renderHomeCliente(opts) {
 
         return `
             ${banner}
+            ${recadoBoxHtml() ? `<div class="mb-6">${recadoBoxHtml()}</div>` : ""}
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div class="lg:col-span-8 space-y-6">${upload}${fila}${extrato}</div>
                 <div class="lg:col-span-4 space-y-6">${saude}${consultoriaCard}</div>
@@ -678,7 +696,7 @@ export async function renderHomeCliente(opts) {
             </div>`;
         const paneCockpit = (ehConsultor && campoData)
             ? htmlCampoPane(campoData)
-            : `<div data-pane="cockpit" class="space-y-3.5">${banner}${captura}${fila}${saude}</div>`;
+            : `<div data-pane="cockpit" class="space-y-3.5">${banner}${recadoBoxHtml()}${captura}${fila}${saude}</div>`;
 
         // --- Aba Menu (todas as funções permitidas) ---
         let perms; try { perms = JSON.parse(localStorage.getItem("oliverPerms")) || { master: false, func: {} }; } catch (e) { perms = { master: false, func: {} }; }
@@ -1066,6 +1084,33 @@ export async function renderHomeCliente(opts) {
     }
 
     function wire(root) {
+        // "Fale com a consultoria": o cliente manda um recado/relato do dia
+        const recBtn = root.querySelector('[data-el="recado-enviar"]');
+        if (recBtn) recBtn.addEventListener("click", async () => {
+            const ta = root.querySelector('[data-el="recado-txt"]');
+            const st = root.querySelector('[data-el="recado-status"]');
+            const texto = (ta.value || "").trim();
+            if (!texto) { st.className = "text-[11px] text-center text-rose-600 mt-1.5"; st.textContent = "Escreva uma mensagem."; ta.focus(); return; }
+            if (!empresaId) { st.className = "text-[11px] text-center text-rose-600 mt-1.5"; st.textContent = "Vincule sua consultoria primeiro."; return; }
+            recBtn.disabled = true; st.className = "text-[11px] text-center text-slate-500 mt-1.5"; st.textContent = "Enviando…";
+            try {
+                await addDoc(collection(db, "empresas", empresaId, "recados"), {
+                    clienteUid: uid, clienteNome: nome || "Cliente", texto, lida: false, criadoEm: new Date().toISOString()
+                });
+                // Avisa os consultores responsáveis (push + sino) com o texto do recado
+                try {
+                    const authMod = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js");
+                    const usr = authMod.getAuth().currentUser;
+                    if (usr) {
+                        const tk = await usr.getIdToken();
+                        fetch("/api/notificar-atividade", { method: "POST", headers: { "Authorization": "Bearer " + tk, "Content-Type": "application/json" }, body: JSON.stringify({ acao: 'mandou um recado: "' + texto.slice(0, 100) + (texto.length > 100 ? "…" : "") + '"', url: "recados.html" }) }).catch(() => {});
+                    }
+                } catch (e) {}
+                ta.value = ""; recBtn.disabled = false;
+                st.className = "text-[11px] text-center text-emerald-600 mt-1.5"; st.textContent = "Enviado! A consultoria foi avisada. ✓";
+            } catch (e) { recBtn.disabled = false; st.className = "text-[11px] text-center text-rose-600 mt-1.5"; st.textContent = "Erro ao enviar: " + e.message; }
+        });
+
         // Contabilizar notas já enviadas (pré-lançamentos pendentes)
         const btContab = root.querySelector('[data-a="contabilizar-todas"]');
         if (btContab) btContab.addEventListener("click", async () => {

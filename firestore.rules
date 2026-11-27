@@ -106,6 +106,18 @@ service cloud.firestore {
       match /config/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
       }
+      // Recados dos clientes para a consultoria (relato do dia, pedidos, dúvidas).
+      // O cliente da empresa cria o seu; a consultoria lê tudo e marca como lido.
+      match /recados/{doc} {
+        allow read: if ehMaster() || membroDaEmpresa(empresaId)
+                    || (request.auth != null && resource.data.clienteUid == request.auth.uid);
+        allow create: if request.auth != null
+                      && request.resource.data.clienteUid == request.auth.uid
+                      && (minhaEmpresaId() == empresaId
+                          || (dadosUsuario().get('orgId', '') != '' && orgData(dadosUsuario().get('orgId', '')).empresaId == empresaId));
+        allow update: if ehMaster() || membroDaEmpresa(empresaId);
+        allow delete: if ehMaster() || membroDaEmpresa(empresaId);
+      }
       // Log de relatórios gerados (alimenta o Dashboard)
       match /relatorios_log/{doc} {
         allow read, write: if ehMaster() || membroDaEmpresa(empresaId);
