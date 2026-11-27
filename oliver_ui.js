@@ -37,11 +37,11 @@
         { href: "meus_clientes.html", label: "Meus Clientes", icon: "fa-user-group", consultoria: true, sec: "Gestão" },
         { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
         { href: "mensagens.html", label: "Mensagens", icon: "fa-comments", consultoria: true, sec: "Gestão" },
-        { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
+        { href: "agenda.html", label: "Agenda", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
         { href: "prospeccao.html", label: "Prospecção", icon: "fa-map-location-dot", prosp: true, sec: "Gestão" },
         { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
         { href: "rotinas.html", label: "Rotinas de Gestão", icon: "fa-clipboard-check", orgLink: true, sec: "Gestão" },
-        { href: "itens_resolver.html", label: "Itens para Resolver", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
+        { href: "itens_resolver.html", label: "Correções", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
         { href: "indicadores.html", label: "Meus Indicadores", icon: "fa-gauge-high", clienteOnly: true, sec: "Gestão" },
 
         { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "fa-chart-line", key: "fluxoCaixa", padrao: true, sec: "Financeiro & Caixa" },

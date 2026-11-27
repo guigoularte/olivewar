@@ -15,7 +15,7 @@ const TEMPLATE = `
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Relatórios no mês</div><div data-el="kpi-mes" class="text-2xl font-black text-indigo-600">0</div></div>
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Últimos 7 dias</div><div data-el="kpi-7" class="text-2xl font-black text-indigo-600">0</div></div>
     <div class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Vistorias no mês</div><div data-el="kpi-vist" class="text-2xl font-black text-orange-600">0</div></div>
-    <div data-el="card-pend" class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">Pendências vencidas</div><div data-el="kpi-pend" class="text-2xl font-black text-red-600">0</div></div>
+    <div data-el="card-pend" class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">A fazer atrasadas</div><div data-el="kpi-pend" class="text-2xl font-black text-red-600">0</div></div>
     <div data-el="card-receber" class="bg-white rounded-xl border border-slate-200 p-3 text-center"><div class="text-[10px] text-slate-400 font-semibold">A receber</div><div data-el="kpi-receber" class="text-sm font-black text-emerald-600 mt-2">R$ 0,00</div></div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-4">

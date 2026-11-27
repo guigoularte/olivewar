@@ -61,10 +61,10 @@ const MENU = [
     { href: "crm.html", label: "CRM", icon: "fa-handshake", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "mensagens.html", label: "Mensagens", icon: "fa-comments", consultoria: true, sec: "Gestão" },
     { href: "prospeccao.html", label: "Prospecção", icon: "fa-map-location-dot", consultoria: true, sec: "Gestão" },
-    { href: "agenda.html", label: "Agenda / Tarefas", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
+    { href: "agenda.html", label: "Agenda", icon: "fa-calendar-days", key: "relatorios", padrao: false, sec: "Gestão" },
     { href: "organizacoes.html", label: "Organizações", icon: "fa-sitemap", orgLink: true, sec: "Gestão" },
     { href: "rotinas.html", label: "Rotinas de Gestão", icon: "fa-clipboard-check", orgLink: true, sec: "Gestão" },
-    { href: "itens_resolver.html", label: "Itens para Resolver", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
+    { href: "itens_resolver.html", label: "Correções", icon: "fa-list-check", key: "itensResolver", padrao: true, sec: "Gestão" },
     { href: "indicadores.html", label: "Meus Indicadores", icon: "fa-gauge-high", clienteOnly: true, sec: "Gestão" },
     { href: "fluxo_caixa.html", label: "Fluxo de Caixa", icon: "fa-chart-line", key: "fluxoCaixa", padrao: true, sec: "Financeiro & Caixa" },
     { href: "notas.html", label: "Notas & Comprovantes", icon: "fa-receipt", key: "notasFiscais", padrao: false, sec: "Financeiro & Caixa" },
@@ -185,7 +185,7 @@ export async function renderHomeCliente(opts) {
         const fila = [];
         pendVenc.forEach((p) => fila.push({
             id: p.id, kind: "pend", tag: "Atrasado", tagCls: "bg-rose-100 text-rose-700", atrasado: true,
-            cliente: p.contatoNome || p.clienteNome || "—", titulo: p.titulo || p.descricao || "Pendência",
+            cliente: p.contatoNome || p.clienteNome || "—", titulo: p.titulo || p.descricao || "A fazer",
             resp: p.responsavel || p.funcionarioNome || "", when: "Venceu " + brDate(p.prazo)
         }));
         compsHoje.forEach((c) => fila.push({
@@ -363,14 +363,14 @@ export async function renderHomeCliente(opts) {
 
         const cartoes = d.preLanc.map(cartaoPreLanc).join("");
         const extras = [];
-        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-green-400 transition"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check"></i></div><div><p class="font-bold text-sm text-slate-800">Itens para resolver</p><p class="text-xs text-slate-500">Pendências do seu acompanhamento</p></div></div><span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.itensPend}</span></a>`);
+        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-green-400 transition"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center"><i class="fa-solid fa-clipboard-check"></i></div><div><p class="font-bold text-sm text-slate-800">Correções</p><p class="text-xs text-slate-500">Enviadas pela consultoria</p></div></div><span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.itensPend}</span></a>`);
         if (d.vencidas > 0) extras.push(`<a href="fluxo_caixa.html" class="flex items-center justify-between p-4 rounded-2xl bg-rose-50 border border-rose-200 hover:border-rose-400 transition"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center"><i class="fa-solid fa-triangle-exclamation"></i></div><div><p class="font-bold text-sm text-rose-700">Contas vencidas</p><p class="text-xs text-rose-600/80">Veja no fluxo de caixa</p></div></div><span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.vencidas}</span></a>`);
-        const filaVazia = `<div class="text-center py-8 text-sm text-slate-400"><i class="fa-regular fa-circle-check text-3xl text-slate-300 mb-2"></i><p>Nenhuma pendência no momento.${temNotas ? " Envie uma nota acima para começar." : ""}</p></div>`;
+        const filaVazia = `<div class="text-center py-8 text-sm text-slate-400"><i class="fa-regular fa-circle-check text-3xl text-slate-300 mb-2"></i><p>Nada a fazer no momento.${temNotas ? " Envie uma nota acima para começar." : ""}</p></div>`;
         const fila = `
             <section class="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-sm">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3">
                     <div>
-                        <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-list-check text-orange-600"></i><span>Pendências & conciliação</span></h3>
+                        <h3 class="font-extrabold text-slate-800 text-base flex items-center gap-2"><i class="fa-solid fa-list-check text-orange-600"></i><span>A fazer & conciliação</span></h3>
                         <p class="text-xs text-slate-500">Confira os dados da nota e lance no caixa com 1 clique.</p>
                     </div>
                     <span class="bg-rose-500 text-white font-extrabold text-xs px-2.5 py-1 rounded-full">${d.preLanc.length + (d.itensPend > 0 ? 1 : 0) + (d.vencidas > 0 ? 1 : 0)} pendente(s)</span>
@@ -496,7 +496,7 @@ export async function renderHomeCliente(opts) {
                         <div class="w-full h-2 bg-white/15 rounded-full overflow-hidden"><div class="h-full ${cd.visitas >= cd.meta ? "bg-emerald-400" : "bg-orange-400"}" style="width:${pct}%"></div></div>
                     </div>
                     <div class="grid grid-cols-2 gap-2.5 mt-2.5">
-                        <div class="bg-white/10 rounded-2xl p-3 border border-white/10"><p class="text-[10px] text-slate-300 font-semibold">Pendências vencidas</p><p class="text-xl font-black ${cd.pendVenc > 0 ? "text-rose-300" : "text-white"} mt-0.5">${cd.pendVenc}</p></div>
+                        <div class="bg-white/10 rounded-2xl p-3 border border-white/10"><p class="text-[10px] text-slate-300 font-semibold">A fazer atrasadas</p><p class="text-xl font-black ${cd.pendVenc > 0 ? "text-rose-300" : "text-white"} mt-0.5">${cd.pendVenc}</p></div>
                         <div class="bg-white/10 rounded-2xl p-3 border border-white/10"><p class="text-[10px] text-slate-300 font-semibold">Follow-ups atrasados</p><p class="text-xl font-black ${cd.follow > 0 ? "text-amber-300" : "text-white"} mt-0.5">${cd.follow}</p></div>
                     </div>
                 </div>
@@ -655,11 +655,11 @@ export async function renderHomeCliente(opts) {
             </div>` : semEmpresaMb;
         const cards = d.preLanc.map(cartaoPreLanc).join("");
         const extras = [];
-        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-3 border border-slate-100 rounded-2xl bg-slate-50"><div class="flex items-center gap-2.5"><div class="w-8 h-8 bg-green-100 text-green-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><h3 class="text-xs font-bold text-slate-800">Itens do acompanhamento</h3><p class="text-[10px] text-slate-400">Pendências da consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);
+        if (d.itensPend > 0) extras.push(`<a href="itens_resolver.html" class="flex items-center justify-between p-3 border border-slate-100 rounded-2xl bg-slate-50"><div class="flex items-center gap-2.5"><div class="w-8 h-8 bg-green-100 text-green-700 rounded-xl flex items-center justify-center"><i class="fa-solid fa-clipboard-check text-xs"></i></div><div><h3 class="text-xs font-bold text-slate-800">Correções</h3><p class="text-[10px] text-slate-400">Enviadas pela consultoria</p></div></div><span class="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${d.itensPend}</span></a>`);
         const fila = `
             <div class="bg-white rounded-3xl p-4 border border-slate-200/90 shadow-sm space-y-3">
                 <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-1.5"><h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide">Itens para resolver</h2>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">${totalPend}</span>` : ""}</div>
+                    <div class="flex items-center gap-1.5"><h2 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide">A fazer</h2>${totalPend > 0 ? `<span class="bg-rose-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">${totalPend}</span>` : ""}</div>
                     <span class="text-[10px] text-orange-600 font-bold">Conciliação</span>
                 </div>
                 ${d.preLanc.length > 0 ? `<button data-a="contabilizar-todas" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl">✓ Contabilizar ${d.preLanc.length} nota(s) já enviada(s)</button>` : ""}
@@ -932,7 +932,7 @@ export async function renderHomeCliente(opts) {
         const dica = el.querySelector("#oliver-dica");
         if (dica) dica.innerText = d.preLanc.length > 0
             ? `Você tem ${d.preLanc.length} nota(s) para conciliar. Revise o valor e toque em “Confirmar no caixa”.`
-            : (d.itensPend > 0 ? `Há ${d.itensPend} item(ns) para resolver no seu acompanhamento.`
+            : (d.itensPend > 0 ? `Há ${d.itensPend} correção(ões) a fazer no seu acompanhamento.`
                 : (temNotas ? `Envie a foto de uma nota no quadro “Envio rápido” e eu lanço no seu caixa.`
                     : `Acompanhe seu saldo e contas aqui. Precisa de algo? É só chamar a consultoria.`));
         const wa = el.querySelector("#oliver-balao-wa");

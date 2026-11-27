@@ -45,7 +45,7 @@ export function montarCockpit(opts) {
     const nav =
         item("fa-compass", "Cockpit Principal", "app.html", { active: true }) +
         section("Gestão") +
-        item("fa-list-check", "Itens para Resolver", permItens ? "itens_resolver.html" : null, (permItens && itens > 0) ? { badge: itens } : {}) +
+        item("fa-list-check", "Correções", permItens ? "itens_resolver.html" : null, (permItens && itens > 0) ? { badge: itens } : {}) +
         item("fa-clipboard-check", "Rotinas de Gestão", "rotinas.html") +
         item("fa-gauge-high", "Meus Indicadores", "indicadores.html") +
         section("Financeiro & Caixa") +

@@ -104,7 +104,7 @@ export async function renderConsultorHome(opts) {
             .concat(comps.filter(c => c.status === "concluido" && (c.concluidoEm || c.data || "").slice(0, 10) === hoje));
 
         const fila = [];
-        pendVenc.forEach(p => fila.push({ id: p.id, col: "crm_pendencias", kind: "pend", grupo: "Atrasado", cls: "bg-rose-100 text-rose-700", cliente: p.contatoNome || p.clienteNome || "—", titulo: p.titulo || p.descricao || "Pendência", resp: p.responsavel || p.funcionarioNome || "", quando: brDate(p.prazo), check: true, done: false }));
+        pendVenc.forEach(p => fila.push({ id: p.id, col: "crm_pendencias", kind: "pend", grupo: "Atrasado", cls: "bg-rose-100 text-rose-700", cliente: p.contatoNome || p.clienteNome || "—", titulo: p.titulo || p.descricao || "A fazer", resp: p.responsavel || p.funcionarioNome || "", quando: brDate(p.prazo), check: true, done: false }));
         compsHoje.forEach(c => fila.push({ id: c.id, col: "crm_compromissos", kind: "comp", grupo: c.tipo === "visita" ? "Visita" : "Hoje", cls: c.tipo === "visita" ? "bg-indigo-100 text-indigo-700" : "bg-orange-100 text-orange-700", cliente: c.contatoNome || "—", titulo: c.titulo || "Compromisso", resp: c.funcionarioNome || c.responsavel || "", quando: (c.data || "").slice(11, 16) || "Hoje", check: true, done: false }));
         followAtrasados.forEach(c => fila.push({ id: c.id, col: "", kind: "follow", grupo: "Follow-up", cls: "bg-amber-100 text-amber-700", cliente: c.nome || "—", titulo: "Retomar contato (" + (c.estagio_funil || "Prospecção").replace(/^\d+\.\s/, "") + ")", resp: c.responsavel || "", quando: "Prev. " + brDate(c.proximo_contato), check: false, done: false }));
         concluidasHoje.slice(0, 3).forEach(x => fila.push({ id: x.id, col: x.titulo && x.tipo ? "crm_compromissos" : "crm_pendencias", kind: "done", grupo: "Concluído", cls: "bg-emerald-100 text-emerald-700", cliente: x.contatoNome || x.clienteNome || "—", titulo: x.titulo || x.descricao || "Item", resp: x.responsavel || x.funcionarioNome || "", quando: "Concluído", check: true, done: true }));
@@ -249,7 +249,7 @@ export async function renderConsultorHome(opts) {
 
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                 ${kpi("A Receber (Mês Atual)", brl(aReceberMes), "text-indigo-600", faturasAbertas + " fatura(s) aberta(s)")}
-                ${kpi("Pendências Vencidas", brl(totalVencido), totalVencido > 0 ? "text-rose-600" : "text-slate-700", vencidasCobr.length + " em atraso")}
+                ${kpi("Cobranças Vencidas", brl(totalVencido), totalVencido > 0 ? "text-rose-600" : "text-slate-700", vencidasCobr.length + " em atraso")}
                 ${kpi("Prospects Visitados (Semana)", visitas + " / " + META_VISITAS, visitas >= META_VISITAS ? "text-emerald-600" : "text-orange-500", "meta 2 por sócio")}
                 ${kpi("Entregas Operacionais", pendFeitasSemana + " / " + (entregasTotal || 0), "text-emerald-600", "fila da semana")}
             </div>

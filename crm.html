@@ -438,7 +438,7 @@
             });
 
             const cont = document.getElementById('lista-pendencias');
-            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhuma pendência. 🎉</p>'; return; }
+            if (lista.length === 0) { cont.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nada a fazer. 🎉</p>'; return; }
             cont.innerHTML = lista.map(p => {
                 const feito = p.status === "feito";
                 const atrasada = !feito && p.prazo && p.prazo < hoje;
@@ -461,7 +461,7 @@
 
         window.addPendencia = async () => {
             const descricao = document.getElementById('p-descricao').value.trim();
-            if (!descricao) { alert("Descreva a pendência."); return; }
+            if (!descricao) { alert("Descreva o item."); return; }
             const contatoId = document.getElementById('p-contato').value;
             const contato = contatos.find(c => c.id === contatoId);
             try {
@@ -483,7 +483,7 @@
             catch (e) { alert("Erro: " + e.message); }
         };
         window.excluirPend = async (id) => {
-            if (!confirm("Excluir esta pendência?")) return;
+            if (!confirm("Excluir este item?")) return;
             try { await deleteDoc(docRef("crm_pendencias", id)); await carregarTudo(); }
             catch (e) { alert("Erro: " + e.message); }
         };
@@ -501,7 +501,7 @@
             <!-- Abas (Agenda vive em agenda.html; cobrança vive na Régua do cockpit) -->
             <div class="flex gap-1.5 mb-3 items-center">
                 <button id="tab-contatos" onclick="trocarAba('contatos')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">Contatos</button>
-                <button id="tab-pendencias" onclick="trocarAba('pendencias')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">Pendências</button>
+                <button id="tab-pendencias" onclick="trocarAba('pendencias')" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200">A Fazer</button>
                 <a href="agenda.html" class="flex-1 py-2 rounded-lg text-xs font-bold bg-white text-slate-500 border border-slate-200 text-center hover:text-blue-600">Agenda →</a>
             </div>
 
@@ -588,7 +588,7 @@
                         <div id="pend-avencer" class="font-black text-amber-700 text-base">0</div>
                     </div>
                 </div>
-                <button onclick="toggleForm('form-pendencia')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ Pendência (o que cobrar / receber)</button>
+                <button onclick="toggleForm('form-pendencia')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg mb-2">+ A Fazer (o que cobrar / receber)</button>
                 <div id="form-pendencia" style="display:none" class="bg-white rounded-xl border border-slate-200 p-3 mb-2 space-y-2">
                     <input id="p-descricao" placeholder="O que precisa ser feito (ex: pegar alvará com o cliente) *" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     <select id="p-responsavel" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
@@ -600,7 +600,7 @@
                         <input id="p-prazo" type="date" class="flex-1 p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <select id="p-contato" class="w-full p-2 border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"></select>
-                    <button onclick="addPendencia()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar pendência</button>
+                    <button onclick="addPendencia()" class="w-full bg-blue-600 text-white text-sm font-bold py-2 rounded-lg">Salvar</button>
                 </div>
                 <div class="flex gap-1.5 mb-2 flex-wrap">
                     <button onclick="filtrarPend('abertas')" class="flex-1 py-1.5 rounded-lg text-[11px] font-bold bg-white text-slate-500 border border-slate-200">Abertas</button>

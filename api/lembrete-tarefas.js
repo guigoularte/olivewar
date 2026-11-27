@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
             <h2 style="color:#1b2a4a">Suas tarefas de hoje${nome ? ', ' + nome : ''} 📋</h2>
             <p style="color:#555">${new Date(hoje + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</p>
             <ul style="padding-left:18px">${linhas}</ul>
-            <p style="color:#999;font-size:12px;margin-top:16px">Abra o Oliver em <a href="https://olivewar.vercel.app/agenda.html">Agenda / Tarefas</a> · OliverApp</p>
+            <p style="color:#999;font-size:12px;margin-top:16px">Abra o Oliver em <a href="https://olivewar.vercel.app/agenda.html">Agenda</a> · OliverApp</p>
           </div>`;
         try { await enviarEmail(email, `Suas tarefas de hoje (${itens.length})`, html); enviados++; detalhes.push({ para: email, tarefas: itens.length }); }
         catch (e) { console.error('email ' + email + ':', e.message); detalhes.push({ para: email, erro: e.message }); }

@@ -29,7 +29,7 @@
             despesa: { icone: "💸", cor: "text-red-700 bg-red-50", nome: "Despesa (caixa)" },
             indicador: { icone: "📈", cor: "text-indigo-700 bg-indigo-50", nome: "Indicador" },
             venda: { icone: "🛒", cor: "text-rose-700 bg-rose-50", nome: "Venda" },
-            item: { icone: "✅", cor: "text-green-700 bg-green-50", nome: "Item resolvido" }
+            item: { icone: "✅", cor: "text-green-700 bg-green-50", nome: "Correção feita" }
         };
 
         onAuthStateChanged(auth, async (user) => {
@@ -69,7 +69,7 @@
                     (await subcol(u.id, "indicadores_valores")).forEach(iv => A({ quando: iv.criadoEm, quem, tipo: "indicador", raw: iv, texto: "Preencheu indicador do período " + (iv.periodo || "") }));
                     (await subcol(u.id, "fechamentos")).forEach(f => A({ quando: f.criadoEm, quem, tipo: "fechamento", raw: f, texto: "Fechou o caixa: " + brl(f.faturamentoTotal) }));
                     (await subcol(u.id, "fechamento_despesas")).forEach(d => A({ quando: d.criadoEm, quem, tipo: "despesa", raw: d, texto: "Despesa: " + (d.descricao || "") + " — " + brl(d.valor) }));
-                    (await subcol(u.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem, tipo: "item", raw: it, texto: "Resolveu item: " + (it.descricao || "") }));
+                    (await subcol(u.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem, tipo: "item", raw: it, texto: "Fez correção: " + (it.descricao || "") }));
                 }
                 (await subcol(u.id, "relatorios_enviados")).forEach(r => A({ quando: r.data, quem, tipo: "relatorio", raw: r, texto: "Gerou relatório" + (r.clienteNome ? " para " + r.clienteNome : "") }));
             }
@@ -80,7 +80,7 @@
                     const nomeOrg = o.data().nome || "organização";
                     (await subcolOrg(o.id, "fechamentos")).forEach(f => A({ quando: f.criadoEm, quem: nomeOrg, tipo: "fechamento", raw: f, texto: "Fechou o caixa da noite: " + brl(f.faturamentoTotal) }));
                     (await subcolOrg(o.id, "fechamento_despesas")).forEach(d => A({ quando: d.criadoEm, quem: nomeOrg, tipo: "despesa", raw: d, texto: "Despesa: " + (d.descricao || "") + " — " + brl(d.valor) }));
-                    (await subcolOrg(o.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem: nomeOrg, tipo: "item", raw: it, texto: "Resolveu item: " + (it.descricao || "") }));
+                    (await subcolOrg(o.id, "itens_resolver")).filter(it => it.status === "concluido").forEach(it => A({ quando: it.resolvidoEm || it.data, quem: nomeOrg, tipo: "item", raw: it, texto: "Fez correção: " + (it.descricao || "") }));
                 }
             } catch (e) { console.error("Falha ao ler organizações:", e); }
 
@@ -217,7 +217,7 @@
                     <option value="despesa">Despesas (caixa)</option>
                     <option value="indicador">Indicadores</option>
                     <option value="venda">Vendas</option>
-                    <option value="item">Itens resolvidos</option>
+                    <option value="item">Correções</option>
                 </select>
             </div>
             <p id="contador" class="text-[11px] text-slate-500 mb-2">Carregando...</p>
